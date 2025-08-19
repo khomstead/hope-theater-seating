@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.2.5
+ * Version: 2.2.6
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.2.5');
+define('HOPE_SEATING_VERSION', '2.2.6');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -66,9 +66,9 @@ function hope_seating_activate() {
         wp_schedule_event(time(), 'hourly', 'hope_seating_cleanup');
     }
     
-    // NEW: Schedule holds cleanup cron
+    // NEW: Schedule holds cleanup cron (hourly - safe WordPress default)
     if (!wp_next_scheduled('hope_seating_cleanup_holds')) {
-        wp_schedule_event(time(), 'hope_seating_every_minute', 'hope_seating_cleanup_holds');
+        wp_schedule_event(time(), 'hourly', 'hope_seating_cleanup_holds');
     }
 }
 

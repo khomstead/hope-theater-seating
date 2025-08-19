@@ -149,5 +149,6 @@ class HOPE_Modal_Handler {
             endif;
         }
         ?>
+        <?php
     }
 }
