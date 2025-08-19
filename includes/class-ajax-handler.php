@@ -200,6 +200,28 @@ class HOPE_Ajax_Handler {
         
         error_log("HOPE: Product found: {$product->get_name()}, Type: {$product->get_type()}");
         
+        // Handle variable products - get the first available variation
+        $variation_id = 0;
+        $variation_data = [];
+        
+        if ($product->is_type('variable')) {
+            error_log('HOPE: Product is variable, getting available variations');
+            $available_variations = $product->get_available_variations();
+            
+            if (empty($available_variations)) {
+                error_log('HOPE: No available variations found');
+                wp_send_json_error(['message' => 'No available ticket options found']);
+            }
+            
+            // Use the first available variation
+            $first_variation = $available_variations[0];
+            $variation_id = $first_variation['variation_id'];
+            $variation_data = $first_variation['attributes'] ?? [];
+            
+            error_log("HOPE: Using variation ID: {$variation_id}");
+            error_log('HOPE: Variation attributes: ' . print_r($variation_data, true));
+        }
+        
         // Verify all seats are held by this session
         if (!$this->verify_seat_holds($product_id, $seats, $session_id)) {
             error_log('HOPE: Seat holds verification failed');
@@ -235,8 +257,8 @@ class HOPE_Ajax_Handler {
             $cart_item_key = WC()->cart->add_to_cart(
                 $product_id,
                 1,
-                0,
-                [],
+                $variation_id,
+                $variation_data,
                 $cart_item_data
             );
             
