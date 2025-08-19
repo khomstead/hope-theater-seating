@@ -95,6 +95,7 @@ class HOPE_Theater_Seating {
     
     private function __construct() {
         add_action('plugins_loaded', array($this, 'init'));
+        add_action('before_woocommerce_init', array($this, 'declare_wc_compatibility'));
     }
     
     public function init() {
@@ -106,6 +107,9 @@ class HOPE_Theater_Seating {
         // Include required files
         $this->includes();
         
+        // Declare WooCommerce HPOS compatibility
+        $this->declare_hpos_compatibility();
+        
         // Initialize components
         $this->init_hooks();
     }
@@ -115,6 +119,32 @@ class HOPE_Theater_Seating {
             class_exists('WooCommerce') && 
             class_exists('FooEvents')
         );
+    }
+    
+    /**
+     * Declare WooCommerce HPOS compatibility
+     */
+    private function declare_hpos_compatibility() {
+        if (class_exists('Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+            \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+                'custom_order_tables', 
+                __FILE__, 
+                true
+            );
+        }
+    }
+    
+    /**
+     * Declare WooCommerce compatibility (called via action hook)
+     */
+    public function declare_wc_compatibility() {
+        if (class_exists('Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+            \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+                'custom_order_tables',
+                __FILE__,
+                true
+            );
+        }
     }
     
     private function includes() {
