@@ -471,7 +471,23 @@ class HOPE_Seating_Admin {
                                                 </div>
                                             <?php endforeach; ?>
                                         </div>
+                                    <?php else: ?>
+                                        <p style="color: #e67e22; margin: 10px 0;">
+                                            ⚠️ No seats found for this venue. You may need to populate seats first.
+                                            <br><small>Debug: Venue ID = <?php echo esc_html($selected_venue); ?>, Table = <?php echo esc_html($seat_maps_table); ?></small>
+                                        </p>
+                                        <!-- Show default pricing tiers even if no seats found -->
+                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0;">
+                                            <?php foreach ($pricing_tiers as $tier_code => $tier_info): ?>
+                                                <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid <?php echo esc_attr($tier_info['color']); ?>; opacity: 0.7;">
+                                                    <strong><?php echo esc_html($tier_info['name']); ?> (<?php echo esc_html($tier_code); ?>)</strong><br>
+                                                    <span style="color: #666;">0 seats (not populated)</span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
                                     <?php endif;
+                                } else {
+                                    echo '<p style="color: red;">HOPE_Seat_Manager class not found</p>';
                                 } ?>
                             </div>
                             
