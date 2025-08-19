@@ -206,6 +206,16 @@ class HOPE_Seat_Manager {
             }
         }
         
+        // Update venue total_seats count in database to reflect actual populated seats
+        $venues_table = $wpdb->prefix . 'hope_seating_venues';
+        $wpdb->update(
+            $venues_table,
+            array('total_seats' => $seats_created),
+            array('id' => $this->venue_id),
+            array('%d'),
+            array('%d')
+        );
+        
         return $seats_created;
     }
     

@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.0.5
+ * Version: 2.0.6
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.0.5');
+define('HOPE_SEATING_VERSION', '2.0.6');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -350,8 +350,8 @@ function hope_seating_create_default_venues() {
         array(
             'name' => 'HOPE Theater - Main Stage',
             'slug' => 'hope-theater-main-stage',
-            'description' => '485-seat half-round theater with orchestra and balcony levels',
-            'total_seats' => 485,
+            'description' => '497-seat half-round theater with orchestra and balcony levels',
+            'total_seats' => 497,
             'configuration' => json_encode(array(
                 'type' => 'half-round',
                 'levels' => array('orchestra', 'balcony'),
