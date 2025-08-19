@@ -14,42 +14,42 @@ class HOPE_Seat_Manager {
     private $venue_id;
     
     /**
-     * Seat distribution based on architectural plans
+     * Seat distribution based on architectural plans - 497 seats total
      */
     private $seat_distribution = array(
         'orchestra' => array(
             'A' => array(
-                'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
-                'seats_per_row' => array('A' => 8, 'B' => 8, 'C' => 8, 'D' => 8, 'E' => 8, 'F' => 8, 'G' => 8, 'H' => 7),
+                'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G'),
+                'seats_per_row' => array('A' => 6, 'B' => 7, 'C' => 7, 'D' => 8, 'E' => 8, 'F' => 8, 'G' => 9),
                 'pricing' => 'P2',
                 'angle_start' => -60,
                 'angle_end' => -30
             ),
             'B' => array(
                 'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
-                'seats_per_row' => array('A' => 10, 'B' => 11, 'C' => 11, 'D' => 12, 'E' => 12, 'F' => 13, 'G' => 13, 'H' => 14),
+                'seats_per_row' => array('A' => 8, 'B' => 9, 'C' => 10, 'D' => 10, 'E' => 11, 'F' => 11, 'G' => 12, 'H' => 12),
                 'pricing' => 'P1',
                 'angle_start' => -30,
                 'angle_end' => -10
             ),
             'C' => array(
                 'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'),
-                'seats_per_row' => array('A' => 16, 'B' => 16, 'C' => 16, 'D' => 16, 'E' => 16, 'F' => 16, 'G' => 16, 'H' => 16, 'I' => 16),
+                'seats_per_row' => array('A' => 12, 'B' => 13, 'C' => 14, 'D' => 14, 'E' => 15, 'F' => 15, 'G' => 16, 'H' => 16, 'I' => 14),
                 'pricing' => 'P1',
                 'angle_start' => -10,
                 'angle_end' => 10
             ),
             'D' => array(
                 'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'AA'),
-                'seats_per_row' => array('A' => 10, 'B' => 11, 'C' => 11, 'D' => 12, 'E' => 12, 'F' => 13, 'G' => 13, 'H' => 14, 'AA' => 10),
+                'seats_per_row' => array('A' => 8, 'B' => 9, 'C' => 10, 'D' => 10, 'E' => 11, 'F' => 11, 'G' => 12, 'H' => 12, 'AA' => 8),
                 'pricing' => 'P1',
                 'pricing_overrides' => array('AA' => 'AA'),
                 'angle_start' => 10,
                 'angle_end' => 30
             ),
             'E' => array(
-                'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
-                'seats_per_row' => array('A' => 8, 'B' => 8, 'C' => 8, 'D' => 8, 'E' => 8, 'F' => 8, 'G' => 8, 'H' => 7),
+                'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G'),
+                'seats_per_row' => array('A' => 6, 'B' => 7, 'C' => 7, 'D' => 8, 'E' => 8, 'F' => 8, 'G' => 9),
                 'pricing' => 'P2',
                 'angle_start' => 30,
                 'angle_end' => 60
@@ -57,23 +57,23 @@ class HOPE_Seat_Manager {
         ),
         'balcony' => array(
             'F' => array(
-                'rows' => array('J', 'K', 'L', 'M'),
-                'seats_per_row' => array('J' => 14, 'K' => 14, 'L' => 14, 'M' => 14),
+                'rows' => array('J', 'K', 'L'),
+                'seats_per_row' => array('J' => 12, 'K' => 13, 'L' => 14),
                 'pricing' => 'P3',
                 'angle_start' => -45,
                 'angle_end' => -15
             ),
             'G' => array(
-                'rows' => array('J', 'K', 'L', 'M'),
-                'seats_per_row' => array('J' => 10, 'K' => 10, 'L' => 10, 'M' => 10),
+                'rows' => array('J', 'K', 'L'),
+                'seats_per_row' => array('J' => 8, 'K' => 9, 'L' => 10),
                 'pricing' => 'P3',
                 'angle_start' => -15,
                 'angle_end' => 5,
-                'x_offset' => -50  // Shifted left per architectural plans
+                'x_offset' => -50
             ),
             'H' => array(
-                'rows' => array('J', 'K', 'L', 'M'),
-                'seats_per_row' => array('J' => 9, 'K' => 9, 'L' => 9, 'M' => 9),
+                'rows' => array('J', 'K', 'L'),
+                'seats_per_row' => array('J' => 7, 'K' => 8, 'L' => 9),
                 'pricing' => 'P3',
                 'angle_start' => 5,
                 'angle_end' => 45
@@ -98,7 +98,7 @@ class HOPE_Seat_Manager {
     }
     
     /**
-     * Populate all 485 seats for the venue
+     * Populate all 497 seats for the venue
      */
     public function populate_seats() {
         global $wpdb;
