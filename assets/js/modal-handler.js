@@ -181,10 +181,14 @@ class HOPEModalHandler {
             // Initialize or refresh seat map
             if (window.hopeSeatMap) {
                 window.hopeSeatMap.initializeMap();
+                // Try to restore previously selected seats from cart
+                this.restoreSeatsFromCart();
             } else {
                 // Create new instance if needed
                 if (typeof HOPESeatMap !== 'undefined' && typeof hope_ajax !== 'undefined') {
                     window.hopeSeatMap = new HOPESeatMap();
+                    // Try to restore previously selected seats from cart
+                    setTimeout(() => this.restoreSeatsFromCart(), 100);
                 }
             }
         }, 500);
@@ -413,6 +417,42 @@ class HOPEModalHandler {
             msgEl.style.animation = 'fadeOut 0.3s ease';
             setTimeout(() => msgEl.remove(), 300);
         }, 5000);
+    }
+    
+    /**
+     * Try to restore previously selected seats from page data
+     */
+    restoreSeatsFromCart() {
+        if (!window.hopeSeatMap) {
+            console.log('Cannot restore seats - seat map not initialized');
+            return;
+        }
+        
+        // Look for seat data in various places
+        let seatsToRestore = [];
+        
+        // Check if there's seat data in the button or summary displays
+        const summaryElements = document.querySelectorAll('.hope-seats-list, .selected-seats-list');
+        for (const element of summaryElements) {
+            if (element.textContent && element.textContent.trim()) {
+                const seatText = element.textContent.trim();
+                if (seatText !== 'No seats selected' && seatText !== '') {
+                    seatsToRestore = seatText.split(', ').map(s => s.trim());
+                    break;
+                }
+            }
+        }
+        
+        console.log('Attempting to restore seats:', seatsToRestore);
+        
+        if (seatsToRestore.length > 0 && window.hopeSeatMap.selectSeats) {
+            try {
+                window.hopeSeatMap.selectSeats(seatsToRestore);
+                console.log('Successfully restored', seatsToRestore.length, 'seats');
+            } catch (error) {
+                console.log('Error restoring seats:', error);
+            }
+        }
     }
 }
 

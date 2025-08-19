@@ -243,10 +243,17 @@ class HOPE_Ajax_Handler {
         $actually_held_seats = $this->get_held_seats($product_id, $session_id);
         error_log('HOPE: Currently held seats: ' . print_r($actually_held_seats, true));
         error_log('HOPE: Requested seats: ' . print_r($seats, true));
+        error_log('HOPE: Requested seat count: ' . count($seats) . ', Actually held count: ' . count($actually_held_seats));
         
         if (empty($actually_held_seats)) {
             error_log('HOPE: No seats are currently held for this session');
             wp_send_json_error(['message' => 'No seats are currently held. Please select seats first.']);
+        }
+        
+        // Show discrepancy warning if counts don't match
+        if (count($seats) !== count($actually_held_seats)) {
+            $missing_seats = array_diff($seats, $actually_held_seats);
+            error_log('HOPE: WARNING - Seat count mismatch! Missing seats: ' . print_r($missing_seats, true));
         }
         
         // Use only the seats that are actually held
