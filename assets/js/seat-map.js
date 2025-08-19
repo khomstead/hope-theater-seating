@@ -423,7 +423,7 @@ class HOPESeatMap {
         
         const rect = seat.getBoundingClientRect();
         tooltip.style.left = rect.left + rect.width / 2 + 'px';
-        tooltip.style.top = rect.top - 50 + 'px';
+        tooltip.style.top = rect.top - 50 + 'px'; // Moved farther up to avoid overlap
         tooltip.classList.add('show');
     }
     

@@ -134,6 +134,11 @@ class HOPEModalHandler {
             // Initialize or refresh seat map
             if (window.hopeSeatMap) {
                 window.hopeSeatMap.initializeMap();
+            } else {
+                // Create new instance if needed
+                if (typeof HOPESeatMap !== 'undefined' && typeof hope_ajax !== 'undefined') {
+                    window.hopeSeatMap = new HOPESeatMap();
+                }
             }
         }, 500);
         
