@@ -281,15 +281,37 @@ class HOPE_Session_Manager {
     public function cleanup_expired_holds() {
         global $wpdb;
         
+        error_log('HOPE Cleanup: Starting expired holds cleanup...');
+        
         // Check if table exists before attempting cleanup
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$this->holds_table}'") == $this->holds_table;
         
         if (!$table_exists) {
+            error_log('HOPE Cleanup: Holds table does not exist, attempting to create...');
             // Table doesn't exist, try to create it
             if (class_exists('HOPE_Seating_Database')) {
                 HOPE_Seating_Database::create_tables();
             }
             return 0;
+        }
+        
+        // First, check how many expired holds exist
+        $expired_count = $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$this->holds_table} WHERE expires_at <= NOW()"
+        );
+        
+        error_log("HOPE Cleanup: Found {$expired_count} expired holds to clean");
+        
+        if ($expired_count > 0) {
+            // Log the expired holds before deleting
+            $expired_holds = $wpdb->get_results(
+                "SELECT session_id, seat_id, expires_at, TIMESTAMPDIFF(MINUTE, expires_at, NOW()) as minutes_expired 
+                FROM {$this->holds_table} WHERE expires_at <= NOW()"
+            );
+            
+            foreach ($expired_holds as $hold) {
+                error_log("HOPE Cleanup: Removing expired hold - Session: {$hold->session_id}, Seat: {$hold->seat_id}, Expired {$hold->minutes_expired} minutes ago");
+            }
         }
         
         $deleted = $wpdb->query(
@@ -298,13 +320,44 @@ class HOPE_Session_Manager {
         );
         
         if ($deleted === false) {
-            error_log('HOPE Seating: Failed to cleanup expired holds - ' . $wpdb->last_error);
+            error_log('HOPE Cleanup: Failed to cleanup expired holds - ' . $wpdb->last_error);
             return 0;
         }
+        
+        error_log("HOPE Cleanup: Successfully deleted {$deleted} expired holds");
         
         if ($deleted > 0) {
             do_action('hope_seating_holds_cleaned', $deleted);
         }
+        
+        // Also log current active holds
+        $active_count = $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$this->holds_table} WHERE expires_at > NOW()"
+        );
+        error_log("HOPE Cleanup: {$active_count} active holds remaining");
+        
+        return $deleted;
+    }
+    
+    /**
+     * Force cleanup of all expired holds (for debugging)
+     */
+    public function force_cleanup_all_expired() {
+        error_log('HOPE Cleanup: FORCED cleanup of all expired holds');
+        return $this->cleanup_expired_holds();
+    }
+    
+    /**
+     * Clear ALL holds (for debugging - use with caution)
+     */
+    public function clear_all_holds() {
+        global $wpdb;
+        
+        error_log('HOPE Cleanup: CLEARING ALL HOLDS (DEBUG MODE)');
+        
+        $deleted = $wpdb->query("DELETE FROM {$this->holds_table}");
+        
+        error_log("HOPE Cleanup: Deleted {$deleted} total holds");
         
         return $deleted;
     }

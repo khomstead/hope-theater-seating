@@ -327,25 +327,30 @@ class HOPESeatMap {
     handleSeatClick(e) {
         e.stopPropagation();
         const seat = e.currentTarget;
+        const seatId = seat.getAttribute('data-id');
         
-        if (seat.classList.contains('unavailable')) {
-            // Check if seat is held by another user or permanently booked
-            this.checkSeatStatus(seat.getAttribute('data-id'));
+        // Allow deselection of currently selected seats, even if they appear unavailable
+        if (this.selectedSeats.has(seatId)) {
+            console.log(`Deselecting seat ${seatId} (was selected by current session)`);
+            this.deselectSeat(seatId);
             return;
         }
         
-        const seatId = seat.getAttribute('data-id');
-        
-        if (this.selectedSeats.has(seatId)) {
-            this.deselectSeat(seatId);
-        } else {
-            // Check maximum seats
-            if (this.selectedSeats.size >= 10) {
-                this.showMessage(hope_ajax.messages.max_seats, 'warning');
-                return;
-            }
-            this.selectSeat(seatId);
+        // If seat is unavailable and not selected by current session, check status
+        if (seat.classList.contains('unavailable')) {
+            console.log(`Seat ${seatId} is unavailable and not selected by current session`);
+            this.checkSeatStatus(seatId);
+            return;
         }
+        
+        // Select new seat
+        if (this.selectedSeats.size >= 10) {
+            this.showMessage(hope_ajax.messages.max_seats, 'warning');
+            return;
+        }
+        
+        console.log(`Selecting new seat ${seatId}`);
+        this.selectSeat(seatId);
     }
     
     selectSeat(seatId) {
@@ -740,10 +745,11 @@ class HOPESeatMap {
     }
     
     startAvailabilityRefresh() {
-        // Refresh availability every 15 seconds
+        // Refresh availability every 10 seconds (more frequent for better UX)
         this.availabilityRefreshInterval = setInterval(() => {
+            console.log('HOPE: Refreshing seat availability...');
             this.loadSeatAvailability();
-        }, 15000);
+        }, 10000);
     }
     
     stopAvailabilityRefresh() {

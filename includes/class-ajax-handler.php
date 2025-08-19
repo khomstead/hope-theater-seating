@@ -276,6 +276,7 @@ class HOPE_Ajax_Handler {
                 }
             }
             
+            error_log('HOPE: All available variations: ' . print_r($available_variations, true));
             error_log('HOPE: Available variation map: ' . print_r($variation_map, true));
         }
         
@@ -594,22 +595,22 @@ class HOPE_Ajax_Handler {
             
             // Theater pricing logic based on HOPE Theater layout
             if ($section === 'A' || $section === 'B') {
-                return 'P1'; // Premium
+                return 'p1'; // Premium (match JS lowercase)
             } elseif ($section === 'C' || $section === 'D') {
-                return 'P2'; // Standard
+                return 'p2'; // Standard (match JS lowercase)
             } elseif ($section === 'E' || $section === 'F') {
                 if ($row <= 5) {
-                    return 'P2'; // Standard
+                    return 'p2'; // Standard (match JS lowercase)
                 } else {
-                    return 'P3'; // Value
+                    return 'p3'; // Value (match JS lowercase)
                 }
             } elseif ($section === 'G' || $section === 'H') {
-                return 'P3'; // Value
+                return 'p3'; // Value (match JS lowercase)
             }
         }
         
         // Default fallback
-        return 'P2';
+        return 'p2';
     }
     
     /**
@@ -618,13 +619,13 @@ class HOPE_Ajax_Handler {
     private function get_price_for_tier($tier) {
         // Define tier pricing - these would typically come from WooCommerce variations
         $tier_prices = [
-            'P1' => 85.00, // Premium
-            'P2' => 65.00, // Standard
-            'P3' => 45.00, // Value
-            'AA' => 95.00  // VIP/Accessible
+            'p1' => 85.00, // Premium
+            'p2' => 65.00, // Standard
+            'p3' => 45.00, // Value
+            'aa' => 95.00  // VIP/Accessible
         ];
         
-        return isset($tier_prices[$tier]) ? $tier_prices[$tier] : $tier_prices['P2'];
+        return isset($tier_prices[$tier]) ? $tier_prices[$tier] : $tier_prices['p2'];
     }
     
     /**
