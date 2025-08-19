@@ -190,5 +190,26 @@ class HOPE_Seating_Database {
             $wpdb->query("DROP TABLE IF EXISTS $table");
         }
     }
+    
+    /**
+     * Update database schema - force recreation of tables with new structure
+     */
+    public static function update_database_schema() {
+        global $wpdb;
+        
+        // Drop existing holds and bookings tables to recreate with new schema
+        $holds_table = $wpdb->prefix . 'hope_seating_holds';
+        $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+        
+        $wpdb->query("DROP TABLE IF EXISTS $holds_table");
+        $wpdb->query("DROP TABLE IF EXISTS $bookings_table");
+        
+        // Recreate tables with new schema
+        self::create_tables();
+        
+        error_log('HOPE Seating: Database schema updated - recreated holds and bookings tables');
+        
+        return true;
+    }
 }
 ?>

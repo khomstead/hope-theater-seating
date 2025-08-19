@@ -52,43 +52,12 @@ class HOPEWooCommerceIntegration {
     }
     
     setupSeatSelectionButton() {
-        // Use event delegation for dynamically loaded buttons
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('#hope-select-seats-main, .hope-change-seats-btn')) {
-                e.preventDefault();
-                this.openSeatSelection();
-            }
-        });
-    }
-    
-    openSeatSelection() {
-        // Find and trigger the modal button
-        const modalButton = document.getElementById('hope-select-seats');
-        if (modalButton) {
-            modalButton.click();
-        } else {
-            // If no modal button exists, create one temporarily
-            this.createTemporaryModalButton();
+        // Remove duplicate event handler - modal-handler.js handles all button clicks
+        // Just ensure we have the right data attributes for the modal
+        const button = document.getElementById('hope-select-seats-main');
+        if (button && !button.hasAttribute('data-venue-id')) {
+            button.setAttribute('data-venue-id', '1'); // Default venue
         }
-    }
-    
-    createTemporaryModalButton() {
-        const tempButton = document.createElement('button');
-        tempButton.id = 'hope-select-seats';
-        tempButton.className = 'hope-select-seats-btn button alt';
-        tempButton.style.display = 'none';
-        tempButton.setAttribute('data-product-id', hopeWooIntegration.product_id);
-        tempButton.setAttribute('data-venue-id', '1'); // Default venue
-        
-        document.body.appendChild(tempButton);
-        
-        // Trigger modal open
-        if (window.hopeModalHandler) {
-            window.hopeModalHandler.openModal();
-        }
-        
-        // Clean up
-        setTimeout(() => tempButton.remove(), 100);
     }
     
     syncSeatDisplay() {

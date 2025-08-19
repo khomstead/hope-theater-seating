@@ -41,6 +41,8 @@ class HOPEModalHandler {
         document.addEventListener('click', (e) => {
             if (e.target.matches('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn')) {
                 e.preventDefault();
+                e.stopPropagation();
+                console.log('Seat selection button clicked, opening modal...');
                 this.openModal();
             }
         });

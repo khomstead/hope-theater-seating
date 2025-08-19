@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.2.17
+ * Version: 2.2.18
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.2.17');
+define('HOPE_SEATING_VERSION', '2.2.18');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -167,6 +167,11 @@ class HOPE_Theater_Seating {
     }
     
     private function init_hooks() {
+        // Check for database updates on admin init
+        if (is_admin()) {
+            add_action('admin_init', array($this, 'check_database_version'));
+        }
+        
         // Initialize admin if class exists
         if (is_admin() && class_exists('HOPE_Seating_Admin')) {
             new HOPE_Seating_Admin();
@@ -335,6 +340,34 @@ class HOPE_Theater_Seating {
                 error_log('HOPE Theater Seating: Cleaned up ' . $cleaned . ' expired holds.');
             }
         }
+    }
+    
+    /**
+     * Check if database needs to be updated
+     */
+    public function check_database_version() {
+        $current_version = get_option('hope_seating_db_version', '0');
+        $plugin_version = HOPE_SEATING_VERSION;
+        
+        // Only update if version has changed and is 2.2.17 or later
+        if (version_compare($current_version, '2.2.17', '<')) {
+            if (class_exists('HOPE_Seating_Database')) {
+                HOPE_Seating_Database::update_database_schema();
+                update_option('hope_seating_db_version', $plugin_version);
+                
+                // Show admin notice
+                add_action('admin_notices', array($this, 'database_updated_notice'));
+            }
+        }
+    }
+    
+    /**
+     * Show database update notice
+     */
+    public function database_updated_notice() {
+        echo '<div class="notice notice-success is-dismissible">';
+        echo '<p><strong>HOPE Theater Seating:</strong> Database schema updated successfully for version 2.2.17</p>';
+        echo '</div>';
     }
 }
 
