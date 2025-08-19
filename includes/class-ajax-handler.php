@@ -239,11 +239,19 @@ class HOPE_Ajax_Handler {
             error_log('HOPE: Variation attributes: ' . print_r($variation_data, true));
         }
         
-        // Verify all seats are held by this session
-        if (!$this->verify_seat_holds($product_id, $seats, $session_id)) {
-            error_log('HOPE: Seat holds verification failed');
-            wp_send_json_error(['message' => 'Seat selection expired. Please try again.']);
+        // Get currently held seats for this session (may be fewer than requested if some were unavailable)
+        $actually_held_seats = $this->get_held_seats($product_id, $session_id);
+        error_log('HOPE: Currently held seats: ' . print_r($actually_held_seats, true));
+        error_log('HOPE: Requested seats: ' . print_r($seats, true));
+        
+        if (empty($actually_held_seats)) {
+            error_log('HOPE: No seats are currently held for this session');
+            wp_send_json_error(['message' => 'No seats are currently held. Please select seats first.']);
         }
+        
+        // Use only the seats that are actually held
+        $seats = $actually_held_seats;
+        error_log('HOPE: Using actually held seats for cart: ' . print_r($seats, true));
         
         error_log('HOPE: Seat holds verified successfully');
         
@@ -400,6 +408,27 @@ class HOPE_Ajax_Handler {
         ));
         
         return $held_count == count($seats);
+    }
+    
+    /**
+     * Get seats currently held by this session
+     */
+    private function get_held_seats($product_id, $session_id) {
+        global $wpdb;
+        $table_holds = $wpdb->prefix . 'hope_seating_holds';
+        
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT seat_id FROM $table_holds 
+            WHERE product_id = %d AND session_id = %s AND expires_at > NOW()",
+            $product_id, $session_id
+        ), ARRAY_A);
+        
+        $seat_ids = [];
+        foreach ($results as $row) {
+            $seat_ids[] = $row['seat_id'];
+        }
+        
+        return $seat_ids;
     }
     
     /**

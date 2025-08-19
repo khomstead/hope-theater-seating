@@ -296,20 +296,28 @@ class HOPE_WooCommerce_Integration {
      * Display seat info in cart
      */
     public function display_seat_info_in_cart($name, $cart_item, $cart_item_key) {
+        error_log('HOPE Cart Display: Cart item data: ' . print_r($cart_item, true));
+        
         // Check for seats in either key (backwards compatibility)
         $seats = null;
         if (isset($cart_item['hope_theater_seats']) && !empty($cart_item['hope_theater_seats'])) {
             $seats = $cart_item['hope_theater_seats'];
+            error_log('HOPE Cart Display: Found hope_theater_seats: ' . print_r($seats, true));
         } elseif (isset($cart_item['hope_selected_seats']) && !empty($cart_item['hope_selected_seats'])) {
             $seats = $cart_item['hope_selected_seats'];
+            error_log('HOPE Cart Display: Found hope_selected_seats: ' . print_r($seats, true));
         }
         
         if ($seats) {
             $seat_list = is_array($seats) ? implode(', ', $seats) : $seats;
             $seat_count = is_array($seats) ? count($seats) : 1;
             
+            error_log("HOPE Cart Display: Displaying {$seat_count} seats: {$seat_list}");
+            
             $name .= '<br><small><strong>' . __('Seats:', 'hope-seating') . '</strong> ' . esc_html($seat_list) . '</small>';
             $name .= '<br><small><strong>' . __('Quantity:', 'hope-seating') . '</strong> ' . $seat_count . ' ' . __('seats', 'hope-seating') . '</small>';
+        } else {
+            error_log('HOPE Cart Display: No seat data found in cart item');
         }
         
         return $name;
