@@ -255,15 +255,16 @@ class HOPE_Ajax_Handler {
         
         error_log('HOPE: Seat holds verified successfully');
         
-        // Get seat details and calculate price - simplified for now
-        $total_price = count($seats) * 120; // Default price per seat
+        // Get seat details and calculate price - simplified for now  
+        $price_per_seat = 120; // Default price per seat
+        $total_price = count($seats) * $price_per_seat;
         
         // Create seat details array
         $seat_details = [];
         foreach ($seats as $seat_id) {
             $seat_details[] = [
                 'seat_id' => $seat_id,
-                'price' => 120 // Default price
+                'price' => $price_per_seat
             ];
         }
         
@@ -272,16 +273,21 @@ class HOPE_Ajax_Handler {
             'hope_theater_seats' => $seats,
             'hope_seat_details' => $seat_details,
             'hope_session_id' => $session_id,
-            'hope_total_price' => $total_price
+            'hope_total_price' => $total_price,
+            'hope_price_per_seat' => $price_per_seat,
+            'hope_seat_count' => count($seats)
         ];
         
         error_log('HOPE: Adding to cart with data: ' . print_r($cart_item_data, true));
         
-        // Add to WooCommerce cart
+        // Add to WooCommerce cart with quantity matching seat count
         try {
+            $quantity = count($seats); // Use actual number of seats as quantity
+            error_log("HOPE: Adding to cart with quantity: {$quantity} for {$quantity} seats");
+            
             $cart_item_key = WC()->cart->add_to_cart(
                 $product_id,
-                1,
+                $quantity,
                 $variation_id,
                 $variation_data,
                 $cart_item_data

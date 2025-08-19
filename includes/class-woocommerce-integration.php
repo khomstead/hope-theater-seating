@@ -21,6 +21,9 @@ class HOPE_WooCommerce_Integration {
         add_action('woocommerce_cart_item_name', array($this, 'display_seat_info_in_cart'), 10, 3);
         add_action('woocommerce_order_item_meta_start', array($this, 'display_seat_info_in_order'), 10, 4);
         
+        // Handle pricing for seat products
+        add_action('woocommerce_before_calculate_totals', array($this, 'set_seat_pricing'));
+        
         // AJAX handlers for seat selection
         add_action('wp_ajax_hope_get_variation_for_seats', array($this, 'ajax_get_variation_for_seats'));
         add_action('wp_ajax_nopriv_hope_get_variation_for_seats', array($this, 'ajax_get_variation_for_seats'));
@@ -432,6 +435,24 @@ class HOPE_WooCommerce_Integration {
                 }
                 
                 $item->save();
+            }
+        }
+    }
+    
+    /**
+     * Set custom pricing for seat products
+     */
+    public function set_seat_pricing($cart) {
+        if (is_admin() && !defined('DOING_AJAX')) {
+            return;
+        }
+
+        foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
+            // Check if this cart item has seat data
+            if (isset($cart_item['hope_price_per_seat']) && isset($cart_item['hope_seat_count'])) {
+                $price_per_seat = floatval($cart_item['hope_price_per_seat']);
+                error_log("HOPE Pricing: Setting price per seat to {$price_per_seat}");
+                $cart_item['data']->set_price($price_per_seat);
             }
         }
     }
