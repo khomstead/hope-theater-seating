@@ -1,0 +1,30 @@
+# Mac files
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# NPM
+node_modules/
+npm-debug.log
+
+# Composer
+vendor/
+composer.lock
+
+# WordPress
+*.log
+.htaccess
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+tmp/
+temp/
