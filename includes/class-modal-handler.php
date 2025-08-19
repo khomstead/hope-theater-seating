@@ -96,8 +96,7 @@ class HOPE_Modal_Handler {
                     
                     <!-- Seat map container -->
                     <div id="hope-seat-map-container" style="display: none;">
-                        <!-- The actual seat map from our mockup will be inserted here -->
-                        <?php $this->render_seat_map_html(); ?>
+                        <!-- The actual seat map will be dynamically loaded by JavaScript -->
                     </div>
                 </div>
                 
@@ -149,69 +148,5 @@ class HOPE_Modal_Handler {
             endif;
         }
         ?>
-    }
-    
-    /**
-     * Render the seat map HTML structure
-     */
-    private function render_seat_map_html() {
-        ?>
-        <div class="theater-container">
-            <div class="header">
-                <h1>HOPE Theater - Main Stage</h1>
-                <div class="floor-selector">
-                    <button class="floor-btn active" data-floor="orchestra">Orchestra</button>
-                    <button class="floor-btn" data-floor="balcony">Balcony</button>
-                </div>
-            </div>
-            
-            <div class="seating-container">
-                <div class="zoom-controls">
-                    <button class="zoom-btn" id="zoom-out">−</button>
-                    <span class="zoom-label">100%</span>
-                    <button class="zoom-btn" id="zoom-in">+</button>
-                </div>
-                
-                <div class="seating-wrapper" id="seating-wrapper">
-                    <svg id="seat-map" viewBox="0 50 1200 600" preserveAspectRatio="xMidYMid meet">
-                        <!-- Seats will be generated dynamically via JavaScript -->
-                    </svg>
-                </div>
-            </div>
-            
-            <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #9b59b6;"></div>
-                    <span>P1 - Premium ($150)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #3498db;"></div>
-                    <span>P2 - Standard ($120)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #17a2b8;"></div>
-                    <span>P3 - Value ($90)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #e67e22;"></div>
-                    <span>AA - Accessible ($120)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #6c757d;"></div>
-                    <span>Unavailable</span>
-                </div>
-            </div>
-            
-            <div class="selected-seats-panel">
-                <h3 class="selected-seats-title">Selected Seats</h3>
-                <div class="seats-list" id="selected-seats-list">
-                    <span class="empty-message">No seats selected</span>
-                </div>
-                <div class="total-price">Total: $0</div>
-            </div>
-        </div>
-        
-        <div class="tooltip" id="tooltip"></div>
-        <?php
     }
 }
