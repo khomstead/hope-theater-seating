@@ -50,12 +50,11 @@ class HOPE_Seating_Integration {
     }
     
     private function init_hooks() {
-        // WooCommerce product hooks
-        add_action('woocommerce_product_options_general_product_data', array($this, 'add_venue_selection'), 15);
-        add_action('woocommerce_process_product_meta', array($this, 'save_venue_selection'), 10);
-        
         // AJAX handlers - MUST be registered for admin
         add_action('wp_ajax_hope_setup_venue_variations', array($this, 'ajax_setup_venue_variations'));
+        
+        // Note: Venue selection is now handled by class-admin.php via the "Venue & Seating" tab
+        // Removed the old general tab venue selection to avoid duplication
     }
     
     /**

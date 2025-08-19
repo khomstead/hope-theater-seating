@@ -22,6 +22,9 @@ class HOPE_Seating_Admin {
         // Add columns to products list
         add_filter('manage_edit-product_columns', array($this, 'add_product_columns'));
         add_action('manage_product_posts_custom_column', array($this, 'show_product_column_content'), 10, 2);
+        
+        // AJAX handler for creating venues
+        add_action('wp_ajax_hope_create_default_venues', array($this, 'ajax_create_default_venues'));
     }
     
     public function add_admin_menu() {
@@ -231,7 +234,7 @@ class HOPE_Seating_Admin {
         $tabs['hope_seating'] = array(
             'label' => __('Venue & Seating', 'hope-seating'),
             'target' => 'hope_seating_venue_options',
-            'class' => array('show_if_simple'),
+            'class' => array('show_if_simple', 'show_if_variable'),
             'priority' => 21
         );
         return $tabs;
@@ -312,9 +315,51 @@ class HOPE_Seating_Admin {
                     <?php if (empty($venues)): ?>
                         <p class="form-field">
                             <em style="color: #d63638;">
-                                ⚠️ No venues found. Please deactivate and reactivate the HOPE Theater Seating plugin to create default venues.
+                                ⚠️ No venues found. 
                             </em>
+                            <br>
+                            <button type="button" id="hope-create-venues" class="button button-secondary" style="margin-top: 5px;">
+                                Create Default Venues Now
+                            </button>
+                            <span id="hope-venue-creation-status" style="margin-left: 10px;"></span>
                         </p>
+                        
+                        <script type="text/javascript">
+                        jQuery(document).ready(function($) {
+                            $('#hope-create-venues').on('click', function(e) {
+                                e.preventDefault();
+                                var $button = $(this);
+                                var $status = $('#hope-venue-creation-status');
+                                
+                                $button.prop('disabled', true).text('Creating...');
+                                $status.html('<span style="color: #666;">Creating venues...</span>');
+                                
+                                $.ajax({
+                                    url: ajaxurl,
+                                    type: 'POST',
+                                    data: {
+                                        action: 'hope_create_default_venues',
+                                        nonce: '<?php echo wp_create_nonce('hope_admin_nonce'); ?>'
+                                    },
+                                    success: function(response) {
+                                        if (response.success) {
+                                            $status.html('<span style="color: green;">✓ ' + response.data.message + '</span>');
+                                            setTimeout(function() {
+                                                location.reload();
+                                            }, 2000);
+                                        } else {
+                                            $status.html('<span style="color: red;">✗ ' + response.data.message + '</span>');
+                                            $button.prop('disabled', false).text('Create Default Venues Now');
+                                        }
+                                    },
+                                    error: function() {
+                                        $status.html('<span style="color: red;">✗ Server error occurred</span>');
+                                        $button.prop('disabled', false).text('Create Default Venues Now');
+                                    }
+                                });
+                            });
+                        });
+                        </script>
                     <?php endif; ?>
                     
                     <?php if ($selected_venue): ?>
@@ -395,6 +440,33 @@ class HOPE_Seating_Admin {
                                 <?php endif; ?>
                             </div>
                             
+                            <!-- Setup Variations Button -->
+                            <div class="hope-variation-setup" style="margin: 15px 0; padding: 15px; background: #f9f9f9; border-radius: 5px;">
+                                <h4>Product Variations Setup</h4>
+                                <p class="description">
+                                    For seating events, the product should be set to <strong>Variable Product</strong> type. 
+                                    Each seating tier (VIP, Premium, General, etc.) will become a product variation.
+                                </p>
+                                
+                                <?php $product = wc_get_product($post->ID); ?>
+                                <?php if ($product && $product->is_type('variable')): ?>
+                                    <button type="button" class="button button-primary" id="hope_setup_variations" 
+                                            data-venue-id="<?php echo esc_attr($selected_venue); ?>" 
+                                            data-product-id="<?php echo esc_attr($post->ID); ?>">
+                                        Setup Pricing Variations
+                                    </button>
+                                    <span class="spinner" style="float: none; margin-left: 10px;"></span>
+                                    <span id="hope-setup-message" style="margin-left: 10px; display: none;"></span>
+                                <?php else: ?>
+                                    <p style="color: #d63638; font-weight: bold;">
+                                        ⚠️ Please change the product type to "Variable product" to enable seating variations.
+                                    </p>
+                                    <p class="description">
+                                        Go to Product Data → Product Type dropdown → Select "Variable product" → Save
+                                    </p>
+                                <?php endif; ?>
+                            </div>
+                            
                         <?php } ?>
                     <?php endif; ?>
                     
@@ -428,6 +500,65 @@ class HOPE_Seating_Admin {
                     var seats = $(this).find('option:selected').data('total-seats');
                     console.log('Selected venue has ' + seats + ' seats');
                 }
+            });
+            
+            // Setup variations button click handler
+            $('#hope_setup_variations').on('click', function(e) {
+                e.preventDefault();
+                
+                var $button = $(this);
+                var $spinner = $button.next('.spinner');
+                var $message = $('#hope-setup-message');
+                var venueId = $button.data('venue-id');
+                var productId = $button.data('product-id');
+                
+                if (!venueId || !productId) {
+                    alert('Please save the product first with a venue selected.');
+                    return;
+                }
+                
+                if (!confirm('This will create/update product variations based on the venue pricing tiers. Continue?')) {
+                    return;
+                }
+                
+                $button.prop('disabled', true);
+                $spinner.addClass('is-active');
+                $message.hide();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        action: 'hope_setup_venue_variations',
+                        product_id: productId,
+                        venue_id: venueId,
+                        nonce: '<?php echo wp_create_nonce('hope_seating_admin'); ?>'
+                    },
+                    success: function(response) {
+                        $spinner.removeClass('is-active');
+                        
+                        if (response.success) {
+                            $message.text(response.data.message).css('color', 'green').show();
+                            // Reload page after 2 seconds to show new variations
+                            setTimeout(function() {
+                                location.reload();
+                            }, 2000);
+                        } else {
+                            $message.text('Error: ' + response.data.message).css('color', 'red').show();
+                            $button.prop('disabled', false);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $spinner.removeClass('is-active');
+                        $button.prop('disabled', false);
+                        
+                        console.error('AJAX Error:', error);
+                        console.error('Response:', xhr.responseText);
+                        
+                        $message.text('Server error. Check console for details.').css('color', 'red').show();
+                    }
+                });
             });
         });
         </script>
@@ -503,6 +634,46 @@ class HOPE_Seating_Admin {
             } else {
                 echo '<span style="color: #999;">—</span>';
             }
+        }
+    }
+    
+    /**
+     * AJAX handler to create default venues
+     */
+    public function ajax_create_default_venues() {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'hope_admin_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+        
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Insufficient permissions'));
+            return;
+        }
+        
+        // Create database tables first if they don't exist
+        if (class_exists('HOPE_Seating_Database')) {
+            HOPE_Seating_Database::create_tables();
+        }
+        
+        // Create default venues
+        if (function_exists('hope_seating_create_default_venues')) {
+            hope_seating_create_default_venues();
+            
+            // Check if venues were created
+            global $wpdb;
+            $venues_table = $wpdb->prefix . 'hope_seating_venues';
+            $count = $wpdb->get_var("SELECT COUNT(*) FROM $venues_table");
+            
+            if ($count > 0) {
+                wp_send_json_success(array('message' => "Successfully created $count default venues"));
+            } else {
+                wp_send_json_error(array('message' => 'Failed to create venues - check error logs'));
+            }
+        } else {
+            wp_send_json_error(array('message' => 'Venue creation function not available'));
         }
     }
 }

@@ -335,15 +335,26 @@ function hope_seating_create_default_venues() {
     global $wpdb;
     $venues_table = $wpdb->prefix . 'hope_seating_venues';
     
+    // Check if table exists first
+    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$venues_table'") == $venues_table;
+    
+    if (!$table_exists) {
+        error_log('HOPE Seating: Venues table does not exist during venue creation');
+        return false;
+    }
+    
     // Check if venues already exist
     $existing = $wpdb->get_var("SELECT COUNT(*) FROM {$venues_table}");
     
     if ($existing > 0) {
+        error_log('HOPE Seating: Venues already exist (' . $existing . ' found)');
         return; // Venues already exist
     }
     
+    error_log('HOPE Seating: Creating default venues...');
+    
     // Create HOPE Theater Main Stage
-    $wpdb->insert(
+    $result1 = $wpdb->insert(
         $venues_table,
         array(
             'name' => 'HOPE Theater - Main Stage',
@@ -359,8 +370,14 @@ function hope_seating_create_default_venues() {
         )
     );
     
+    if ($result1 === false) {
+        error_log('HOPE Seating: Failed to create Main Stage venue - ' . $wpdb->last_error);
+    } else {
+        error_log('HOPE Seating: Created Main Stage venue with ID ' . $wpdb->insert_id);
+    }
+    
     // Create Black Box Theater
-    $wpdb->insert(
+    $result2 = $wpdb->insert(
         $venues_table,
         array(
             'name' => 'Black Box Theater',
@@ -375,6 +392,16 @@ function hope_seating_create_default_venues() {
             'status' => 'active'
         )
     );
+    
+    if ($result2 === false) {
+        error_log('HOPE Seating: Failed to create Black Box venue - ' . $wpdb->last_error);
+    } else {
+        error_log('HOPE Seating: Created Black Box venue with ID ' . $wpdb->insert_id);
+    }
+    
+    // Final verification
+    $final_count = $wpdb->get_var("SELECT COUNT(*) FROM {$venues_table}");
+    error_log('HOPE Seating: Venue creation complete. Total venues: ' . $final_count);
 }
 
 // Initialize plugin
