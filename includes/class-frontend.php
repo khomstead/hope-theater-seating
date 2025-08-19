@@ -25,7 +25,8 @@ class HOPE_Seating_Frontend {
         
         // WooCommerce integration
         add_filter('woocommerce_add_cart_item_data', array($this, 'add_seats_to_cart_item'), 10, 3);
-        add_action('woocommerce_before_add_to_cart_button', array($this, 'add_hidden_seat_field'));
+        add_action('woocommerce_before_add_to_cart_button', array($this, 'add_seating_interface'));
+        add_action('woocommerce_single_product_summary', array($this, 'add_seating_button'), 25);
         
         // Schedule cleanup
         if (!wp_next_scheduled('hope_seating_cleanup')) {
@@ -39,15 +40,21 @@ class HOPE_Seating_Frontend {
         
         $load_scripts = false;
         
-        if (function_exists('is_product') && is_product()) {
-            $load_scripts = true;
+        // Check if this is a product page with seating enabled
+        if (function_exists('is_product') && is_product() && $post) {
+            $seating_enabled = get_post_meta($post->ID, '_hope_seating_enabled', true);
+            if ($seating_enabled === 'yes') {
+                $load_scripts = true;
+            }
         }
         
+        // Check for shortcodes in content
         if ($post && is_object($post) && (has_shortcode($post->post_content, 'hope_seating_chart') || has_shortcode($post->post_content, 'hope_seat_button'))) {
             $load_scripts = true;
         }
         
-        if (is_singular()) {
+        // Admin area or when explicitly needed
+        if (is_admin()) {
             $load_scripts = true;
         }
         
@@ -220,7 +227,11 @@ public function seat_button_shortcode($atts) {
                             response.data.seats.forEach(function(seat) {
                                 var isBooked = response.data.booked_seats && response.data.booked_seats.includes(seat.seat_number);
                                 html += '<span class="seat-item ' + (isBooked ? 'booked' : 'available') + '">';
-                                html += seat.section + '-' + seat.row + '-' + seat.number;
+                                // XSS Protection: Escape all seat data
+                                var seatText = String(seat.section || '').replace(/[<>&"']/g, '') + '-' + 
+                                              String(seat.row || '').replace(/[<>&"']/g, '') + '-' + 
+                                              String(seat.number || '').replace(/[<>&"']/g, '');
+                                html += seatText;
                                 html += '</span> ';
                             });
                             html += '</div>';
@@ -329,6 +340,15 @@ public function seat_button_shortcode($atts) {
             return;
         }
         
+        // Check if seating is enabled for this product/event
+        if ($event_id) {
+            $seating_enabled = get_post_meta($event_id, '_hope_seating_enabled', true);
+            if ($seating_enabled !== 'yes') {
+                wp_send_json_error('Seating selection is not enabled for this event');
+                return;
+            }
+        }
+        
         global $wpdb;
         
         // Get venue data
@@ -409,10 +429,38 @@ public function seat_button_shortcode($atts) {
         $seat_ids = isset($_POST['seat_ids']) ? json_decode(stripslashes($_POST['seat_ids']), true) : array();
         $event_id = isset($_POST['event_id']) ? intval($_POST['event_id']) : 0;
         
+        // Enhanced input validation
         if (empty($seat_ids) || !$event_id) {
             wp_send_json_error('Invalid request');
             return;
         }
+        
+        // Validate seat_ids is array and all elements are positive integers
+        if (!is_array($seat_ids)) {
+            wp_send_json_error('Invalid seat data format');
+            return;
+        }
+        
+        $validated_seat_ids = array();
+        foreach ($seat_ids as $seat_id) {
+            $seat_id = intval($seat_id);
+            if ($seat_id > 0) {
+                $validated_seat_ids[] = $seat_id;
+            }
+        }
+        
+        if (empty($validated_seat_ids)) {
+            wp_send_json_error('No valid seat IDs provided');
+            return;
+        }
+        
+        // Limit maximum seats per reservation (security measure)
+        if (count($validated_seat_ids) > 20) {
+            wp_send_json_error('Too many seats selected (maximum 20)');
+            return;
+        }
+        
+        $seat_ids = $validated_seat_ids;
         
         global $wpdb;
         $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
@@ -421,37 +469,118 @@ public function seat_button_shortcode($atts) {
         $reserved_until = date('Y-m-d H:i:s', strtotime('+15 minutes'));
         $session_id = session_id() ?: wp_generate_password(32, false);
         
-        $success = true;
-        foreach ($seat_ids as $seat_id) {
-            $result = $wpdb->replace($bookings_table, array(
-                'seat_id' => $seat_id,
-                'event_id' => $event_id,
-                'status' => 'reserved',
-                'reserved_until' => $reserved_until,
-                'session_id' => $session_id
+        // Start transaction for atomicity
+        $wpdb->query('START TRANSACTION');
+        
+        try {
+            // Check if seats are already reserved by others
+            $placeholders = implode(',', array_fill(0, count($seat_ids), '%d'));
+            $existing_reservations = $wpdb->get_results($wpdb->prepare(
+                "SELECT seat_id FROM $bookings_table 
+                WHERE seat_id IN ($placeholders) 
+                AND event_id = %d 
+                AND status IN ('reserved', 'confirmed') 
+                AND (reserved_until > NOW() OR status = 'confirmed')
+                AND session_id != %s",
+                array_merge($seat_ids, array($event_id, $session_id))
             ));
             
-            if (!$result) {
-                $success = false;
-                break;
+            if (!empty($existing_reservations)) {
+                $wpdb->query('ROLLBACK');
+                $conflicted_seats = wp_list_pluck($existing_reservations, 'seat_id');
+                wp_send_json_error('Some seats are no longer available: ' . implode(', ', $conflicted_seats));
+                return;
             }
-        }
-        
-        if ($success) {
-            wp_send_json_success(array(
-                'reserved_until' => $reserved_until,
-                'message' => 'Seats reserved for 15 minutes'
-            ));
-        } else {
-            wp_send_json_error('Failed to reserve seats');
+            
+            // Reserve seats
+            $success = true;
+            $reserved_seats = array();
+            
+            foreach ($seat_ids as $seat_id) {
+                $result = $wpdb->replace($bookings_table, array(
+                    'seat_id' => $seat_id,
+                    'event_id' => $event_id,
+                    'status' => 'reserved',
+                    'reserved_until' => $reserved_until,
+                    'session_id' => $session_id,
+                    'created_at' => current_time('mysql')
+                ), array('%d', '%d', '%s', '%s', '%s', '%s'));
+                
+                if ($result === false) {
+                    $success = false;
+                    error_log('HOPE Seating: Failed to reserve seat ' . $seat_id . ' - ' . $wpdb->last_error);
+                    break;
+                } else {
+                    $reserved_seats[] = $seat_id;
+                }
+            }
+            
+            if ($success) {
+                $wpdb->query('COMMIT');
+                wp_send_json_success(array(
+                    'reserved_until' => $reserved_until,
+                    'reserved_seats' => $reserved_seats,
+                    'message' => 'Seats reserved for 15 minutes'
+                ));
+            } else {
+                $wpdb->query('ROLLBACK');
+                wp_send_json_error('Failed to reserve seats - transaction rolled back');
+            }
+            
+        } catch (Exception $e) {
+            $wpdb->query('ROLLBACK');
+            error_log('HOPE Seating: Exception during seat reservation - ' . $e->getMessage());
+            wp_send_json_error('An error occurred while reserving seats');
         }
     }
     
     /**
-     * Add hidden field for selected seats
+     * Add seating interface if enabled for this product
+     */
+    public function add_seating_interface() {
+        global $product;
+        
+        if (!$product) {
+            return;
+        }
+        
+        $seating_enabled = get_post_meta($product->get_id(), '_hope_seating_enabled', true);
+        
+        if ($seating_enabled === 'yes') {
+            echo '<input type="hidden" id="hope_selected_seats_cart" name="hope_selected_seats" value="" />';
+            echo '<div id="hope-selected-seats-display" style="margin: 10px 0; display: none;">';
+            echo '<div class="hope-selected-seats-info">';
+            echo '<h4>' . __('Selected Seats:', 'hope-seating') . '</h4>';
+            echo '<div id="hope-selected-seats-list"></div>';
+            echo '<div id="hope-selected-seats-total"></div>';
+            echo '</div>';
+            echo '</div>';
+        }
+    }
+    
+    /**
+     * Add seat selection button if enabled for this product
+     */
+    public function add_seating_button() {
+        global $product;
+        
+        if (!$product) {
+            return;
+        }
+        
+        $seating_enabled = get_post_meta($product->get_id(), '_hope_seating_enabled', true);
+        $venue_id = get_post_meta($product->get_id(), '_hope_seating_venue_id', true);
+        
+        if ($seating_enabled === 'yes' && $venue_id) {
+            echo do_shortcode('[hope_seat_button venue_id="' . esc_attr($venue_id) . '" event_id="' . esc_attr($product->get_id()) . '" text="' . __('Select Your Seats', 'hope-seating') . '"]');
+        }
+    }
+    
+    /**
+     * Add hidden field for selected seats (legacy method - keeping for compatibility)
      */
     public function add_hidden_seat_field() {
-        echo '<input type="hidden" id="hope_selected_seats_cart" name="hope_selected_seats" value="" />';
+        // This method is kept for backward compatibility but functionality moved to add_seating_interface
     }
     
     /**

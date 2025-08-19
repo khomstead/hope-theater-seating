@@ -2,11 +2,15 @@
 /**
  * Plugin Name: HOPE Theater Seating
  * Plugin URI: https://hopecenterforthearts.org
- * Description: Custom seating chart system for HOPE Theater with accurate half-round layout
- * Version: 2.0.0
+ * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
+ * Version: 2.0.1
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
- * Text Domain: hope-theater-seating
+ * Requires at least: 5.0
+ * Tested up to: 6.4
+ * Requires PHP: 7.4
+ * WC requires at least: 5.0
+ * WC tested up to: 8.5
  */
 
 // Prevent direct access
@@ -15,14 +19,65 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.0.0');
+define('HOPE_SEATING_VERSION', '2.0.1');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
 
-/**
- * Main plugin class
- */
+// Activation hook - THIS IS WHERE THE NEW CODE GOES
+register_activation_hook(__FILE__, 'hope_seating_activate');
+
+function hope_seating_activate() {
+    // Check dependencies
+    if (!is_plugin_active('woocommerce/woocommerce.php')) {
+        deactivate_plugins(plugin_basename(__FILE__));
+        wp_die('HOPE Theater Seating requires WooCommerce to be installed and activated.');
+    }
+    
+    if (!is_plugin_active('fooevents/fooevents.php')) {
+        deactivate_plugins(plugin_basename(__FILE__));
+        wp_die('HOPE Theater Seating requires FooEvents for WooCommerce to be installed and activated.');
+    }
+    
+    // Include required files for activation
+    require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-database.php';
+    require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-seat-manager.php';
+    
+    // Create database tables
+    $database = new HOPE_Seating_Database();
+    $database->create_tables();
+    
+    // Create default venues if they don't exist
+    hope_seating_create_default_venues();
+    
+    // NEW: Populate seats for main venue
+    $seat_manager = new HOPE_Seat_Manager(1); // Venue ID 1 is Main Stage
+    $total_seats = $seat_manager->populate_seats();
+    
+    // Log activation
+    error_log('HOPE Theater Seating v2.0.1 activated. ' . $total_seats . ' seats populated.');
+    
+    // Schedule cleanup cron
+    if (!wp_next_scheduled('hope_seating_cleanup')) {
+        wp_schedule_event(time(), 'hourly', 'hope_seating_cleanup');
+    }
+    
+    // NEW: Schedule holds cleanup cron
+    if (!wp_next_scheduled('hope_seating_cleanup_holds')) {
+        wp_schedule_event(time(), 'hope_seating_every_minute', 'hope_seating_cleanup_holds');
+    }
+}
+
+// Deactivation hook
+register_deactivation_hook(__FILE__, 'hope_seating_deactivate');
+
+function hope_seating_deactivate() {
+    // Clear all scheduled crons
+    wp_clear_scheduled_hook('hope_seating_cleanup');
+    wp_clear_scheduled_hook('hope_seating_cleanup_holds');
+}
+
+// Main plugin class
 class HOPE_Theater_Seating {
     
     private static $instance = null;
@@ -35,228 +90,258 @@ class HOPE_Theater_Seating {
     }
     
     private function __construct() {
-        $this->load_dependencies();
+        add_action('plugins_loaded', array($this, 'init'));
+    }
+    
+    public function init() {
+        // Check dependencies
+        if (!$this->check_dependencies()) {
+            return;
+        }
+        
+        // Include required files
+        $this->includes();
+        
+        // Initialize components
         $this->init_hooks();
     }
     
-    private function load_dependencies() {
-        // Core classes
+    private function check_dependencies() {
+        return (
+            class_exists('WooCommerce') && 
+            class_exists('FooEvents')
+        );
+    }
+    
+    private function includes() {
+        // Database and core classes
         require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-database.php';
-        require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-modal-handler.php';
-        require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-ajax-handler.php';
-        require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-seat-manager.php';
-        require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-mobile-detector.php';
-        require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-session-manager.php';
         
-        // Admin classes
-        if (is_admin()) {
-            require_once HOPE_SEATING_PLUGIN_DIR . 'includes/admin/class-admin-menu.php';
-            require_once HOPE_SEATING_PLUGIN_DIR . 'includes/admin/class-product-meta.php';
+        // Check if files exist before requiring
+        $files_to_include = array(
+            'includes/class-venues.php',
+            'includes/class-seat-maps.php',
+            'includes/class-seat-manager.php',     // NEW
+            'includes/class-session-manager.php',   // NEW
+            'includes/class-mobile-detector.php',   // NEW
+            'includes/class-admin.php',
+            'includes/class-frontend.php',
+            'includes/class-ajax.php',
+            'includes/class-modal-handler.php',
+            'includes/class-ajax-handler.php',
+            'includes/class-integration.php'
+        );
+        
+        foreach ($files_to_include as $file) {
+            $file_path = HOPE_SEATING_PLUGIN_DIR . $file;
+            if (file_exists($file_path)) {
+                require_once $file_path;
+            }
         }
     }
     
     private function init_hooks() {
-        // Activation/Deactivation hooks
-        register_activation_hook(HOPE_SEATING_PLUGIN_FILE, [$this, 'activate']);
-        register_deactivation_hook(HOPE_SEATING_PLUGIN_FILE, [$this, 'deactivate']);
-        
-        // Initialize components
-        add_action('init', [$this, 'init']);
-        add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
-        add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
-        
-        // WooCommerce integration
-        add_action('woocommerce_before_add_to_cart_button', [$this, 'add_seat_selection_button']);
-        add_action('wp_footer', [$this, 'render_modal']);
-        
-        // AJAX handlers
-        $ajax = new HOPE_Ajax_Handler();
-        add_action('wp_ajax_hope_check_availability', [$ajax, 'check_availability']);
-        add_action('wp_ajax_nopriv_hope_check_availability', [$ajax, 'check_availability']);
-        add_action('wp_ajax_hope_hold_seats', [$ajax, 'hold_seats']);
-        add_action('wp_ajax_nopriv_hope_hold_seats', [$ajax, 'hold_seats']);
-        add_action('wp_ajax_hope_add_to_cart', [$ajax, 'add_to_cart']);
-        add_action('wp_ajax_nopriv_hope_add_to_cart', [$ajax, 'add_to_cart']);
-        add_action('wp_ajax_hope_release_seats', [$ajax, 'release_seats']);
-        add_action('wp_ajax_nopriv_hope_release_seats', [$ajax, 'release_seats']);
-        
-        // Session cleanup
-        add_action('hope_cleanup_expired_holds', [$this, 'cleanup_expired_holds']);
-        
-        // Schedule cleanup if not already scheduled
-        if (!wp_next_scheduled('hope_cleanup_expired_holds')) {
-            wp_schedule_event(time(), 'every_five_minutes', 'hope_cleanup_expired_holds');
+        // Initialize admin if class exists
+        if (is_admin() && class_exists('HOPE_Seating_Admin')) {
+            new HOPE_Seating_Admin();
         }
         
-        // Admin initialization
-        if (is_admin()) {
-            new HOPE_Admin_Menu();
-            new HOPE_Product_Meta();
+        // Initialize frontend if class exists
+        if (class_exists('HOPE_Seating_Frontend')) {
+            new HOPE_Seating_Frontend();
+        }
+        
+        // Initialize AJAX handlers if they exist
+        if (class_exists('HOPE_Seating_Ajax')) {
+            new HOPE_Seating_Ajax();
+        }
+        
+        if (class_exists('HOPE_Ajax_Handler')) {
+            new HOPE_Ajax_Handler();
+        }
+        
+        // Initialize modal handler if it exists
+        if (class_exists('HOPE_Modal_Handler')) {
+            new HOPE_Modal_Handler();
+        }
+        
+        // NEW: Initialize session manager (handles holds cron)
+        if (class_exists('HOPE_Session_Manager')) {
+            new HOPE_Session_Manager();
+        }
+        
+        // NEW: Make mobile detector available globally
+        if (class_exists('HOPE_Mobile_Detector')) {
+            $GLOBALS['hope_mobile_detector'] = HOPE_Mobile_Detector::get_instance();
+        }
+        
+        // Add cleanup cron action
+        add_action('hope_seating_cleanup', array($this, 'cleanup_temp_seats'));
+        
+        // Enqueue scripts and styles
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
+        
+        // Add body classes for device detection
+        if (class_exists('HOPE_Mobile_Detector')) {
+            add_filter('body_class', array(HOPE_Mobile_Detector::get_instance(), 'add_body_classes'));
         }
     }
     
-    public function init() {
-        // Add custom cron schedule
-        add_filter('cron_schedules', function($schedules) {
-            $schedules['every_five_minutes'] = [
-                'interval' => 300,
-                'display' => __('Every 5 Minutes', 'hope-theater-seating')
-            ];
-            return $schedules;
-        });
-    }
-    
-    public function enqueue_scripts() {
-        if (!is_product()) {
-            return;
+    public function enqueue_frontend_assets() {
+        // Get mobile detector instance if available
+        $viewport_config = array();
+        if (class_exists('HOPE_Mobile_Detector')) {
+            $mobile_detector = HOPE_Mobile_Detector::get_instance();
+            $viewport_config = $mobile_detector->get_viewport_config();
         }
         
-        global $product;
-        if (!$product || !get_post_meta($product->get_id(), '_hope_has_seating', true)) {
-            return;
-        }
-        
-        // Core styles
+        // Enqueue styles
         wp_enqueue_style(
-            'hope-seating-styles',
+            'hope-seating-frontend',
             HOPE_SEATING_PLUGIN_URL . 'assets/css/seat-map.css',
-            [],
+            array(),
             HOPE_SEATING_VERSION
         );
         
         wp_enqueue_style(
-            'hope-modal-styles',
+            'hope-seating-modal',
             HOPE_SEATING_PLUGIN_URL . 'assets/css/modal.css',
-            [],
+            array(),
             HOPE_SEATING_VERSION
         );
         
-        // Core scripts
+        // Enqueue scripts
         wp_enqueue_script(
-            'hope-seating-map',
+            'hope-seating-seat-map',
             HOPE_SEATING_PLUGIN_URL . 'assets/js/seat-map.js',
-            [],
+            array(),
             HOPE_SEATING_VERSION,
             true
         );
         
         wp_enqueue_script(
-            'hope-modal-handler',
+            'hope-seating-modal',
             HOPE_SEATING_PLUGIN_URL . 'assets/js/modal-handler.js',
-            ['hope-seating-map'],
+            array('hope-seating-seat-map'),
             HOPE_SEATING_VERSION,
             true
         );
         
-        // Mobile handler for touch devices
-        $mobile_detector = new HOPE_Mobile_Detector();
-        if ($mobile_detector->is_mobile()) {
+        // Add mobile handler if touch device
+        if (isset($mobile_detector) && $mobile_detector->is_touch_device()) {
             wp_enqueue_script(
-                'hope-mobile-handler',
+                'hope-seating-mobile',
                 HOPE_SEATING_PLUGIN_URL . 'assets/js/mobile-handler.js',
-                ['hope-seating-map'],
+                array('hope-seating-seat-map'),
                 HOPE_SEATING_VERSION,
                 true
             );
         }
         
-        // Localize script with AJAX data
-        wp_localize_script('hope-seating-map', 'hope_ajax', [
+        // Get session ID
+        $session_id = '';
+        if (class_exists('HOPE_Session_Manager')) {
+            $session_id = HOPE_Session_Manager::get_current_session_id();
+        }
+        
+        // Localize script with configuration
+        wp_localize_script('hope-seating-seat-map', 'hope_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('hope_seating_nonce'),
-            'product_id' => $product->get_id(),
-            'venue_id' => get_post_meta($product->get_id(), '_hope_venue_id', true),
-            'is_mobile' => $mobile_detector->is_mobile(),
-            'session_id' => HOPE_Session_Manager::get_session_id(),
-            'hold_duration' => 600, // 10 minutes in seconds
-            'messages' => [
-                'seat_unavailable' => __('This seat is no longer available', 'hope-theater-seating'),
-                'connection_error' => __('Connection error. Please try again.', 'hope-theater-seating'),
-                'session_expired' => __('Your session has expired. Please refresh the page.', 'hope-theater-seating'),
-                'max_seats' => __('Maximum 10 seats per order', 'hope-theater-seating')
-            ]
-        ]);
+            'session_id' => $session_id,
+            'device_type' => isset($mobile_detector) ? $mobile_detector->get_device_type() : 'desktop',
+            'viewport_config' => $viewport_config,
+            'messages' => array(
+                'seat_unavailable' => __('This seat is no longer available', 'hope-seating'),
+                'max_seats' => __('Maximum number of seats selected', 'hope-seating'),
+                'connection_error' => __('Connection error. Please try again.', 'hope-seating'),
+                'session_expired' => __('Your session has expired. Please refresh the page.', 'hope-seating')
+            )
+        ));
     }
     
-    public function admin_enqueue_scripts($hook) {
-        if (!in_array($hook, ['post.php', 'post-new.php', 'toplevel_page_hope-seating'])) {
+    public function enqueue_admin_assets($hook) {
+        // Only load on our admin pages
+        if (strpos($hook, 'hope-seating') === false) {
             return;
         }
         
         wp_enqueue_style(
-            'hope-admin-styles',
+            'hope-seating-admin',
             HOPE_SEATING_PLUGIN_URL . 'assets/css/admin.css',
-            [],
+            array(),
             HOPE_SEATING_VERSION
         );
         
         wp_enqueue_script(
-            'hope-admin-scripts',
+            'hope-seating-admin',
             HOPE_SEATING_PLUGIN_URL . 'assets/js/admin.js',
-            ['jquery'],
+            array('jquery'),
             HOPE_SEATING_VERSION,
             true
         );
     }
     
-    public function add_seat_selection_button() {
-        global $product;
-        
-        if (!$product || !get_post_meta($product->get_id(), '_hope_has_seating', true)) {
-            return;
+    public function cleanup_temp_seats() {
+        // Cleanup expired holds if session manager exists
+        if (class_exists('HOPE_Session_Manager')) {
+            $session_manager = new HOPE_Session_Manager();
+            $cleaned = $session_manager->cleanup_expired_holds();
+            
+            if ($cleaned > 0) {
+                error_log('HOPE Theater Seating: Cleaned up ' . $cleaned . ' expired holds.');
+            }
         }
-        
-        $modal_handler = new HOPE_Modal_Handler();
-        $modal_handler->render_seat_selection_button($product->get_id());
-    }
-    
-    public function render_modal() {
-        if (!is_product()) {
-            return;
-        }
-        
-        global $product;
-        if (!$product || !get_post_meta($product->get_id(), '_hope_has_seating', true)) {
-            return;
-        }
-        
-        $modal_handler = new HOPE_Modal_Handler();
-        $modal_handler->render_modal_wrapper();
-    }
-    
-    public function cleanup_expired_holds() {
-        $session_manager = new HOPE_Session_Manager();
-        $session_manager->cleanup_expired_holds();
-    }
-    
-    public function activate() {
-        // Create database tables
-        $database = new HOPE_Database();
-        $database->create_tables();
-        
-        // Initialize default data
-        $database->initialize_venue_data();
-        
-        // Schedule cleanup cron
-        if (!wp_next_scheduled('hope_cleanup_expired_holds')) {
-            wp_schedule_event(time(), 'every_five_minutes', 'hope_cleanup_expired_holds');
-        }
-        
-        // Flush rewrite rules
-        flush_rewrite_rules();
-    }
-    
-    public function deactivate() {
-        // Clear scheduled events
-        wp_clear_scheduled_hook('hope_cleanup_expired_holds');
-        
-        // Clean up temporary holds
-        $session_manager = new HOPE_Session_Manager();
-        $session_manager->cleanup_all_holds();
     }
 }
 
+// Helper function to create default venues
+function hope_seating_create_default_venues() {
+    global $wpdb;
+    $venues_table = $wpdb->prefix . 'hope_seating_venues';
+    
+    // Check if venues already exist
+    $existing = $wpdb->get_var("SELECT COUNT(*) FROM {$venues_table}");
+    
+    if ($existing > 0) {
+        return; // Venues already exist
+    }
+    
+    // Create HOPE Theater Main Stage
+    $wpdb->insert(
+        $venues_table,
+        array(
+            'name' => 'HOPE Theater - Main Stage',
+            'slug' => 'hope-theater-main-stage',
+            'description' => '485-seat half-round theater with orchestra and balcony levels',
+            'total_seats' => 485,
+            'configuration' => json_encode(array(
+                'type' => 'half-round',
+                'levels' => array('orchestra', 'balcony'),
+                'sections' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H')
+            )),
+            'status' => 'active'
+        )
+    );
+    
+    // Create Black Box Theater
+    $wpdb->insert(
+        $venues_table,
+        array(
+            'name' => 'Black Box Theater',
+            'slug' => 'black-box-theater',
+            'description' => '110-seat flexible configuration theater',
+            'total_seats' => 110,
+            'configuration' => json_encode(array(
+                'type' => 'flexible',
+                'levels' => array('floor'),
+                'sections' => array('General')
+            )),
+            'status' => 'active'
+        )
+    );
+}
+
 // Initialize plugin
-add_action('plugins_loaded', function() {
-    HOPE_Theater_Seating::get_instance();
-});
+HOPE_Theater_Seating::get_instance();
