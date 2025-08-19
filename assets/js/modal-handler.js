@@ -37,15 +37,13 @@ class HOPEModalHandler {
     }
     
     setupEventListeners() {
-        // Open modal button - try both possible IDs
-        const selectSeatsBtn = document.getElementById('hope-select-seats') || 
-                              document.getElementById('hope-select-seats-main');
-        if (selectSeatsBtn) {
-            selectSeatsBtn.addEventListener('click', (e) => {
+        // Use event delegation for dynamically loaded buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn')) {
                 e.preventDefault();
                 this.openModal();
-            });
-        }
+            }
+        });
         
         // Close button
         const closeBtn = this.modal.querySelector('.hope-modal-close');

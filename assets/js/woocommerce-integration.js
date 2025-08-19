@@ -52,20 +52,13 @@ class HOPEWooCommerceIntegration {
     }
     
     setupSeatSelectionButton() {
-        const selectButton = document.getElementById('hope-select-seats-main');
-        const changeButton = document.querySelector('.hope-change-seats-btn');
-        
-        if (selectButton) {
-            selectButton.addEventListener('click', () => {
+        // Use event delegation for dynamically loaded buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('#hope-select-seats-main, .hope-change-seats-btn')) {
+                e.preventDefault();
                 this.openSeatSelection();
-            });
-        }
-        
-        if (changeButton) {
-            changeButton.addEventListener('click', () => {
-                this.openSeatSelection();
-            });
-        }
+            }
+        });
     }
     
     openSeatSelection() {
