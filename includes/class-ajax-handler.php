@@ -109,10 +109,12 @@ class HOPE_Ajax_Handler {
         $table_holds = $wpdb->prefix . 'hope_seating_holds';
         
         // First, release any existing holds for this session
-        $wpdb->delete($table_holds, [
+        $deleted = $wpdb->delete($table_holds, [
             'session_id' => $session_id,
             'product_id' => $product_id
         ]);
+        
+        error_log("Released {$deleted} existing holds for session {$session_id}");
         
         $success = true;
         $held_seats = [];
@@ -122,6 +124,8 @@ class HOPE_Ajax_Handler {
         foreach ($seats as $seat_id) {
             // Check if seat is available
             $is_available = $this->is_seat_available($product_id, $seat_id, $session_id);
+            
+            error_log("Seat {$seat_id} availability: " . ($is_available ? 'available' : 'not available'));
             
             if ($is_available) {
                 $result = $wpdb->insert($table_holds, [
@@ -134,9 +138,13 @@ class HOPE_Ajax_Handler {
                 
                 if ($result) {
                     $held_seats[] = $seat_id;
+                    error_log("Successfully held seat {$seat_id}");
                 } else {
                     $success = false;
+                    error_log("Failed to hold seat {$seat_id}: " . $wpdb->last_error);
                 }
+            } else {
+                error_log("Seat {$seat_id} is not available for holding");
             }
         }
         
@@ -176,13 +184,16 @@ class HOPE_Ajax_Handler {
             wp_send_json_error(['message' => 'Seat selection expired. Please try again.']);
         }
         
-        // Get seat details and calculate price
-        $seat_manager = new HOPE_Seat_Manager();
-        $seat_details = $seat_manager->get_seat_details($seats, $product_id);
-        $total_price = 0;
+        // Get seat details and calculate price - simplified for now
+        $total_price = count($seats) * 120; // Default price per seat
         
-        foreach ($seat_details as $seat) {
-            $total_price += $seat['price'];
+        // Create seat details array
+        $seat_details = [];
+        foreach ($seats as $seat_id) {
+            $seat_details[] = [
+                'seat_id' => $seat_id,
+                'price' => 120 // Default price
+            ];
         }
         
         // Create cart item data

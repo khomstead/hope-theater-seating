@@ -95,10 +95,12 @@ class HOPE_Modal_Handler {
                     <div id="hope-seat-map-container" style="display: none;">
                         <div class="theater-container">
                             <div class="header">
-                                <h1>HOPE Theater - Main Stage</h1>
-                                <div class="floor-selector">
-                                    <button class="floor-btn active" data-floor="orchestra">Orchestra</button>
-                                    <button class="floor-btn" data-floor="balcony">Balcony</button>
+                                <div class="header-content">
+                                    <h1>HOPE Theater</h1>
+                                    <div class="floor-selector">
+                                        <button class="floor-btn active" data-floor="orchestra">Orchestra</button>
+                                        <button class="floor-btn" data-floor="balcony">Balcony</button>
+                                    </div>
                                 </div>
                             </div>
                             
