@@ -31,7 +31,6 @@ class HOPE_Seating_Database {
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            KEY slug (slug),
             KEY status (status)
         ) $charset_collate;";
         
