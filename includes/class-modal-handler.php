@@ -80,12 +80,9 @@ class HOPE_Modal_Handler {
         <div id="hope-seat-modal" class="hope-modal" style="display: none;" aria-hidden="true" role="dialog">
             <div class="hope-modal-overlay"></div>
             <div class="hope-modal-content">
-                <div class="hope-modal-header">
-                    <h2><?php echo esc_html($venue->name); ?></h2>
-                    <button type="button" class="hope-modal-close" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+                <button type="button" class="hope-modal-close" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
                 
                 <div class="hope-modal-body">
                     <!-- Loading indicator -->
