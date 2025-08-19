@@ -166,8 +166,11 @@ class HOPE_Ajax_Handler {
      * Add selected seats to cart
      */
     public function add_to_cart() {
+        error_log('HOPE: add_to_cart called with data: ' . print_r($_POST, true));
+        
         // Verify nonce
         if (!wp_verify_nonce($_POST['nonce'], 'hope_seating_nonce')) {
+            error_log('HOPE: Nonce verification failed');
             wp_die('Security check failed');
         }
         
@@ -175,14 +178,35 @@ class HOPE_Ajax_Handler {
         $seats = json_decode(stripslashes($_POST['seats']), true);
         $session_id = sanitize_text_field($_POST['session_id']);
         
+        error_log("HOPE: Processing add_to_cart - Product ID: {$product_id}, Seats: " . print_r($seats, true) . ", Session: {$session_id}");
+        
         if (empty($seats)) {
+            error_log('HOPE: No seats selected');
             wp_send_json_error(['message' => 'No seats selected']);
         }
         
+        // Check if WooCommerce is available
+        if (!function_exists('WC') || !WC()->cart) {
+            error_log('HOPE: WooCommerce cart not available');
+            wp_send_json_error(['message' => 'Shopping cart not available']);
+        }
+        
+        // Check if product exists
+        $product = wc_get_product($product_id);
+        if (!$product) {
+            error_log("HOPE: Product {$product_id} not found");
+            wp_send_json_error(['message' => 'Product not found']);
+        }
+        
+        error_log("HOPE: Product found: {$product->get_name()}, Type: {$product->get_type()}");
+        
         // Verify all seats are held by this session
         if (!$this->verify_seat_holds($product_id, $seats, $session_id)) {
+            error_log('HOPE: Seat holds verification failed');
             wp_send_json_error(['message' => 'Seat selection expired. Please try again.']);
         }
+        
+        error_log('HOPE: Seat holds verified successfully');
         
         // Get seat details and calculate price - simplified for now
         $total_price = count($seats) * 120; // Default price per seat
@@ -204,28 +228,45 @@ class HOPE_Ajax_Handler {
             'hope_total_price' => $total_price
         ];
         
-        // Add to WooCommerce cart
-        $cart_item_key = WC()->cart->add_to_cart(
-            $product_id,
-            1,
-            0,
-            [],
-            $cart_item_data
-        );
+        error_log('HOPE: Adding to cart with data: ' . print_r($cart_item_data, true));
         
-        if ($cart_item_key) {
-            // Convert holds to pending bookings
-            $this->convert_holds_to_bookings($product_id, $seats, $session_id);
+        // Add to WooCommerce cart
+        try {
+            $cart_item_key = WC()->cart->add_to_cart(
+                $product_id,
+                1,
+                0,
+                [],
+                $cart_item_data
+            );
             
-            wp_send_json_success([
-                'cart_url' => wc_get_cart_url(),
-                'message' => sprintf(
-                    __('%d seats added to cart', 'hope-theater-seating'),
-                    count($seats)
-                )
-            ]);
-        } else {
-            wp_send_json_error(['message' => 'Could not add seats to cart']);
+            error_log("HOPE: WooCommerce add_to_cart returned: " . ($cart_item_key ? $cart_item_key : 'FALSE'));
+            
+            if ($cart_item_key) {
+                // Convert holds to pending bookings
+                $this->convert_holds_to_bookings($product_id, $seats, $session_id);
+                
+                error_log('HOPE: Successfully added seats to cart and converted holds to bookings');
+                
+                wp_send_json_success([
+                    'cart_url' => wc_get_cart_url(),
+                    'message' => sprintf(
+                        __('%d seats added to cart', 'hope-theater-seating'),
+                        count($seats)
+                    )
+                ]);
+            } else {
+                error_log('HOPE: WooCommerce add_to_cart failed - no cart item key returned');
+                
+                // Get WooCommerce notices to see what went wrong
+                $notices = wc_get_notices('error');
+                error_log('HOPE: WooCommerce error notices: ' . print_r($notices, true));
+                
+                wp_send_json_error(['message' => 'Could not add seats to cart - WooCommerce error']);
+            }
+        } catch (Exception $e) {
+            error_log('HOPE: Exception during add_to_cart: ' . $e->getMessage());
+            wp_send_json_error(['message' => 'Error adding seats to cart: ' . $e->getMessage()]);
         }
     }
     

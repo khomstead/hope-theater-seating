@@ -13,17 +13,27 @@ class HOPEModalHandler {
     }
     
     init() {
+        console.log('HOPEModalHandler initializing...');
         // Wait for DOM to be ready
         if (document.readyState === 'loading') {
+            console.log('DOM still loading, waiting for DOMContentLoaded...');
             document.addEventListener('DOMContentLoaded', () => this.setupModal());
         } else {
+            console.log('DOM ready, setting up modal immediately...');
             this.setupModal();
         }
     }
     
     setupModal() {
+        console.log('setupModal called');
         this.modal = document.getElementById('hope-seat-modal');
-        if (!this.modal) return;
+        
+        if (!this.modal) {
+            console.error('Modal element #hope-seat-modal not found in DOM');
+            return;
+        }
+        
+        console.log('Modal element found, setting up event listeners...');
         
         // Setup event listeners
         this.setupEventListeners();
@@ -34,6 +44,8 @@ class HOPEModalHandler {
                 this.seatMap = window.hopeSeatMap;
             }
         });
+        
+        console.log('Modal setup complete');
     }
     
     setupEventListeners() {
@@ -111,7 +123,19 @@ class HOPEModalHandler {
     }
     
     openModal() {
-        if (!this.modal || this.isOpen) return;
+        console.log('openModal called, isOpen:', this.isOpen, 'modal exists:', !!this.modal);
+        
+        if (!this.modal) {
+            console.error('Modal element not found!');
+            return;
+        }
+        
+        if (this.isOpen) {
+            console.log('Modal is already open, ignoring');
+            return;
+        }
+        
+        console.log('Opening modal...');
         
         // Show modal
         this.modal.style.display = 'block';
@@ -409,5 +433,5 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Initialize
-new HOPEModalHandler();
+// Initialize and store globally
+window.hopeModalHandler = new HOPEModalHandler();
