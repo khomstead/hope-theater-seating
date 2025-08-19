@@ -149,6 +149,7 @@ class HOPE_Modal_Handler {
             endif;
         }
         ?>
+    }
     
     /**
      * Render the seat map HTML structure
@@ -212,6 +213,5 @@ class HOPE_Modal_Handler {
         
         <div class="tooltip" id="tooltip"></div>
         <?php
-    }
     }
 }
