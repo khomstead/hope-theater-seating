@@ -588,24 +588,61 @@ class HOPE_Ajax_Handler {
      */
     private function extract_tier_from_seat_id($seat_id) {
         // Parse seat ID to determine pricing tier
-        // Format examples: E10-1, E9-1, E7-1, E2-1
+        // Format examples: C8-1, C9-1, C10-1, etc.
         if (preg_match('/^([A-Z])(\d+)-(\d+)$/', $seat_id, $matches)) {
             $section = $matches[1];
             $row = intval($matches[2]);
             
-            // Theater pricing logic based on HOPE Theater layout
-            if ($section === 'A' || $section === 'B') {
-                return 'p1'; // Premium (match JS lowercase)
-            } elseif ($section === 'C' || $section === 'D') {
-                return 'p2'; // Standard (match JS lowercase)
-            } elseif ($section === 'E' || $section === 'F') {
-                if ($row <= 5) {
-                    return 'p2'; // Standard (match JS lowercase)
-                } else {
-                    return 'p3'; // Value (match JS lowercase)
-                }
-            } elseif ($section === 'G' || $section === 'H') {
-                return 'p3'; // Value (match JS lowercase)
+            // Theater pricing logic based on HOPE Theater seat map configuration
+            // Must match the tier assignments in seat-map.js exactly
+            
+            if ($section === 'A') {
+                // Section A: rows 1-2 are p1, rows 3-9 are p2, row 10 is aa
+                if ($row <= 2) return 'p1';
+                elseif ($row <= 9) return 'p2';
+                else return 'aa'; // row 10
+            } 
+            elseif ($section === 'B') {
+                // Section B: rows 1-3 are p1, rows 4-9 are p2
+                if ($row <= 3) return 'p1';
+                else return 'p2';
+            } 
+            elseif ($section === 'C') {
+                // Section C: rows 1-3 are p1, rows 4-9 are p2, row 10 is p3
+                if ($row <= 3) return 'p1';
+                elseif ($row <= 9) return 'p2';
+                else return 'p3'; // row 10
+            } 
+            elseif ($section === 'D') {
+                // Section D: rows 1-3 are p1, rows 4-9 are p2, row 10 is aa
+                if ($row <= 3) return 'p1';
+                elseif ($row <= 9) return 'p2';
+                else return 'aa'; // row 10
+            } 
+            elseif ($section === 'E') {
+                // Section E: rows 1-2 are p1, rows 3-7 are p2, rows 8-9 are p3, row 10 is aa
+                if ($row <= 2) return 'p1';
+                elseif ($row <= 7) return 'p2';
+                elseif ($row <= 9) return 'p3';
+                else return 'aa'; // row 10
+            } 
+            elseif ($section === 'F') {
+                // Section F (Balcony): rows 1 is p1, rows 2-3 are p2, row 4 is p3
+                if ($row <= 1) return 'p1';
+                elseif ($row <= 3) return 'p2';
+                else return 'p3'; // row 4
+            } 
+            elseif ($section === 'G') {
+                // Section G (Balcony): row 1 is p1, rows 2-3 are p2, row 4 is p3
+                if ($row <= 1) return 'p1';
+                elseif ($row <= 3) return 'p2';
+                else return 'p3'; // row 4
+            } 
+            elseif ($section === 'H') {
+                // Section H (Balcony): row 1 is p1, rows 2-3 are p2, row 4 is p3
+                if ($row <= 1) return 'p1';
+                elseif ($row <= 3) return 'p2';
+                else return 'p3'; // row 4
             }
         }
         
@@ -617,12 +654,13 @@ class HOPE_Ajax_Handler {
      * Get price for a specific pricing tier
      */
     private function get_price_for_tier($tier) {
-        // Define tier pricing - these would typically come from WooCommerce variations
+        // Default tier pricing - these are fallbacks only
+        // Actual prices should come from WooCommerce variations
         $tier_prices = [
-            'p1' => 85.00, // Premium
-            'p2' => 65.00, // Standard
-            'p3' => 45.00, // Value
-            'aa' => 95.00  // VIP/Accessible
+            'p1' => 50.00, // Premium - default fallback
+            'p2' => 35.00, // Standard - default fallback
+            'p3' => 25.00, // Value - default fallback
+            'aa' => 25.00  // Accessible - default fallback
         ];
         
         return isset($tier_prices[$tier]) ? $tier_prices[$tier] : $tier_prices['p2'];
