@@ -36,15 +36,18 @@ class HOPE_WooCommerce_Integration {
         if (!is_product()) return;
         
         global $product;
-        if (!$product) return;
+        if (!$product || !is_object($product)) return;
         
-        $seating_enabled = get_post_meta($product->get_id(), '_hope_seating_enabled', true);
+        $product_id = $product->get_id();
+        if (!$product_id) return;
+        
+        $seating_enabled = get_post_meta($product_id, '_hope_seating_enabled', true);
         if ($seating_enabled !== 'yes') return;
         
         wp_enqueue_script(
             'hope-woocommerce-integration',
             HOPE_SEATING_PLUGIN_URL . 'assets/js/woocommerce-integration.js',
-            array('jquery', 'hope-seating-seat-map'),
+            array('jquery'),
             HOPE_SEATING_VERSION,
             true
         );
@@ -73,10 +76,12 @@ class HOPE_WooCommerce_Integration {
         $seating_enabled = get_post_meta($product->get_id(), '_hope_seating_enabled', true);
         if ($seating_enabled !== 'yes') return;
         
-        // Add CSS to hide variations form
+        // Add CSS to hide variations form but keep our seat selection interface
         echo '<style>
-        .variations_form .variations,
-        .variations_form .single_variation_wrap {
+        .variations_form .variations {
+            display: none !important;
+        }
+        .variations_form .single_variation_wrap .woocommerce-variation {
             display: none !important;
         }
         .hope-seating-enabled .quantity {
@@ -98,24 +103,40 @@ class HOPE_WooCommerce_Integration {
     public function add_seat_selection_interface() {
         global $product;
         
-        if (!$product) return;
+        if (!$product || !is_object($product)) return;
         
-        $seating_enabled = get_post_meta($product->get_id(), '_hope_seating_enabled', true);
-        $venue_id = get_post_meta($product->get_id(), '_hope_seating_venue_id', true);
+        $product_id = $product->get_id();
+        if (!$product_id) return;
+        
+        $seating_enabled = get_post_meta($product_id, '_hope_seating_enabled', true);
+        $venue_id = get_post_meta($product_id, '_hope_seating_venue_id', true);
         
         if ($seating_enabled !== 'yes' || !$venue_id) return;
         
         // Get venue details
         global $wpdb;
+        
+        // Check if venues table exists
+        $venues_table = $wpdb->prefix . 'hope_seating_venues';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$venues_table'") == $venues_table;
+        
+        if (!$table_exists) {
+            error_log('HOPE Seating: Venues table does not exist');
+            return;
+        }
+        
         $venue = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}hope_seating_venues WHERE id = %d",
+            "SELECT * FROM {$venues_table} WHERE id = %d",
             $venue_id
         ));
         
-        if (!$venue) return;
+        if (!$venue) {
+            error_log('HOPE Seating: Venue not found for ID ' . $venue_id);
+            return;
+        }
         
         ?>
-        <div class="hope-seat-selection-interface" data-product-id="<?php echo esc_attr($product->get_id()); ?>">
+        <div class="hope-seat-selection-interface" data-product-id="<?php echo esc_attr($product_id); ?>">
             <div class="hope-seat-selection-prompt">
                 <h4><?php _e('Seat Selection Required', 'hope-seating'); ?></h4>
                 <p><?php printf(__('This event takes place at %s. Please select your seats to continue.', 'hope-seating'), esc_html($venue->name)); ?></p>
