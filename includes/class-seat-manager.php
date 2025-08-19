@@ -34,7 +34,7 @@ class HOPE_Seat_Manager {
             ),
             'C' => array(
                 'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'),
-                'seats_per_row' => array('A' => 12, 'B' => 13, 'C' => 14, 'D' => 14, 'E' => 15, 'F' => 15, 'G' => 16, 'H' => 16, 'I' => 14),
+                'seats_per_row' => array('A' => 12, 'B' => 13, 'C' => 14, 'D' => 14, 'E' => 15, 'F' => 15, 'G' => 16, 'H' => 16, 'I' => 12),
                 'pricing' => 'P1',
                 'angle_start' => -10,
                 'angle_end' => 10
