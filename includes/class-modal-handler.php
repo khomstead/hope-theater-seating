@@ -130,6 +130,7 @@ class HOPE_Modal_Handler {
                 </div>
             </div>
         </div>
+        </div>
         
         <!-- Mobile-specific overlay for better UX -->
         <?php 
