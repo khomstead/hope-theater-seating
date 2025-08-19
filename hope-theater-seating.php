@@ -154,7 +154,8 @@ class HOPE_Theater_Seating {
             'includes/class-ajax.php',
             'includes/class-modal-handler.php',
             'includes/class-ajax-handler.php',
-            'includes/class-integration.php'
+            'includes/class-integration.php',
+            'includes/class-woocommerce-integration.php'
         );
         
         foreach ($files_to_include as $file) {
@@ -270,12 +271,21 @@ class HOPE_Theater_Seating {
             $session_id = HOPE_Session_Manager::get_current_session_id();
         }
         
+        // Get current product data for seat map
+        global $product;
+        $product_id = $product ? $product->get_id() : 0;
+        $venue_id = $product ? get_post_meta($product->get_id(), '_hope_seating_venue_id', true) : 0;
+        
         // Localize script with configuration
         wp_localize_script('hope-seating-seat-map', 'hope_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('hope_seating_nonce'),
             'session_id' => $session_id,
+            'product_id' => $product_id,
+            'venue_id' => $venue_id,
+            'hold_duration' => 600, // 10 minutes
             'device_type' => isset($mobile_detector) ? $mobile_detector->get_device_type() : 'desktop',
+            'is_mobile' => isset($mobile_detector) ? $mobile_detector->is_mobile() : false,
             'viewport_config' => $viewport_config,
             'messages' => array(
                 'seat_unavailable' => __('This seat is no longer available', 'hope-seating'),

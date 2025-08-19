@@ -292,6 +292,10 @@ class HOPE_Seating_Integration {
                     $tier_label = $this->pricing_tiers[$tier]['label'];
                     $variation->set_name($product->get_name() . ' - ' . $tier_label);
                     
+                    // Set as downloadable and virtual
+                    $variation->set_downloadable(true);
+                    $variation->set_virtual(true);
+                    
                     // Save variation
                     $variation->save();
                     $created_count++;

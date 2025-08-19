@@ -25,8 +25,9 @@ class HOPE_Seating_Frontend {
         
         // WooCommerce integration
         add_filter('woocommerce_add_cart_item_data', array($this, 'add_seats_to_cart_item'), 10, 3);
-        add_action('woocommerce_before_add_to_cart_button', array($this, 'add_seating_interface'));
-        add_action('woocommerce_single_product_summary', array($this, 'add_seating_button'), 25);
+        // Seating interface now handled by WooCommerce integration class
+        // add_action('woocommerce_before_add_to_cart_button', array($this, 'add_seating_interface'));
+        // add_action('woocommerce_single_product_summary', array($this, 'add_seating_button'), 25);
         
         // Schedule cleanup
         if (!wp_next_scheduled('hope_seating_cleanup')) {
