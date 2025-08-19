@@ -91,6 +91,13 @@ class HOPE_Seat_Manager {
         'AA' => array('name' => 'Accessible', 'price' => 25, 'color' => '#e67e22')
     );
     
+    /**
+     * Get pricing tiers configuration
+     */
+    public function get_pricing_tiers() {
+        return $this->pricing_tiers;
+    }
+    
     public function __construct($venue_id = 1) {
         global $wpdb;
         $this->table_name = $wpdb->prefix . 'hope_seating_seat_maps';

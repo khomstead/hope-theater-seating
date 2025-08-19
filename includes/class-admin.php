@@ -440,12 +440,47 @@ class HOPE_Seating_Admin {
                                 <?php endif; ?>
                             </div>
                             
+                            <!-- Seating Tier Summary -->
+                            <div class="hope-seating-summary" style="margin: 15px 0; padding: 15px; background: #f0f8ff; border-radius: 5px; border-left: 4px solid #7c3aed;">
+                                <h4>Seating Breakdown</h4>
+                                <?php 
+                                // Get seat counts by pricing tier
+                                if (class_exists('HOPE_Seat_Manager')) {
+                                    $seat_manager = new HOPE_Seat_Manager($selected_venue);
+                                    $pricing_tiers = $seat_manager->get_pricing_tiers();
+                                    
+                                    // Get actual seat counts from database
+                                    $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
+                                    $seat_counts = $wpdb->get_results($wpdb->prepare(
+                                        "SELECT pricing_tier, COUNT(*) as count 
+                                         FROM $seat_maps_table 
+                                         WHERE venue_id = %d 
+                                         GROUP BY pricing_tier
+                                         ORDER BY pricing_tier",
+                                        $selected_venue
+                                    ));
+                                    
+                                    if (!empty($seat_counts)): ?>
+                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0;">
+                                            <?php foreach ($seat_counts as $tier_count): 
+                                                $tier_info = isset($pricing_tiers[$tier_count->pricing_tier]) ? $pricing_tiers[$tier_count->pricing_tier] : array('name' => $tier_count->pricing_tier, 'color' => '#666');
+                                                ?>
+                                                <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid <?php echo esc_attr($tier_info['color']); ?>;">
+                                                    <strong><?php echo esc_html($tier_info['name']); ?> (<?php echo esc_html($tier_count->pricing_tier); ?>)</strong><br>
+                                                    <span style="color: #666;"><?php echo esc_html($tier_count->count); ?> seats</span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif;
+                                } ?>
+                            </div>
+                            
                             <!-- Setup Variations Button -->
                             <div class="hope-variation-setup" style="margin: 15px 0; padding: 15px; background: #f9f9f9; border-radius: 5px;">
                                 <h4>Product Variations Setup</h4>
                                 <p class="description">
                                     For seating events, the product should be set to <strong>Variable Product</strong> type. 
-                                    Each seating tier (VIP, Premium, General, etc.) will become a product variation.
+                                    Each seating tier will become a product variation that customers can select.
                                 </p>
                                 
                                 <?php $product = wc_get_product($post->ID); ?>
@@ -457,6 +492,11 @@ class HOPE_Seating_Admin {
                                     </button>
                                     <span class="spinner" style="float: none; margin-left: 10px;"></span>
                                     <span id="hope-setup-message" style="margin-left: 10px; display: none;"></span>
+                                    
+                                    <div class="hope-variation-help" style="margin-top: 10px; font-size: 12px; color: #666;">
+                                        This will create variations for: VIP, Premium, General, and Accessible seating tiers.
+                                        You can adjust pricing in the Variations tab after creation.
+                                    </div>
                                 <?php else: ?>
                                     <p style="color: #d63638; font-weight: bold;">
                                         ⚠️ Please change the product type to "Variable product" to enable seating variations.
