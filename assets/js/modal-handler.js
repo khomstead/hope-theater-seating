@@ -37,7 +37,7 @@ class HOPEModalHandler {
     }
     
     setupEventListeners() {
-        // Use event delegation for dynamically loaded buttons
+        // Use event delegation for dynamically loaded buttons - support multiple button IDs
         document.addEventListener('click', (e) => {
             if (e.target.matches('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn')) {
                 e.preventDefault();
@@ -215,7 +215,7 @@ class HOPEModalHandler {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Update button on product page
+                // Update button on product page - support multiple button IDs
                 const productBtn = document.getElementById('hope-select-seats') || 
                                   document.getElementById('hope-select-seats-main');
                 if (productBtn) {
@@ -224,10 +224,12 @@ class HOPEModalHandler {
                 }
                 
                 // Show selected seats summary
-                const summary = document.querySelector('.hope-selected-seats-summary');
+                const summary = document.querySelector('.hope-selected-seats-summary') || 
+                              document.querySelector('.hope-selected-seats-display');
                 if (summary) {
                     summary.style.display = 'block';
-                    const listEl = summary.querySelector('.selected-seats-list');
+                    const listEl = summary.querySelector('.selected-seats-list') ||
+                                  summary.querySelector('.hope-seats-list');
                     if (listEl) {
                         listEl.innerHTML = seats.join(', ');
                     }
