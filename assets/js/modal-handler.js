@@ -181,14 +181,14 @@ class HOPEModalHandler {
             // Initialize or refresh seat map
             if (window.hopeSeatMap) {
                 window.hopeSeatMap.initializeMap();
-                // Try to restore previously selected seats from cart
-                this.restoreSeatsFromCart();
+                // Try to restore previously selected seats from cart - with longer delay
+                setTimeout(() => this.restoreSeatsFromCart(), 750);
             } else {
                 // Create new instance if needed
                 if (typeof HOPESeatMap !== 'undefined' && typeof hope_ajax !== 'undefined') {
                     window.hopeSeatMap = new HOPESeatMap();
-                    // Try to restore previously selected seats from cart
-                    setTimeout(() => this.restoreSeatsFromCart(), 100);
+                    // Try to restore previously selected seats from cart - with longer delay
+                    setTimeout(() => this.restoreSeatsFromCart(), 1000);
                 }
             }
         }, 500);
@@ -429,31 +429,111 @@ class HOPEModalHandler {
             return;
         }
         
-        // Look for seat data in various places
-        let seatsToRestore = [];
+        console.log('restoreSeatsFromCart: Starting seat restoration process');
         
-        // Check if there's seat data in the button or summary displays
-        const summaryElements = document.querySelectorAll('.hope-seats-list, .selected-seats-list');
-        for (const element of summaryElements) {
-            if (element.textContent && element.textContent.trim()) {
-                const seatText = element.textContent.trim();
-                if (seatText !== 'No seats selected' && seatText !== '') {
-                    seatsToRestore = seatText.split(', ').map(s => s.trim());
-                    break;
+        // Wait for seat map to be fully rendered
+        let retryCount = 0;
+        const maxRetries = 10;
+        
+        const attemptRestore = () => {
+            retryCount++;
+            console.log(`Restore attempt ${retryCount}/${maxRetries}`);
+            
+            // Check if seats are rendered
+            const allSeats = document.querySelectorAll('#seat-map .seat');
+            if (allSeats.length === 0 && retryCount < maxRetries) {
+                console.log('Seats not yet rendered, retrying in 200ms...');
+                setTimeout(attemptRestore, 200);
+                return;
+            }
+            
+            console.log(`Found ${allSeats.length} rendered seats`);
+            
+            // Look for seat data in various places
+            let seatsToRestore = [];
+            
+            // Check if there's seat data in the button text
+            const selectButton = document.querySelector('#hope-select-seats-main, #hope-select-seats');
+            if (selectButton && selectButton.textContent.includes('Seats Selected')) {
+                console.log('Found button with seats selected state');
+            }
+            
+            // Check if there's seat data in the summary displays
+            const summaryElements = document.querySelectorAll('.hope-seats-list, .selected-seats-list, .hope-selected-seats-display');
+            for (const element of summaryElements) {
+                if (element.textContent && element.textContent.trim()) {
+                    const seatText = element.textContent.trim();
+                    if (seatText !== 'No seats selected' && seatText !== '' && !seatText.includes('$')) {
+                        // Try to extract seat IDs from text
+                        const seatMatches = seatText.match(/[A-Z]\d+-\d+/g);
+                        if (seatMatches && seatMatches.length > 0) {
+                            seatsToRestore = seatMatches;
+                            console.log('Extracted seats from summary:', seatsToRestore);
+                            break;
+                        }
+                        // Fallback: split by comma
+                        const potentialSeats = seatText.split(', ').map(s => s.trim());
+                        if (potentialSeats.length > 0 && potentialSeats[0].match(/[A-Z]\d+-\d+/)) {
+                            seatsToRestore = potentialSeats;
+                            console.log('Extracted seats via comma split:', seatsToRestore);
+                            break;
+                        }
+                    }
                 }
             }
-        }
-        
-        console.log('Attempting to restore seats:', seatsToRestore);
-        
-        if (seatsToRestore.length > 0 && window.hopeSeatMap.selectSeats) {
-            try {
-                window.hopeSeatMap.selectSeats(seatsToRestore);
-                console.log('Successfully restored', seatsToRestore.length, 'seats');
-            } catch (error) {
-                console.log('Error restoring seats:', error);
+            
+            // Check hidden form fields that might have seat data
+            const hiddenSeatFields = document.querySelectorAll('input[name*="seat"], input[id*="seat"]');
+            for (const field of hiddenSeatFields) {
+                if (field.value && field.value !== '') {
+                    try {
+                        const parsedSeats = JSON.parse(field.value);
+                        if (Array.isArray(parsedSeats) && parsedSeats.length > 0) {
+                            seatsToRestore = parsedSeats;
+                            console.log('Found seats in hidden field:', seatsToRestore);
+                            break;
+                        }
+                    } catch (e) {
+                        // Not JSON, try as comma-separated
+                        const seats = field.value.split(',').map(s => s.trim()).filter(s => s.match(/[A-Z]\d+-\d+/));
+                        if (seats.length > 0) {
+                            seatsToRestore = seats;
+                            console.log('Found seats in hidden field (comma-separated):', seatsToRestore);
+                            break;
+                        }
+                    }
+                }
             }
-        }
+            
+            console.log('Final seats to restore:', seatsToRestore);
+            
+            if (seatsToRestore.length > 0 && window.hopeSeatMap.selectSeats) {
+                try {
+                    // Verify each seat exists in the DOM before attempting to select
+                    const validSeats = seatsToRestore.filter(seatId => {
+                        const seatElement = document.querySelector(`[data-id="${seatId}"]`);
+                        const exists = !!seatElement;
+                        console.log(`Seat ${seatId} exists: ${exists}`);
+                        return exists;
+                    });
+                    
+                    if (validSeats.length > 0) {
+                        console.log(`Restoring ${validSeats.length} valid seats:`, validSeats);
+                        window.hopeSeatMap.selectSeats(validSeats);
+                        console.log('Successfully restored seats');
+                    } else {
+                        console.log('No valid seats found to restore');
+                    }
+                } catch (error) {
+                    console.log('Error restoring seats:', error);
+                }
+            } else {
+                console.log('No seats found to restore or selectSeats method unavailable');
+            }
+        };
+        
+        // Start the restoration process
+        attemptRestore();
     }
 }
 

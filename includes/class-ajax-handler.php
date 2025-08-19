@@ -126,6 +126,11 @@ class HOPE_Ajax_Handler {
         $seats = json_decode(stripslashes($_POST['seats']), true);
         $session_id = sanitize_text_field($_POST['session_id']);
         
+        // DEBUG: Log what we received
+        error_log("HOPE hold_seats: Received raw seats data: " . $_POST['seats']);
+        error_log("HOPE hold_seats: Decoded seats array: " . print_r($seats, true));
+        error_log("HOPE hold_seats: Session ID: {$session_id}");
+        
         if (empty($seats) || empty($session_id)) {
             wp_send_json_error(['message' => 'Invalid request']);
         }
@@ -304,8 +309,11 @@ class HOPE_Ajax_Handler {
         $successful_additions = 0;
         $total_seats_added = 0;
         
-        // Add each tier as a separate cart item
+        // CRITICAL FIX: Add each seat as an individual cart item (quantity=1)
+        // This ensures seats from different tiers create separate cart items
         foreach ($seats_by_tier as $tier => $tier_seats) {
+            error_log("HOPE: Processing tier {$tier} with " . count($tier_seats) . " seats: " . implode(', ', $tier_seats));
+            
             // Find the appropriate variation for this tier
             $variation_id = 0;
             $variation_data = [];
@@ -336,53 +344,52 @@ class HOPE_Ajax_Handler {
             
             // Calculate pricing for this tier
             $price_per_seat = $this->get_price_for_tier($tier);
-            $quantity = count($tier_seats);
             
-            // Create seat details array for this tier
-            $seat_details = [];
-            foreach ($tier_seats as $seat_id) {
-                $seat_details[] = [
-                    'seat_id' => $seat_id,
-                    'price' => $price_per_seat,
-                    'tier' => $tier
-                ];
-            }
-            
-            // Create cart item data
-            $cart_item_data = [
-                'hope_theater_seats' => $tier_seats,
-                'hope_seat_details' => $seat_details,
-                'hope_session_id' => $session_id,
-                'hope_total_price' => $quantity * $price_per_seat,
-                'hope_price_per_seat' => $price_per_seat,
-                'hope_seat_count' => $quantity,
-                'hope_tier' => $tier
-            ];
-            
-            error_log("HOPE: Adding tier {$tier} to cart - {$quantity} seats at \${$price_per_seat} each");
-            error_log('HOPE: Cart item data: ' . print_r($cart_item_data, true));
-            
-            try {
-                $cart_item_key = WC()->cart->add_to_cart(
-                    $product_id,
-                    $quantity,
-                    $variation_id,
-                    $variation_data,
-                    $cart_item_data
-                );
+            // Add each seat as a separate cart item with quantity=1
+            foreach ($tier_seats as $individual_seat) {
+                error_log("HOPE: Adding individual seat {$individual_seat} from tier {$tier} as separate cart item");
                 
-                if ($cart_item_key) {
-                    error_log("HOPE: Successfully added tier {$tier} to cart");
-                    $successful_additions++;
-                    $total_seats_added += $quantity;
+                // Create cart item data for this individual seat
+                $cart_item_data = [
+                    'hope_theater_seats' => [$individual_seat], // Array with single seat
+                    'hope_seat_details' => [[
+                        'seat_id' => $individual_seat,
+                        'price' => $price_per_seat,
+                        'tier' => $tier
+                    ]],
+                    'hope_session_id' => $session_id,
+                    'hope_total_price' => $price_per_seat,
+                    'hope_price_per_seat' => $price_per_seat,
+                    'hope_seat_count' => 1, // Always 1 for individual seats
+                    'hope_tier' => $tier,
+                    'unique_key' => md5($individual_seat . microtime() . rand()) // Ensure uniqueness
+                ];
+                
+                error_log("HOPE: Adding individual seat {$individual_seat} to cart - tier {$tier} at \${$price_per_seat}");
+                error_log('HOPE: Individual seat cart data: ' . print_r($cart_item_data, true));
+                
+                try {
+                    $cart_item_key = WC()->cart->add_to_cart(
+                        $product_id,
+                        1, // Always quantity 1 for individual seats
+                        $variation_id,
+                        $variation_data,
+                        $cart_item_data
+                    );
                     
-                    // Convert holds to pending bookings for this tier
-                    $this->convert_holds_to_bookings($product_id, $tier_seats, $session_id);
-                } else {
-                    error_log("HOPE: Failed to add tier {$tier} to cart");
+                    if ($cart_item_key) {
+                        error_log("HOPE: Successfully added individual seat {$individual_seat} to cart with key {$cart_item_key}");
+                        $successful_additions++;
+                        $total_seats_added += 1;
+                        
+                        // Convert hold to pending booking for this individual seat
+                        $this->convert_holds_to_bookings($product_id, [$individual_seat], $session_id);
+                    } else {
+                        error_log("HOPE: Failed to add individual seat {$individual_seat} to cart");
+                    }
+                } catch (Exception $e) {
+                    error_log("HOPE: Exception adding individual seat {$individual_seat} to cart: " . $e->getMessage());
                 }
-            } catch (Exception $e) {
-                error_log("HOPE: Exception adding tier {$tier} to cart: " . $e->getMessage());
             }
         }
         
