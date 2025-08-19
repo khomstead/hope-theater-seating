@@ -134,8 +134,9 @@ class HOPE_Modal_Handler {
         
         <!-- Mobile-specific overlay for better UX -->
         <?php 
-        $mobile_detector = new HOPE_Mobile_Detector();
-        if ($mobile_detector->is_mobile()): 
+        if (class_exists('HOPE_Mobile_Detector')) {
+            $mobile_detector = HOPE_Mobile_Detector::get_instance();
+            if ($mobile_detector->is_mobile()): 
         ?>
         <div class="hope-mobile-overlay" style="display: none;">
             <div class="hope-mobile-header">
@@ -144,8 +145,10 @@ class HOPE_Modal_Handler {
                 <button class="hope-mobile-done"><?php _e('Done', 'hope-theater-seating'); ?></button>
             </div>
         </div>
-        <?php endif; ?>
-        <?php
+        <?php 
+            endif;
+        }
+        ?>
     }
     
     /**
