@@ -233,6 +233,7 @@ class HOPEModalHandler {
             this.seatMap.selectedSeats.clear();
             this.seatMap.updateSelectedDisplay();
             this.seatMap.stopHoldTimer();
+            this.seatMap.stopAvailabilityRefresh();
         }
         
         // Emit modal closed event

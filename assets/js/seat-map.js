@@ -20,6 +20,7 @@ class HOPESeatMap {
         this.productId = hope_ajax.product_id;
         this.holdTimer = null;
         this.countdownInterval = null;
+        this.availabilityRefreshInterval = null;
         
         this.theaterData = this.getTheaterConfiguration();
         this.pricing = this.getPricingTiers();
@@ -51,6 +52,9 @@ class HOPESeatMap {
         
         // Load existing seat availability
         this.loadSeatAvailability();
+        
+        // Start periodic availability refresh (every 15 seconds)
+        this.startAvailabilityRefresh();
         
         // Start hold timer if seats are already selected
         if (this.selectedSeats.size > 0) {
@@ -325,7 +329,8 @@ class HOPESeatMap {
         const seat = e.currentTarget;
         
         if (seat.classList.contains('unavailable')) {
-            this.showMessage(hope_ajax.messages.seat_unavailable, 'error');
+            // Check if seat is held by another user or permanently booked
+            this.checkSeatStatus(seat.getAttribute('data-id'));
             return;
         }
         
@@ -584,20 +589,36 @@ class HOPESeatMap {
                 nonce: hope_ajax.nonce,
                 product_id: this.productId,
                 venue_id: hope_ajax.venue_id,
-                seats: JSON.stringify([])
+                seats: JSON.stringify([]),
+                session_id: this.sessionId
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success && data.data.unavailable_seats) {
+                // First, clear all existing unavailable markings
+                document.querySelectorAll('.seat.unavailable').forEach(seat => {
+                    seat.classList.remove('unavailable');
+                    const tier = seat.getAttribute('data-tier');
+                    if (tier && this.pricing[tier]) {
+                        seat.setAttribute('fill', this.pricing[tier].color);
+                    }
+                });
+                
+                // Then mark the currently unavailable seats
                 data.data.unavailable_seats.forEach(seatId => {
                     const seat = document.querySelector(`[data-id="${seatId}"]`);
-                    if (seat) {
+                    if (seat && !this.selectedSeats.has(seatId)) {
                         seat.classList.add('unavailable');
                         seat.setAttribute('fill', '#6c757d');
                     }
                 });
+                
+                console.log(`HOPE: Marked ${data.data.unavailable_seats.length} seats as unavailable`);
             }
+        })
+        .catch(error => {
+            console.error('HOPE: Error loading seat availability:', error);
         });
     }
     
@@ -716,6 +737,64 @@ class HOPESeatMap {
         setTimeout(() => {
             msgEl.remove();
         }, 3000);
+    }
+    
+    startAvailabilityRefresh() {
+        // Refresh availability every 15 seconds
+        this.availabilityRefreshInterval = setInterval(() => {
+            this.loadSeatAvailability();
+        }, 15000);
+    }
+    
+    stopAvailabilityRefresh() {
+        if (this.availabilityRefreshInterval) {
+            clearInterval(this.availabilityRefreshInterval);
+            this.availabilityRefreshInterval = null;
+        }
+    }
+    
+    checkSeatStatus(seatId) {
+        // Check the specific status of a seat to provide better feedback
+        fetch(hope_ajax.ajax_url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                action: 'hope_check_availability',
+                nonce: hope_ajax.nonce,
+                product_id: this.productId,
+                venue_id: hope_ajax.venue_id,
+                seats: JSON.stringify([seatId]),
+                session_id: this.sessionId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.data.unavailable_seats && data.data.unavailable_seats.includes(seatId)) {
+                    this.showMessage(`Seat ${seatId} is currently held by another user or booked. Please select a different seat.`, 'warning');
+                } else {
+                    // Seat might have become available - refresh the display
+                    this.loadSeatAvailability();
+                    this.showMessage(`Seat ${seatId} status updated. Please try again.`, 'info');
+                }
+            }
+        })
+        .catch(error => {
+            this.showMessage('Unable to check seat status. Please try again.', 'error');
+        });
+    }
+    
+    // Method to select multiple seats (used by modal restoration)
+    selectSeats(seatIds) {
+        if (!Array.isArray(seatIds)) return;
+        
+        seatIds.forEach(seatId => {
+            if (!this.selectedSeats.has(seatId)) {
+                this.selectSeat(seatId);
+            }
+        });
     }
 }
 

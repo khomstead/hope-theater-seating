@@ -168,6 +168,7 @@ class HOPE_WooCommerce_Integration {
             <!-- Hidden fields for form submission -->
             <input type="hidden" name="hope_selected_seats" id="hope_selected_seats" value="">
             <input type="hidden" name="hope_selected_variation" id="hope_selected_variation" value="">
+            <!-- FooEvents compatibility field -->
             <input type="hidden" name="fooevents_seats__trans" id="fooevents_seats__trans" value="">
         </div>
         
@@ -275,6 +276,7 @@ class HOPE_WooCommerce_Integration {
      * Add seat data to cart item
      */
     public function add_seat_data_to_cart($cart_item_data, $product_id, $variation_id, $quantity) {
+        // Check for HOPE Theater seating data first
         if (isset($_POST['hope_selected_seats']) && !empty($_POST['hope_selected_seats'])) {
             $selected_seats = json_decode(stripslashes($_POST['hope_selected_seats']), true);
             
@@ -282,12 +284,23 @@ class HOPE_WooCommerce_Integration {
                 $cart_item_data['hope_selected_seats'] = $selected_seats;
                 $cart_item_data['hope_seat_count'] = count($selected_seats);
                 
-                // Add FooEvents compatible data
+                // Add FooEvents compatible data for compatibility
                 if (isset($_POST['fooevents_seats__trans'])) {
                     $cart_item_data['fooevents_seats__trans'] = $_POST['fooevents_seats__trans'];
                 }
                 
                 // Ensure each seat selection gets a unique cart item
+                $cart_item_data['unique_key'] = md5(microtime() . rand());
+            }
+        }
+        // Fallback to FooEvents format for compatibility
+        elseif (isset($_POST['fooevents_seats__trans']) && !empty($_POST['fooevents_seats__trans'])) {
+            $selected_seats = explode(',', sanitize_text_field($_POST['fooevents_seats__trans']));
+            
+            if (!empty($selected_seats)) {
+                $cart_item_data['hope_selected_seats'] = $selected_seats;
+                $cart_item_data['fooevents_seats__trans'] = $_POST['fooevents_seats__trans'];
+                $cart_item_data['hope_seat_count'] = count($selected_seats);
                 $cart_item_data['unique_key'] = md5(microtime() . rand());
             }
         }
@@ -330,7 +343,47 @@ class HOPE_WooCommerce_Integration {
      * Display seat info in order
      */
     public function display_seat_info_in_order($item_id, $item, $order, $plain_text) {
-        // Check for seats in either meta key (backwards compatibility)
+        // Check for seat summary first (preferred)
+        $seat_summary = $item->get_meta('hope_seat_summary');
+        if (!empty($seat_summary)) {
+            if ($plain_text) {
+                echo "\n" . __('Seats:', 'hope-seating') . ' ' . $seat_summary;
+            } else {
+                echo '<br><small><strong>' . __('Seats:', 'hope-seating') . '</strong> ' . esc_html($seat_summary) . '</small>';
+            }
+            
+            // Add additional seats info if multiple
+            $additional_seats = $item->get_meta('hope_additional_seats');
+            if (!empty($additional_seats)) {
+                if ($plain_text) {
+                    echo ' (+' . $additional_seats . ')';
+                } else {
+                    echo '<br><small><em>+' . esc_html($additional_seats) . '</em></small>';
+                }
+            }
+            
+            // Add pricing tier info
+            $tier = $item->get_meta('hope_pricing_tier');
+            if (!empty($tier)) {
+                $tier_names = [
+                    'P1' => __('Premium', 'hope-seating'),
+                    'P2' => __('Standard', 'hope-seating'), 
+                    'P3' => __('Value', 'hope-seating'),
+                    'AA' => __('Accessible', 'hope-seating')
+                ];
+                $tier_name = isset($tier_names[$tier]) ? $tier_names[$tier] : $tier;
+                
+                if ($plain_text) {
+                    echo ' (' . $tier_name . ')';
+                } else {
+                    echo '<br><small><strong>' . __('Seating Tier:', 'hope-seating') . '</strong> ' . esc_html($tier_name) . '</small>';
+                }
+            }
+            
+            return;
+        }
+        
+        // Fallback: Check for seats in either meta key (backwards compatibility)
         $selected_seats = $item->get_meta('hope_theater_seats');
         if (empty($selected_seats)) {
             $selected_seats = $item->get_meta('hope_selected_seats');
@@ -340,7 +393,11 @@ class HOPE_WooCommerce_Integration {
             $seats = is_array($selected_seats) ? $selected_seats : json_decode($selected_seats, true);
             if (!empty($seats)) {
                 $seat_list = implode(', ', $seats);
-                echo '<br><small><strong>' . __('Seats:', 'hope-seating') . '</strong> ' . esc_html($seat_list) . '</small>';
+                if ($plain_text) {
+                    echo "\n" . __('Seats:', 'hope-seating') . ' ' . $seat_list;
+                } else {
+                    echo '<br><small><strong>' . __('Seats:', 'hope-seating') . '</strong> ' . esc_html($seat_list) . '</small>';
+                }
             }
         }
     }
@@ -419,19 +476,45 @@ class HOPE_WooCommerce_Integration {
         if (!class_exists('FooEvents')) return;
         
         foreach ($order->get_items() as $item_id => $item) {
-            $selected_seats = $item->get_meta('hope_selected_seats');
+            // Check for either hope_theater_seats or hope_selected_seats
+            $selected_seats = $item->get_meta('hope_theater_seats');
+            if (empty($selected_seats)) {
+                $selected_seats = $item->get_meta('hope_selected_seats');
+            }
             
             if (!empty($selected_seats)) {
                 $seats = is_array($selected_seats) ? $selected_seats : json_decode($selected_seats, true);
                 
-                // Convert our seat format to FooEvents format
-                foreach ($seats as $index => $seat_id) {
-                    // Parse seat ID (e.g., "A1-5" -> Section A, Row 1, Seat 5)
+                // For multiple seats, we'll create a summary
+                if (count($seats) > 1) {
+                    // Multiple seats - create summary
+                    $seat_list = implode(', ', $seats);
+                    $item->add_meta_data('hope_seat_summary', $seat_list);
+                    
+                    // Also add FooEvents-style data for the first seat (for compatibility)
+                    $first_seat = $seats[0];
+                    $seat_parts = $this->parse_seat_id($first_seat);
+                    $item->add_meta_data('fooevents_seat_row_name_0', $seat_parts['section'] . ' ' . $seat_parts['row']);
+                    $item->add_meta_data('fooevents_seat_number_0', $seat_parts['seat']);
+                    
+                    // Add count indicator
+                    $item->add_meta_data('hope_seat_count', count($seats));
+                    $item->add_meta_data('hope_additional_seats', count($seats) - 1 . ' additional seats');
+                } else {
+                    // Single seat - full compatibility
+                    $seat_id = $seats[0];
                     $seat_parts = $this->parse_seat_id($seat_id);
                     
-                    // Store in FooEvents format
-                    $item->add_meta_data('fooevents_seat_row_name_' . $index, $seat_parts['section'] . ' ' . $seat_parts['row']);
-                    $item->add_meta_data('fooevents_seat_number_' . $index, $seat_parts['seat']);
+                    // Store in FooEvents format for full compatibility
+                    $item->add_meta_data('fooevents_seat_row_name_0', $seat_parts['section'] . ' ' . $seat_parts['row']);
+                    $item->add_meta_data('fooevents_seat_number_0', $seat_parts['seat']);
+                    $item->add_meta_data('hope_seat_summary', $seat_id);
+                }
+                
+                // Always store the tier information in order meta for reference
+                $tier = $item->get_meta('hope_tier');
+                if ($tier) {
+                    $item->add_meta_data('hope_pricing_tier', $tier);
                 }
                 
                 $item->save();

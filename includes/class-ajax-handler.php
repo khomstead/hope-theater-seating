@@ -37,17 +37,46 @@ class HOPE_Ajax_Handler {
         $product_id = intval($_POST['product_id']);
         $venue_id = intval($_POST['venue_id']);
         $requested_seats = json_decode(stripslashes($_POST['seats']), true);
-        
-        if (empty($requested_seats)) {
-            wp_send_json_error(['message' => 'No seats selected']);
-        }
+        $session_id = sanitize_text_field($_POST['session_id']);
         
         global $wpdb;
         $table_bookings = $wpdb->prefix . 'hope_seating_bookings';
         $table_holds = $wpdb->prefix . 'hope_seating_holds';
         
         $unavailable_seats = [];
+        $all_unavailable_seats = [];
         
+        // If no specific seats requested, get all unavailable seats for the venue
+        if (empty($requested_seats)) {
+            // Get all booked seats
+            $booked_seats = $wpdb->get_results($wpdb->prepare(
+                "SELECT DISTINCT seat_id FROM $table_bookings 
+                WHERE product_id = %d AND status IN ('confirmed', 'pending')",
+                $product_id
+            ), ARRAY_A);
+            
+            foreach ($booked_seats as $row) {
+                $all_unavailable_seats[] = $row['seat_id'];
+            }
+            
+            // Get all held seats (by other sessions)
+            $held_seats = $wpdb->get_results($wpdb->prepare(
+                "SELECT DISTINCT seat_id FROM $table_holds 
+                WHERE product_id = %d AND session_id != %s AND expires_at > NOW()",
+                $product_id, $session_id
+            ), ARRAY_A);
+            
+            foreach ($held_seats as $row) {
+                $all_unavailable_seats[] = $row['seat_id'];
+            }
+            
+            wp_send_json_success([
+                'available' => true,
+                'unavailable_seats' => array_unique($all_unavailable_seats)
+            ]);
+        }
+        
+        // Check specific requested seats
         foreach ($requested_seats as $seat_id) {
             // Check if seat is booked
             $is_booked = $wpdb->get_var($wpdb->prepare(
@@ -61,11 +90,12 @@ class HOPE_Ajax_Handler {
                 "SELECT COUNT(*) FROM $table_holds 
                 WHERE product_id = %d AND seat_id = %s 
                 AND session_id != %s AND expires_at > NOW()",
-                $product_id, $seat_id, $_POST['session_id']
+                $product_id, $seat_id, $session_id
             ));
             
             if ($is_booked || $is_held) {
                 $unavailable_seats[] = $seat_id;
+                error_log("HOPE: Seat {$seat_id} unavailable - booked: {$is_booked}, held: {$is_held}");
             }
         }
         
@@ -217,9 +247,9 @@ class HOPE_Ajax_Handler {
         
         error_log("HOPE: Product found: {$product->get_name()}, Type: {$product->get_type()}");
         
-        // Handle variable products - get the first available variation
-        $variation_id = 0;
-        $variation_data = [];
+        // Handle variable products - need to map seats to their appropriate variations
+        $available_variations = [];
+        $variation_map = [];
         
         if ($product->is_type('variable')) {
             error_log('HOPE: Product is variable, getting available variations');
@@ -230,13 +260,18 @@ class HOPE_Ajax_Handler {
                 wp_send_json_error(['message' => 'No available ticket options found']);
             }
             
-            // Use the first available variation
-            $first_variation = $available_variations[0];
-            $variation_id = $first_variation['variation_id'];
-            $variation_data = $first_variation['attributes'] ?? [];
+            // Create a map of seating-tier to variation_id
+            foreach ($available_variations as $variation) {
+                $tier = $variation['attributes']['attribute_seating-tier'] ?? '';
+                if ($tier) {
+                    $variation_map[$tier] = [
+                        'variation_id' => $variation['variation_id'],
+                        'attributes' => $variation['attributes']
+                    ];
+                }
+            }
             
-            error_log("HOPE: Using variation ID: {$variation_id}");
-            error_log('HOPE: Variation attributes: ' . print_r($variation_data, true));
+            error_log('HOPE: Available variation map: ' . print_r($variation_map, true));
         }
         
         // Get currently held seats for this session (may be fewer than requested if some were unavailable)
@@ -262,71 +297,108 @@ class HOPE_Ajax_Handler {
         
         error_log('HOPE: Seat holds verified successfully');
         
-        // Get seat details and calculate price - simplified for now  
-        $price_per_seat = 120; // Default price per seat
-        $total_price = count($seats) * $price_per_seat;
+        // Group seats by their pricing tier
+        $seats_by_tier = $this->group_seats_by_tier($seats);
+        error_log('HOPE: Seats grouped by tier: ' . print_r($seats_by_tier, true));
         
-        // Create seat details array
-        $seat_details = [];
-        foreach ($seats as $seat_id) {
-            $seat_details[] = [
-                'seat_id' => $seat_id,
-                'price' => $price_per_seat
+        $successful_additions = 0;
+        $total_seats_added = 0;
+        
+        // Add each tier as a separate cart item
+        foreach ($seats_by_tier as $tier => $tier_seats) {
+            // Find the appropriate variation for this tier
+            $variation_id = 0;
+            $variation_data = [];
+            
+            if (isset($variation_map[$tier])) {
+                $variation_id = $variation_map[$tier]['variation_id'];
+                $variation_data = $variation_map[$tier]['attributes'];
+                error_log("HOPE: Found exact variation match for tier {$tier}: variation_id {$variation_id}");
+            } else {
+                // Try to find a matching variation by searching all available variations
+                $matching_variation = $this->find_variation_for_tier($available_variations, $tier);
+                if ($matching_variation) {
+                    $variation_id = $matching_variation['variation_id'];
+                    $variation_data = $matching_variation['attributes'];
+                    error_log("HOPE: Found fallback variation for tier {$tier}: variation_id {$variation_id}");
+                } elseif (!empty($available_variations)) {
+                    // Last resort: use first available variation but log the issue
+                    $variation_id = $available_variations[0]['variation_id'];
+                    $variation_data = $available_variations[0]['attributes'];
+                    error_log("HOPE: WARNING - Using first available variation for tier {$tier} as no match found");
+                }
+            }
+            
+            if ($variation_id === 0) {
+                error_log("HOPE: ERROR - No variation found for tier {$tier}, skipping");
+                continue;
+            }
+            
+            // Calculate pricing for this tier
+            $price_per_seat = $this->get_price_for_tier($tier);
+            $quantity = count($tier_seats);
+            
+            // Create seat details array for this tier
+            $seat_details = [];
+            foreach ($tier_seats as $seat_id) {
+                $seat_details[] = [
+                    'seat_id' => $seat_id,
+                    'price' => $price_per_seat,
+                    'tier' => $tier
+                ];
+            }
+            
+            // Create cart item data
+            $cart_item_data = [
+                'hope_theater_seats' => $tier_seats,
+                'hope_seat_details' => $seat_details,
+                'hope_session_id' => $session_id,
+                'hope_total_price' => $quantity * $price_per_seat,
+                'hope_price_per_seat' => $price_per_seat,
+                'hope_seat_count' => $quantity,
+                'hope_tier' => $tier
             ];
+            
+            error_log("HOPE: Adding tier {$tier} to cart - {$quantity} seats at \${$price_per_seat} each");
+            error_log('HOPE: Cart item data: ' . print_r($cart_item_data, true));
+            
+            try {
+                $cart_item_key = WC()->cart->add_to_cart(
+                    $product_id,
+                    $quantity,
+                    $variation_id,
+                    $variation_data,
+                    $cart_item_data
+                );
+                
+                if ($cart_item_key) {
+                    error_log("HOPE: Successfully added tier {$tier} to cart");
+                    $successful_additions++;
+                    $total_seats_added += $quantity;
+                    
+                    // Convert holds to pending bookings for this tier
+                    $this->convert_holds_to_bookings($product_id, $tier_seats, $session_id);
+                } else {
+                    error_log("HOPE: Failed to add tier {$tier} to cart");
+                }
+            } catch (Exception $e) {
+                error_log("HOPE: Exception adding tier {$tier} to cart: " . $e->getMessage());
+            }
         }
         
-        // Create cart item data
-        $cart_item_data = [
-            'hope_theater_seats' => $seats,
-            'hope_seat_details' => $seat_details,
-            'hope_session_id' => $session_id,
-            'hope_total_price' => $total_price,
-            'hope_price_per_seat' => $price_per_seat,
-            'hope_seat_count' => count($seats)
-        ];
-        
-        error_log('HOPE: Adding to cart with data: ' . print_r($cart_item_data, true));
-        
-        // Add to WooCommerce cart with quantity matching seat count
-        try {
-            $quantity = count($seats); // Use actual number of seats as quantity
-            error_log("HOPE: Adding to cart with quantity: {$quantity} for {$quantity} seats");
-            
-            $cart_item_key = WC()->cart->add_to_cart(
-                $product_id,
-                $quantity,
-                $variation_id,
-                $variation_data,
-                $cart_item_data
-            );
-            
-            error_log("HOPE: WooCommerce add_to_cart returned: " . ($cart_item_key ? $cart_item_key : 'FALSE'));
-            
-            if ($cart_item_key) {
-                // Convert holds to pending bookings
-                $this->convert_holds_to_bookings($product_id, $seats, $session_id);
-                
-                error_log('HOPE: Successfully added seats to cart and converted holds to bookings');
-                
-                wp_send_json_success([
-                    'cart_url' => wc_get_checkout_url(),
-                    'message' => sprintf(
-                        __('%d seats added - proceeding to checkout', 'hope-theater-seating'),
-                        count($seats)
-                    )
-                ]);
-            } else {
-                error_log('HOPE: WooCommerce add_to_cart failed - no cart item key returned');
-                
-                // Get WooCommerce notices to see what went wrong
-                $notices = wc_get_notices('error');
-                error_log('HOPE: WooCommerce error notices: ' . print_r($notices, true));
-                
-                wp_send_json_error(['message' => 'Could not add seats to cart - WooCommerce error']);
-            }
-        } catch (Exception $e) {
-            error_log('HOPE: Exception during add_to_cart: ' . $e->getMessage());
-            wp_send_json_error(['message' => 'Error adding seats to cart: ' . $e->getMessage()]);
+        // Send response based on results
+        if ($successful_additions > 0) {
+            wp_send_json_success([
+                'cart_url' => wc_get_checkout_url(),
+                'message' => sprintf(
+                    __('%d seats added from %d pricing tiers - proceeding to checkout', 'hope-theater-seating'),
+                    $total_seats_added,
+                    $successful_additions
+                )
+            ]);
+        } else {
+            error_log('HOPE: No cart items were successfully added');
+            wp_send_json_error(['message' => 'Could not add any seats to cart']);
         }
     }
     
@@ -470,5 +542,109 @@ class HOPE_Ajax_Handler {
                 'session_id' => $session_id
             ]);
         }
+    }
+    
+    /**
+     * Group seats by their pricing tier
+     */
+    private function group_seats_by_tier($seats) {
+        global $wpdb;
+        $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
+        $seats_by_tier = [];
+        
+        foreach ($seats as $seat_id) {
+            // Get the pricing tier for this seat
+            $seat_data = $wpdb->get_row($wpdb->prepare(
+                "SELECT pricing_tier FROM $seat_maps_table WHERE seat_id = %s LIMIT 1",
+                $seat_id
+            ));
+            
+            if ($seat_data && !empty($seat_data->pricing_tier)) {
+                $tier = $seat_data->pricing_tier;
+            } else {
+                // Fallback: extract tier from seat ID (e.g., E10-1 -> P2)
+                $tier = $this->extract_tier_from_seat_id($seat_id);
+            }
+            
+            if (!isset($seats_by_tier[$tier])) {
+                $seats_by_tier[$tier] = [];
+            }
+            $seats_by_tier[$tier][] = $seat_id;
+        }
+        
+        return $seats_by_tier;
+    }
+    
+    /**
+     * Extract pricing tier from seat ID
+     */
+    private function extract_tier_from_seat_id($seat_id) {
+        // Parse seat ID to determine pricing tier
+        // Format examples: E10-1, E9-1, E7-1, E2-1
+        if (preg_match('/^([A-Z])(\d+)-(\d+)$/', $seat_id, $matches)) {
+            $section = $matches[1];
+            $row = intval($matches[2]);
+            
+            // Theater pricing logic based on HOPE Theater layout
+            if ($section === 'A' || $section === 'B') {
+                return 'P1'; // Premium
+            } elseif ($section === 'C' || $section === 'D') {
+                return 'P2'; // Standard
+            } elseif ($section === 'E' || $section === 'F') {
+                if ($row <= 5) {
+                    return 'P2'; // Standard
+                } else {
+                    return 'P3'; // Value
+                }
+            } elseif ($section === 'G' || $section === 'H') {
+                return 'P3'; // Value
+            }
+        }
+        
+        // Default fallback
+        return 'P2';
+    }
+    
+    /**
+     * Get price for a specific pricing tier
+     */
+    private function get_price_for_tier($tier) {
+        // Define tier pricing - these would typically come from WooCommerce variations
+        $tier_prices = [
+            'P1' => 85.00, // Premium
+            'P2' => 65.00, // Standard
+            'P3' => 45.00, // Value
+            'AA' => 95.00  // VIP/Accessible
+        ];
+        
+        return isset($tier_prices[$tier]) ? $tier_prices[$tier] : $tier_prices['P2'];
+    }
+    
+    /**
+     * Find a variation that matches the given pricing tier
+     */
+    private function find_variation_for_tier($available_variations, $tier) {
+        foreach ($available_variations as $variation) {
+            // Check if this variation has a seating-tier attribute that matches
+            if (isset($variation['attributes']['attribute_seating-tier'])) {
+                $variation_tier = $variation['attributes']['attribute_seating-tier'];
+                if ($variation_tier === $tier) {
+                    return $variation;
+                }
+            }
+            
+            // Also check for price-based matching as fallback
+            if (isset($variation['display_price'])) {
+                $variation_price = floatval($variation['display_price']);
+                $tier_price = $this->get_price_for_tier($tier);
+                
+                // Match if prices are within $1 of each other
+                if (abs($variation_price - $tier_price) < 1.0) {
+                    return $variation;
+                }
+            }
+        }
+        
+        return null;
     }
 }
