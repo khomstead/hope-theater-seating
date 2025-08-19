@@ -37,8 +37,9 @@ class HOPEModalHandler {
     }
     
     setupEventListeners() {
-        // Open modal button
-        const selectSeatsBtn = document.getElementById('hope-select-seats');
+        // Open modal button - try both possible IDs
+        const selectSeatsBtn = document.getElementById('hope-select-seats') || 
+                              document.getElementById('hope-select-seats-main');
         if (selectSeatsBtn) {
             selectSeatsBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -217,7 +218,8 @@ class HOPEModalHandler {
         .then(data => {
             if (data.success) {
                 // Update button on product page
-                const productBtn = document.getElementById('hope-select-seats');
+                const productBtn = document.getElementById('hope-select-seats') || 
+                                  document.getElementById('hope-select-seats-main');
                 if (productBtn) {
                     productBtn.innerHTML = `<span class="btn-text">${seats.length} Seats Selected</span> <span class="btn-icon">✓</span>`;
                     productBtn.classList.add('seats-selected');
