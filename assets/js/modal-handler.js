@@ -431,6 +431,45 @@ class HOPEModalHandler {
         
         console.log('restoreSeatsFromCart: Starting seat restoration process');
         
+        // First, try to get seats from WooCommerce cart via AJAX
+        this.getSeatsFromCart().then((cartSeats) => {
+            if (cartSeats && cartSeats.length > 0) {
+                console.log('Found seats in cart via AJAX:', cartSeats);
+                this.attemptSeatRestore(cartSeats);
+            } else {
+                // Fallback to DOM parsing
+                console.log('No seats found in cart, trying DOM fallback');
+                this.fallbackRestoreFromDOM();
+            }
+        }).catch((error) => {
+            console.log('Error getting cart seats via AJAX, trying DOM fallback:', error);
+            this.fallbackRestoreFromDOM();
+        });
+    }
+    
+    getSeatsFromCart() {
+        return fetch(hope_ajax.ajax_url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                action: 'hope_get_cart_seats',
+                nonce: hope_ajax.nonce,
+                product_id: hope_ajax.product_id
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                return data.data.seats || [];
+            } else {
+                throw new Error(data.data || 'Failed to get cart seats');
+            }
+        });
+    }
+    
+    attemptSeatRestore(seatsToRestore) {
         // Wait for seat map to be fully rendered
         let retryCount = 0;
         const maxRetries = 10;
@@ -448,41 +487,61 @@ class HOPEModalHandler {
             }
             
             console.log(`Found ${allSeats.length} rendered seats`);
+            console.log('Seats to restore:', seatsToRestore);
             
-            // Look for seat data in various places
-            let seatsToRestore = [];
-            
-            // Check if there's seat data in the button text
-            const selectButton = document.querySelector('#hope-select-seats-main, #hope-select-seats');
-            if (selectButton && selectButton.textContent.includes('Seats Selected')) {
-                console.log('Found button with seats selected state');
+            if (seatsToRestore.length > 0 && window.hopeSeatMap.selectSeats) {
+                try {
+                    // Verify each seat exists in the DOM before attempting to select
+                    const validSeats = seatsToRestore.filter(seatId => {
+                        const seatElement = document.querySelector(`[data-id="${seatId}"]`);
+                        const exists = !!seatElement;
+                        console.log(`Seat ${seatId} exists: ${exists}`);
+                        return exists;
+                    });
+                    
+                    if (validSeats.length > 0) {
+                        console.log(`Restoring ${validSeats.length} valid seats:`, validSeats);
+                        window.hopeSeatMap.selectSeats(validSeats);
+                        console.log('Successfully restored seats from cart');
+                    } else {
+                        console.log('No valid seats found to restore');
+                    }
+                } catch (error) {
+                    console.log('Error restoring seats:', error);
+                }
+            } else {
+                console.log('No seats found to restore or selectSeats method unavailable');
             }
-            
-            // Check if there's seat data in the summary displays
-            const summaryElements = document.querySelectorAll('.hope-seats-list, .selected-seats-list, .hope-selected-seats-display');
-            for (const element of summaryElements) {
-                if (element.textContent && element.textContent.trim()) {
-                    const seatText = element.textContent.trim();
-                    if (seatText !== 'No seats selected' && seatText !== '' && !seatText.includes('$')) {
-                        // Try to extract seat IDs from text
-                        const seatMatches = seatText.match(/[A-Z]\d+-\d+/g);
-                        if (seatMatches && seatMatches.length > 0) {
-                            seatsToRestore = seatMatches;
-                            console.log('Extracted seats from summary:', seatsToRestore);
-                            break;
-                        }
-                        // Fallback: split by comma
-                        const potentialSeats = seatText.split(', ').map(s => s.trim());
-                        if (potentialSeats.length > 0 && potentialSeats[0].match(/[A-Z]\d+-\d+/)) {
-                            seatsToRestore = potentialSeats;
-                            console.log('Extracted seats via comma split:', seatsToRestore);
-                            break;
-                        }
+        };
+        
+        // Start the restoration process
+        attemptRestore();
+    }
+    
+    fallbackRestoreFromDOM() {
+        console.log('Falling back to DOM parsing for seat restoration');
+        
+        let seatsToRestore = [];
+        
+        // Check if there's seat data in the summary displays
+        const summaryElements = document.querySelectorAll('.hope-seats-list, .selected-seats-list, .hope-selected-seats-display');
+        for (const element of summaryElements) {
+            if (element.textContent && element.textContent.trim()) {
+                const seatText = element.textContent.trim();
+                if (seatText !== 'No seats selected' && seatText !== '' && !seatText.includes('$')) {
+                    // Try to extract seat IDs from text
+                    const seatMatches = seatText.match(/[A-Z]\d+-\d+/g);
+                    if (seatMatches && seatMatches.length > 0) {
+                        seatsToRestore = seatMatches;
+                        console.log('Extracted seats from summary:', seatsToRestore);
+                        break;
                     }
                 }
             }
-            
-            // Check hidden form fields that might have seat data
+        }
+        
+        // Check hidden form fields that might have seat data
+        if (seatsToRestore.length === 0) {
             const hiddenSeatFields = document.querySelectorAll('input[name*="seat"], input[id*="seat"]');
             for (const field of hiddenSeatFields) {
                 if (field.value && field.value !== '') {
@@ -504,36 +563,13 @@ class HOPEModalHandler {
                     }
                 }
             }
-            
-            console.log('Final seats to restore:', seatsToRestore);
-            
-            if (seatsToRestore.length > 0 && window.hopeSeatMap.selectSeats) {
-                try {
-                    // Verify each seat exists in the DOM before attempting to select
-                    const validSeats = seatsToRestore.filter(seatId => {
-                        const seatElement = document.querySelector(`[data-id="${seatId}"]`);
-                        const exists = !!seatElement;
-                        console.log(`Seat ${seatId} exists: ${exists}`);
-                        return exists;
-                    });
-                    
-                    if (validSeats.length > 0) {
-                        console.log(`Restoring ${validSeats.length} valid seats:`, validSeats);
-                        window.hopeSeatMap.selectSeats(validSeats);
-                        console.log('Successfully restored seats');
-                    } else {
-                        console.log('No valid seats found to restore');
-                    }
-                } catch (error) {
-                    console.log('Error restoring seats:', error);
-                }
-            } else {
-                console.log('No seats found to restore or selectSeats method unavailable');
-            }
-        };
+        }
         
-        // Start the restoration process
-        attemptRestore();
+        if (seatsToRestore.length > 0) {
+            this.attemptSeatRestore(seatsToRestore);
+        } else {
+            console.log('No seats found to restore via DOM fallback');
+        }
     }
 }
 

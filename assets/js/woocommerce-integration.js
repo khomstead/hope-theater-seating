@@ -32,6 +32,9 @@ class HOPEWooCommerceIntegration {
         
         // Listen for seat selection changes
         this.listenForSeatChanges();
+        
+        // Check for existing cart seats and restore display
+        this.restoreProductPageDisplay();
     }
     
     connectToModal() {
@@ -365,6 +368,46 @@ class HOPEWooCommerceIntegration {
             if (this.seatMap) {
                 this.syncSeatDisplay();
             }
+        });
+    }
+    
+    restoreProductPageDisplay() {
+        // Check if there are seats in the cart for this product
+        if (typeof hope_ajax === 'undefined' || !hope_ajax.product_id) {
+            return;
+        }
+        
+        fetch(hope_ajax.ajax_url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                action: 'hope_get_cart_seats',
+                nonce: hope_ajax.nonce,
+                product_id: hope_ajax.product_id
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data.seats && data.data.seats.length > 0) {
+                console.log('Found seats in cart for product page display:', data.data.seats);
+                this.selectedSeats = new Set(data.data.seats);
+                this.updateSelectedSeatsDisplay(data.data.seats);
+                this.getVariationForSeats(data.data.seats);
+                
+                // Update the select seats button
+                const selectButton = document.querySelector('#hope-select-seats-main, #hope-select-seats');
+                if (selectButton) {
+                    selectButton.innerHTML = `<span class="btn-text">${data.data.seats.length} Seats Selected</span> <span class="btn-icon">✓</span>`;
+                    selectButton.classList.add('seats-selected');
+                }
+            } else {
+                console.log('No seats found in cart for this product');
+            }
+        })
+        .catch(error => {
+            console.error('Error checking cart seats for product page:', error);
         });
     }
 }

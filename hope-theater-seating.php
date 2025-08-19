@@ -213,6 +213,10 @@ class HOPE_Theater_Seating {
         add_action('wp_ajax_hope_get_variation_pricing', array($this, 'get_variation_pricing'));
         add_action('wp_ajax_nopriv_hope_get_variation_pricing', array($this, 'get_variation_pricing'));
         
+        // Add AJAX endpoint for getting cart seats
+        add_action('wp_ajax_hope_get_cart_seats', array($this, 'get_cart_seats'));
+        add_action('wp_ajax_nopriv_hope_get_cart_seats', array($this, 'get_cart_seats'));
+        
         // Enqueue scripts and styles
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
@@ -428,6 +432,69 @@ class HOPE_Theater_Seating {
         }
         
         wp_send_json_success(array('pricing' => $pricing));
+    }
+    
+    /**
+     * AJAX handler to get seats from current WooCommerce cart
+     */
+    public function get_cart_seats() {
+        // Check nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'hope_seating_nonce')) {
+            wp_send_json_error('Invalid nonce');
+            return;
+        }
+        
+        $product_id = intval($_POST['product_id']);
+        
+        if (!$product_id) {
+            wp_send_json_error('Invalid product ID');
+            return;
+        }
+        
+        // Get current cart
+        if (!function_exists('WC') || !WC()->cart) {
+            wp_send_json_success(array('seats' => array()));
+            return;
+        }
+        
+        $cart_seats = array();
+        
+        // Loop through cart items to find seats for this product
+        foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+            if ($cart_item['product_id'] == $product_id || $cart_item['variation_id'] == $product_id) {
+                // Check if this cart item has seat data
+                if (isset($cart_item['hope_seat_data'])) {
+                    $seat_data = $cart_item['hope_seat_data'];
+                    if (isset($seat_data['seat_id'])) {
+                        $cart_seats[] = $seat_data['seat_id'];
+                    }
+                }
+                
+                // Alternative: check for seat data in other formats
+                if (isset($cart_item['fooevents_seats_trans'])) {
+                    $seats = explode(',', $cart_item['fooevents_seats_trans']);
+                    foreach ($seats as $seat) {
+                        $seat = trim($seat);
+                        if ($seat && !in_array($seat, $cart_seats)) {
+                            $cart_seats[] = $seat;
+                        }
+                    }
+                }
+                
+                // Check for meta data with seat information
+                if (isset($cart_item['variation']) && is_array($cart_item['variation'])) {
+                    foreach ($cart_item['variation'] as $key => $value) {
+                        if (strpos($key, 'seat') !== false && preg_match('/[A-Z]\d+-\d+/', $value)) {
+                            if (!in_array($value, $cart_seats)) {
+                                $cart_seats[] = $value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        wp_send_json_success(array('seats' => array_unique($cart_seats)));
     }
 }
 
