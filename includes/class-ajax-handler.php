@@ -121,6 +121,8 @@ class HOPE_Ajax_Handler {
         $hold_duration = 600; // 10 minutes
         $expires_at = date('Y-m-d H:i:s', time() + $hold_duration);
         
+        $unavailable_seats = [];
+        
         foreach ($seats as $seat_id) {
             // Check if seat is available
             $is_available = $this->is_seat_available($product_id, $seat_id, $session_id);
@@ -144,20 +146,35 @@ class HOPE_Ajax_Handler {
                     error_log("Failed to hold seat {$seat_id}: " . $wpdb->last_error);
                 }
             } else {
+                $unavailable_seats[] = $seat_id;
                 error_log("Seat {$seat_id} is not available for holding");
             }
         }
         
-        if ($success && count($held_seats) > 0) {
-            wp_send_json_success([
+        // Success if we held at least some seats (partial success allowed)
+        if (count($held_seats) > 0) {
+            $response = [
                 'held_seats' => $held_seats,
                 'expires_at' => $expires_at,
                 'hold_duration' => $hold_duration
-            ]);
+            ];
+            
+            // Include unavailable seats info if any
+            if (!empty($unavailable_seats)) {
+                $response['unavailable_seats'] = $unavailable_seats;
+                $response['message'] = sprintf(
+                    'Held %d seats. %d seats were unavailable: %s',
+                    count($held_seats),
+                    count($unavailable_seats),
+                    implode(', ', $unavailable_seats)
+                );
+            }
+            
+            wp_send_json_success($response);
         } else {
             wp_send_json_error([
-                'message' => 'Could not hold all requested seats',
-                'held_seats' => $held_seats
+                'message' => 'Could not hold any requested seats - all are unavailable',
+                'unavailable_seats' => $unavailable_seats
             ]);
         }
     }

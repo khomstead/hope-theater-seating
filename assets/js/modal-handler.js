@@ -58,8 +58,8 @@ class HOPEModalHandler {
             // Check if the clicked element or its parent is a seat selection button
             while (target && target !== document) {
                 if (target.matches && (
-                    target.matches('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn') ||
-                    target.closest('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn')
+                    target.matches('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn, .hope-change-seats-btn') ||
+                    target.closest('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn, .hope-change-seats-btn')
                 )) {
                     e.preventDefault();
                     e.stopPropagation();

@@ -296,11 +296,20 @@ class HOPE_WooCommerce_Integration {
      * Display seat info in cart
      */
     public function display_seat_info_in_cart($name, $cart_item, $cart_item_key) {
-        if (isset($cart_item['hope_selected_seats']) && !empty($cart_item['hope_selected_seats'])) {
+        // Check for seats in either key (backwards compatibility)
+        $seats = null;
+        if (isset($cart_item['hope_theater_seats']) && !empty($cart_item['hope_theater_seats'])) {
+            $seats = $cart_item['hope_theater_seats'];
+        } elseif (isset($cart_item['hope_selected_seats']) && !empty($cart_item['hope_selected_seats'])) {
             $seats = $cart_item['hope_selected_seats'];
+        }
+        
+        if ($seats) {
             $seat_list = is_array($seats) ? implode(', ', $seats) : $seats;
+            $seat_count = is_array($seats) ? count($seats) : 1;
             
             $name .= '<br><small><strong>' . __('Seats:', 'hope-seating') . '</strong> ' . esc_html($seat_list) . '</small>';
+            $name .= '<br><small><strong>' . __('Quantity:', 'hope-seating') . '</strong> ' . $seat_count . ' ' . __('seats', 'hope-seating') . '</small>';
         }
         
         return $name;
@@ -310,7 +319,11 @@ class HOPE_WooCommerce_Integration {
      * Display seat info in order
      */
     public function display_seat_info_in_order($item_id, $item, $order, $plain_text) {
-        $selected_seats = $item->get_meta('hope_selected_seats');
+        // Check for seats in either meta key (backwards compatibility)
+        $selected_seats = $item->get_meta('hope_theater_seats');
+        if (empty($selected_seats)) {
+            $selected_seats = $item->get_meta('hope_selected_seats');
+        }
         
         if (!empty($selected_seats)) {
             $seats = is_array($selected_seats) ? $selected_seats : json_decode($selected_seats, true);
