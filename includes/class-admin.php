@@ -243,7 +243,30 @@ class HOPE_Seating_Admin {
         
         // Get all active venues
         $venues_table = $wpdb->prefix . 'hope_seating_venues';
-        $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+        
+        // Check if table exists first
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$venues_table'") == $venues_table;
+        
+        if ($table_exists) {
+            $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+            
+            // If no venues found, try to create default ones
+            if (empty($venues)) {
+                if (function_exists('hope_seating_create_default_venues')) {
+                    hope_seating_create_default_venues();
+                    // Try to get venues again
+                    $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+                }
+            }
+        } else {
+            $venues = array();
+            // Create tables if they don't exist
+            if (class_exists('HOPE_Seating_Database')) {
+                HOPE_Seating_Database::create_tables();
+                hope_seating_create_default_venues();
+                $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+            }
+        }
         
         // Get saved venue for this product
         $selected_venue = get_post_meta($post->ID, '_hope_seating_venue_id', true);
@@ -271,16 +294,28 @@ class HOPE_Seating_Admin {
                         <label for="_hope_seating_venue_id"><?php _e('Select Venue', 'hope-seating'); ?></label>
                         <select id="_hope_seating_venue_id" name="_hope_seating_venue_id" class="select short">
                             <option value=""><?php _e('— Select a venue —', 'hope-seating'); ?></option>
-                            <?php foreach ($venues as $venue): ?>
-                                <option value="<?php echo esc_attr($venue->id); ?>" 
-                                        <?php selected($selected_venue, $venue->id); ?>
-                                        data-total-seats="<?php echo esc_attr($venue->total_seats); ?>">
-                                    <?php echo esc_html($venue->name); ?> 
-                                    (<?php echo esc_html($venue->total_seats); ?> seats)
-                                </option>
-                            <?php endforeach; ?>
+                            <?php if (!empty($venues)): ?>
+                                <?php foreach ($venues as $venue): ?>
+                                    <option value="<?php echo esc_attr($venue->id); ?>" 
+                                            <?php selected($selected_venue, $venue->id); ?>
+                                            data-total-seats="<?php echo esc_attr($venue->total_seats); ?>">
+                                        <?php echo esc_html($venue->name); ?> 
+                                        (<?php echo esc_html($venue->total_seats); ?> seats)
+                                    </option>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <option value="" disabled>No venues found - please activate plugin or check database</option>
+                            <?php endif; ?>
                         </select>
                     </p>
+                    
+                    <?php if (empty($venues)): ?>
+                        <p class="form-field">
+                            <em style="color: #d63638;">
+                                ⚠️ No venues found. Please deactivate and reactivate the HOPE Theater Seating plugin to create default venues.
+                            </em>
+                        </p>
+                    <?php endif; ?>
                     
                     <?php if ($selected_venue): ?>
                         <?php
@@ -364,34 +399,7 @@ class HOPE_Seating_Admin {
                     <?php endif; ?>
                     
                     <?php
-                    // Event-specific settings
-                    woocommerce_wp_text_input(array(
-                        'id' => '_hope_seating_price_multiplier',
-                        'label' => __('Price Multiplier', 'hope-seating'),
-                        'placeholder' => '1.0',
-                        'description' => __('Multiply all seat prices by this factor (e.g., 1.5 for 50% increase)', 'hope-seating'),
-                        'type' => 'number',
-                        'custom_attributes' => array(
-                            'step' => '0.1',
-                            'min' => '0.1',
-                            'max' => '10'
-                        ),
-                        'desc_tip' => true
-                    ));
-                    
-                    woocommerce_wp_text_input(array(
-                        'id' => '_hope_seating_max_seats',
-                        'label' => __('Max Seats Per Order', 'hope-seating'),
-                        'placeholder' => '10',
-                        'description' => __('Maximum number of seats a customer can select', 'hope-seating'),
-                        'type' => 'number',
-                        'custom_attributes' => array(
-                            'step' => '1',
-                            'min' => '1',
-                            'max' => '100'
-                        ),
-                        'desc_tip' => true
-                    ));
+                    // Future event-specific settings can go here if needed
                     ?>
                 </div>
             </div>
@@ -455,16 +463,6 @@ class HOPE_Seating_Admin {
         // Save venue selection
         if (isset($_POST['_hope_seating_venue_id'])) {
             update_post_meta($post_id, '_hope_seating_venue_id', sanitize_text_field($_POST['_hope_seating_venue_id']));
-        }
-        
-        // Save price multiplier
-        if (isset($_POST['_hope_seating_price_multiplier'])) {
-            update_post_meta($post_id, '_hope_seating_price_multiplier', floatval($_POST['_hope_seating_price_multiplier']));
-        }
-        
-        // Save max seats
-        if (isset($_POST['_hope_seating_max_seats'])) {
-            update_post_meta($post_id, '_hope_seating_max_seats', intval($_POST['_hope_seating_max_seats']));
         }
     }
     

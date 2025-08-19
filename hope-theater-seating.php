@@ -2,6 +2,7 @@
 /**
  * Plugin Name: HOPE Theater Seating
  * Plugin URI: https://hopecenterforthearts.org
+ * GitHub Plugin URI: khomstead/hope-theater-seating
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
  * Version: 2.0.1
  * Author: HOPE Center Development Team
