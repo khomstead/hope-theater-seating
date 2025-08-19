@@ -17,14 +17,14 @@ class HOPE_Session_Manager {
         global $wpdb;
         $this->holds_table = $wpdb->prefix . 'hope_seating_holds';
         
-        // Schedule cleanup cron
+        // Add custom cron schedule FIRST
+        add_filter('cron_schedules', array($this, 'add_cron_schedules'));
+        add_action('hope_seating_cleanup_holds', array($this, 'cleanup_expired_holds'));
+        
+        // Schedule cleanup cron AFTER adding the schedule
         if (!wp_next_scheduled('hope_seating_cleanup_holds')) {
             wp_schedule_event(time(), 'hope_seating_every_minute', 'hope_seating_cleanup_holds');
         }
-        
-        // Add custom cron schedule
-        add_filter('cron_schedules', array($this, 'add_cron_schedules'));
-        add_action('hope_seating_cleanup_holds', array($this, 'cleanup_expired_holds'));
     }
     
     /**
@@ -281,10 +281,26 @@ class HOPE_Session_Manager {
     public function cleanup_expired_holds() {
         global $wpdb;
         
+        // Check if table exists before attempting cleanup
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$this->holds_table}'") == $this->holds_table;
+        
+        if (!$table_exists) {
+            // Table doesn't exist, try to create it
+            if (class_exists('HOPE_Seating_Database')) {
+                HOPE_Seating_Database::create_tables();
+            }
+            return 0;
+        }
+        
         $deleted = $wpdb->query(
             "DELETE FROM {$this->holds_table}
             WHERE expires_at <= NOW()"
         );
+        
+        if ($deleted === false) {
+            error_log('HOPE Seating: Failed to cleanup expired holds - ' . $wpdb->last_error);
+            return 0;
+        }
         
         if ($deleted > 0) {
             do_action('hope_seating_holds_cleaned', $deleted);

@@ -115,6 +115,54 @@ class HOPE_Seating_Database {
         ) $charset_collate;";
         
         dbDelta($pricing_sql);
+        
+        // Holds table (for temporary seat reservations)
+        $holds_table = $wpdb->prefix . 'hope_seating_holds';
+        $holds_sql = "CREATE TABLE IF NOT EXISTS $holds_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            seat_id int(11) NOT NULL,
+            event_id int(11) NOT NULL,
+            session_id varchar(100) NOT NULL,
+            user_email varchar(255) NULL,
+            expires_at datetime NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY seat_event_unique (seat_id, event_id),
+            KEY seat_id (seat_id),
+            KEY event_id (event_id),
+            KEY session_id (session_id),
+            KEY expires_at (expires_at)
+        ) $charset_collate;";
+        
+        dbDelta($holds_sql);
+        
+        // Bookings table (for confirmed reservations)
+        $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+        $bookings_sql = "CREATE TABLE IF NOT EXISTS $bookings_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            seat_id int(11) NOT NULL,
+            event_id int(11) NOT NULL,
+            order_id int(11) NULL,
+            order_item_id int(11) NULL,
+            customer_id int(11) NULL,
+            session_id varchar(100) NULL,
+            status varchar(20) NOT NULL DEFAULT 'reserved',
+            reserved_until datetime NULL,
+            booking_reference varchar(50) NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY seat_event_unique (seat_id, event_id),
+            KEY seat_id (seat_id),
+            KEY event_id (event_id),
+            KEY order_id (order_id),
+            KEY customer_id (customer_id),
+            KEY session_id (session_id),
+            KEY status (status),
+            KEY reserved_until (reserved_until)
+        ) $charset_collate;";
+        
+        dbDelta($bookings_sql);
     }
     
     public static function get_table_name($table) {
