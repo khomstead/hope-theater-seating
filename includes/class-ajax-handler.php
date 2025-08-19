@@ -271,9 +271,9 @@ class HOPE_Ajax_Handler {
                 error_log('HOPE: Successfully added seats to cart and converted holds to bookings');
                 
                 wp_send_json_success([
-                    'cart_url' => wc_get_cart_url(),
+                    'cart_url' => wc_get_checkout_url(),
                     'message' => sprintf(
-                        __('%d seats added to cart', 'hope-theater-seating'),
+                        __('%d seats added - proceeding to checkout', 'hope-theater-seating'),
                         count($seats)
                     )
                 ]);

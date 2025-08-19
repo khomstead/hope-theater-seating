@@ -8,6 +8,7 @@ class HOPEModalHandler {
         this.modal = null;
         this.isOpen = false;
         this.seatMap = null;
+        this.lastClickTime = 0;
         
         this.init();
     }
@@ -50,14 +51,34 @@ class HOPEModalHandler {
     
     setupEventListeners() {
         // Use event delegation for dynamically loaded buttons - support multiple button IDs
+        // Also check parent elements in case the click is on a child span
         document.addEventListener('click', (e) => {
-            if (e.target.matches('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Seat selection button clicked, opening modal...');
-                this.openModal();
+            let target = e.target;
+            
+            // Check if the clicked element or its parent is a seat selection button
+            while (target && target !== document) {
+                if (target.matches && (
+                    target.matches('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn') ||
+                    target.closest('#hope-select-seats, #hope-select-seats-main, .hope-select-seats-btn')
+                )) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Seat selection button clicked (target:', target.tagName, target.className, '), opening modal...');
+                    
+                    // Prevent multiple rapid clicks
+                    const now = Date.now();
+                    if (this.isOpen || (now - this.lastClickTime < 500)) {
+                        console.log('Modal already open or too soon after last click, ignoring');
+                        return;
+                    }
+                    
+                    this.lastClickTime = now;
+                    this.openModal();
+                    return;
+                }
+                target = target.parentElement;
             }
-        });
+        }, { capture: true }); // Use capture phase to catch events early
         
         // Close button
         const closeBtn = this.modal.querySelector('.hope-modal-close');
