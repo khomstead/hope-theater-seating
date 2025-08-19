@@ -330,6 +330,9 @@ class HOPE_Session_Manager {
             do_action('hope_seating_holds_cleaned', $deleted);
         }
         
+        // Also cleanup abandoned pending bookings (older than 30 minutes with no order)
+        $this->cleanup_abandoned_pending_bookings();
+        
         // Also log current active holds
         $active_count = $wpdb->get_var(
             "SELECT COUNT(*) FROM {$this->holds_table} WHERE expires_at > NOW()"
@@ -362,6 +365,46 @@ class HOPE_Session_Manager {
         return $deleted;
     }
     
+    /**
+     * Clean up abandoned pending bookings
+     */
+    public function cleanup_abandoned_pending_bookings() {
+        global $wpdb;
+        $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+        
+        error_log('HOPE Cleanup: Starting abandoned pending bookings cleanup...');
+        
+        // Find pending bookings older than 30 minutes with no order_id
+        $abandoned_bookings = $wpdb->get_results(
+            "SELECT id, seat_id, created_at, TIMESTAMPDIFF(MINUTE, created_at, NOW()) as minutes_old
+            FROM {$bookings_table} 
+            WHERE status = 'pending' 
+            AND (order_id = 0 OR order_id IS NULL)
+            AND created_at <= DATE_SUB(NOW(), INTERVAL 30 MINUTE)"
+        );
+        
+        if (count($abandoned_bookings) > 0) {
+            error_log("HOPE Cleanup: Found " . count($abandoned_bookings) . " abandoned pending bookings");
+            
+            foreach ($abandoned_bookings as $booking) {
+                error_log("HOPE Cleanup: Removing abandoned booking - ID: {$booking->id}, Seat: {$booking->seat_id}, Age: {$booking->minutes_old} minutes");
+            }
+            
+            $deleted_bookings = $wpdb->query(
+                "DELETE FROM {$bookings_table}
+                WHERE status = 'pending' 
+                AND (order_id = 0 OR order_id IS NULL)
+                AND created_at <= DATE_SUB(NOW(), INTERVAL 30 MINUTE)"
+            );
+            
+            if ($deleted_bookings > 0) {
+                error_log("HOPE Cleanup: Successfully deleted {$deleted_bookings} abandoned pending bookings");
+            }
+        } else {
+            error_log('HOPE Cleanup: No abandoned pending bookings found');
+        }
+    }
+
     /**
      * Get hold statistics
      */

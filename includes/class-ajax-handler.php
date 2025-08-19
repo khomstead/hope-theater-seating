@@ -383,8 +383,10 @@ class HOPE_Ajax_Handler {
                         $successful_additions++;
                         $total_seats_added += 1;
                         
-                        // Convert hold to pending booking for this individual seat
-                        $this->convert_holds_to_bookings($product_id, [$individual_seat], $session_id);
+                        // DO NOT convert holds to bookings yet - keep as holds until checkout
+                        // This allows users to change their selection by going back to the modal
+                        // Conversion to bookings will happen during checkout process
+                        
                     } else {
                         error_log("HOPE: Failed to add individual seat {$individual_seat} to cart");
                     }
@@ -426,12 +428,26 @@ class HOPE_Ajax_Handler {
         global $wpdb;
         $table_holds = $wpdb->prefix . 'hope_seating_holds';
         
+        // Also clear any pending bookings for this session that haven't been completed
+        $table_bookings = $wpdb->prefix . 'hope_seating_bookings';
+        
         if (empty($seats)) {
             // Release all holds for this session
-            $result = $wpdb->delete($table_holds, [
+            $holds_result = $wpdb->delete($table_holds, [
                 'session_id' => $session_id,
                 'product_id' => $product_id
             ]);
+            
+            // Also remove any pending bookings with no order_id (cart items not yet checked out)
+            $bookings_result = $wpdb->delete($table_bookings, [
+                'product_id' => $product_id,
+                'order_id' => 0,
+                'status' => 'pending'
+                // Note: we can't easily match by session_id here since bookings don't store it
+                // This cleanup will happen during the abandoned cart cleanup cron
+            ]);
+            
+            $result = $holds_result;
         } else {
             // Release specific seats
             $result = 0;
@@ -442,6 +458,14 @@ class HOPE_Ajax_Handler {
                     'seat_id' => $seat_id
                 ]);
                 $result += $deleted;
+                
+                // Also remove pending booking for this seat if it exists
+                $wpdb->delete($table_bookings, [
+                    'product_id' => $product_id,
+                    'seat_id' => $seat_id,
+                    'order_id' => 0,
+                    'status' => 'pending'
+                ]);
             }
         }
         

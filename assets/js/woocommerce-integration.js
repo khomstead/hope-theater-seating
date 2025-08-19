@@ -93,9 +93,19 @@ class HOPEWooCommerceIntegration {
                 const seatTag = document.createElement('span');
                 seatTag.className = 'hope-seat-tag';
                 seatTag.textContent = seatId;
+                
+                // Get tier information for color-coding
+                const tier = this.getSeatTier(seatId);
+                const tierColor = this.getTierColor(tier);
+                
+                // Apply tier-based styling
+                seatTag.style.backgroundColor = tierColor;
+                seatTag.setAttribute('data-tier', tier);
+                seatTag.setAttribute('title', this.getTierName(tier) + ' - $' + this.getSeatPrice(seatId).toFixed(2));
+                
                 seatsList.appendChild(seatTag);
                 
-                // Calculate price (simplified - you may want to get actual prices)
+                // Calculate price
                 total += this.getSeatPrice(seatId);
             });
             
@@ -144,6 +154,86 @@ class HOPEWooCommerceIntegration {
         
         // Fallback price
         return 25;
+    }
+    
+    getSeatTier(seatId) {
+        // Try to get tier from seat element first
+        const seatElement = document.querySelector(`[data-id="${seatId}"]`);
+        if (seatElement) {
+            return seatElement.getAttribute('data-tier') || 'p2';
+        }
+        
+        // Fallback: extract tier using same logic as PHP
+        return this.extractTierFromSeatId(seatId);
+    }
+    
+    extractTierFromSeatId(seatId) {
+        // Parse seat ID to determine pricing tier (matches PHP logic)
+        const match = seatId.match(/^([A-Z])(\d+)-(\d+)$/);
+        if (!match) return 'p2';
+        
+        const section = match[1];
+        const row = parseInt(match[2]);
+        
+        // Theater pricing logic (matches the PHP code exactly)
+        if (section === 'A') {
+            if (row <= 2) return 'p1';
+            else if (row <= 9) return 'p2';
+            else return 'aa';
+        } else if (section === 'B') {
+            if (row <= 3) return 'p1';
+            else return 'p2';
+        } else if (section === 'C') {
+            if (row <= 3) return 'p1';
+            else if (row <= 9) return 'p2';
+            else return 'p3';
+        } else if (section === 'D') {
+            if (row <= 3) return 'p1';
+            else if (row <= 9) return 'p2';
+            else return 'aa';
+        } else if (section === 'E') {
+            if (row <= 2) return 'p1';
+            else if (row <= 7) return 'p2';
+            else if (row <= 9) return 'p3';
+            else return 'aa';
+        } else if (section === 'F') {
+            if (row <= 1) return 'p1';
+            else if (row <= 3) return 'p2';
+            else return 'p3';
+        } else if (section === 'G') {
+            if (row <= 1) return 'p1';
+            else if (row <= 3) return 'p2';
+            else return 'p3';
+        } else if (section === 'H') {
+            if (row <= 1) return 'p1';
+            else if (row <= 3) return 'p2';
+            else return 'p3';
+        }
+        
+        return 'p2'; // Default fallback
+    }
+    
+    getTierColor(tier) {
+        // Color mapping that matches seat-map.js pricing colors
+        const tierColors = {
+            'p1': '#9b59b6', // Premium - Purple
+            'p2': '#3498db', // Standard - Blue  
+            'p3': '#17a2b8', // Value - Teal
+            'aa': '#e67e22'  // Accessible - Orange
+        };
+        
+        return tierColors[tier] || tierColors['p2'];
+    }
+    
+    getTierName(tier) {
+        const tierNames = {
+            'p1': 'Premium',
+            'p2': 'Standard', 
+            'p3': 'Value',
+            'aa': 'Accessible'
+        };
+        
+        return tierNames[tier] || 'Standard';
     }
     
     getVariationForSeats(seats) {
