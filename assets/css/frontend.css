@@ -1,0 +1,358 @@
+/**
+ * HOPE Theater Seating Plugin - Frontend Styles
+ * Accurate visual representation of the half-round theater
+ */
+
+/* Main Container */
+.hope-seating-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.hope-seating-wrapper {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+/* Header */
+.hope-seating-header {
+    background: #f8f9fa;
+    padding: 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.hope-seating-header h2 {
+    margin: 0;
+    font-size: 28px;
+    color: #2c3e50;
+    font-weight: 300;
+    letter-spacing: -0.5px;
+}
+
+/* Loading State */
+.hope-seating-loading {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.hope-seating-loading .spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* SVG Container */
+.hope-seating-svg-container {
+    padding: 20px;
+    background: #fafbfc;
+    position: relative;
+    min-height: 400px;
+}
+
+.hope-seating-svg {
+    width: 100%;
+    height: auto;
+    max-height: 600px;
+    display: block;
+}
+
+/* Seat Styles */
+.seat-group {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.seat-group.unavailable {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.seat-circle {
+    transition: all 0.2s ease;
+}
+
+.seat-group:hover:not(.unavailable) .seat-circle {
+    transform-origin: center;
+    filter: brightness(1.1);
+}
+
+.seat-group.selected .seat-circle {
+    stroke-width: 2;
+    stroke: #2c3e50;
+}
+
+/* Section Labels */
+.section-label {
+    user-select: none;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* Stage Styling */
+.stage-group {
+    pointer-events: none;
+}
+
+/* Legend */
+.hope-seating-legend {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    padding: 20px;
+    background: #ffffff;
+    border-top: 1px solid #e9ecef;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #495057;
+}
+
+.legend-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid #2c3e50;
+    flex-shrink: 0;
+}
+
+.legend-label {
+    white-space: nowrap;
+}
+
+/* Selection Info */
+.hope-seating-info {
+    padding: 20px;
+    background: #ffffff;
+    border-top: 1px solid #e9ecef;
+}
+
+.selection-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.selected-count {
+    font-size: 16px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.clear-selection {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s ease;
+}
+
+.clear-selection:hover {
+    background: #c0392b;
+}
+
+.selected-seats-list {
+    font-size: 14px;
+    color: #6c757d;
+    line-height: 1.6;
+}
+
+.selected-seats-list strong {
+    color: #495057;
+}
+
+/* Tooltip */
+.hope-seat-tooltip {
+    position: fixed;
+    background: rgba(44, 62, 80, 0.95);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    pointer-events: none;
+    z-index: 10000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.hope-seat-tooltip strong {
+    font-weight: 600;
+}
+
+/* Error State */
+.hope-seating-error {
+    text-align: center;
+    padding: 40px 20px;
+    color: #e74c3c;
+}
+
+.hope-seating-error p {
+    margin: 0;
+    font-size: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .hope-seating-container {
+        padding: 10px;
+    }
+    
+    .hope-seating-header h2 {
+        font-size: 24px;
+    }
+    
+    .hope-seating-legend {
+        gap: 15px;
+        padding: 15px;
+    }
+    
+    .legend-item {
+        font-size: 12px;
+    }
+    
+    .legend-dot {
+        width: 16px;
+        height: 16px;
+    }
+    
+    .hope-seating-svg-container {
+        padding: 10px;
+    }
+    
+    .section-label {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .hope-seating-header h2 {
+        font-size: 20px;
+    }
+    
+    .selection-summary {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    
+    .clear-selection {
+        width: 100%;
+    }
+    
+    .hope-seating-legend {
+        gap: 10px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .hope-seating-container {
+        max-width: 100%;
+    }
+    
+    .hope-seating-wrapper {
+        box-shadow: none;
+        border: 1px solid #dee2e6;
+    }
+    
+    .clear-selection {
+        display: none !important;
+    }
+    
+    .seat-group {
+        cursor: default;
+    }
+}
+
+/* Animation for seat selection */
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.seat-group.selected .seat-circle {
+    animation: pulse 0.3s ease-out;
+}
+
+/* Accessibility */
+.seat-group:focus {
+    outline: 2px solid #3498db;
+    outline-offset: 2px;
+}
+
+/* Price tier specific colors - matching the screenshot */
+.seat-group[data-pricing="P1"] .seat-circle:not([fill]) {
+    fill: #9b59b6; /* VIP Purple */
+}
+
+.seat-group[data-pricing="P2"] .seat-circle:not([fill]) {
+    fill: #3498db; /* Premium Blue */
+}
+
+.seat-group[data-pricing="P3"] .seat-circle:not([fill]) {
+    fill: #27ae60; /* General Green */
+}
+
+.seat-group[data-pricing="AA"] .seat-circle:not([fill]) {
+    fill: #e67e22; /* Accessible Orange */
+}
+
+/* Balcony level specific styling */
+.balcony-level {
+    opacity: 0.95;
+}
+
+.balcony-level .section-label {
+    font-style: italic;
+}
+
+/* Orchestra level specific styling */
+.orchestra-level .section-c .seat-circle {
+    /* Center section seats can be slightly larger */
+    r: 9;
+}
+
+/* Hover effect for available seats */
+.seat-group.available:hover .seat-circle {
+    stroke-width: 2;
+    filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.3));
+}
+
+/* Selected seat highlighting */
+.seat-group.selected {
+    z-index: 10;
+}
+
+.seat-group.selected .seat-circle {
+    fill: #f39c12 !important;
+    stroke: #d68910;
+    stroke-width: 2;
+}
