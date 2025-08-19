@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.2.14
+ * Version: 2.2.15
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.2.14');
+define('HOPE_SEATING_VERSION', '2.2.15');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -222,11 +222,18 @@ class HOPE_Theater_Seating {
             $viewport_config = $mobile_detector->get_viewport_config();
         }
         
-        // Enqueue styles
+        // Enqueue styles - both frontend basics and seat map animations
         wp_enqueue_style(
             'hope-seating-frontend',
-            HOPE_SEATING_PLUGIN_URL . 'assets/css/seat-map.css',
+            HOPE_SEATING_PLUGIN_URL . 'assets/css/frontend.css',
             array(),
+            HOPE_SEATING_VERSION
+        );
+        
+        wp_enqueue_style(
+            'hope-seating-seat-map',
+            HOPE_SEATING_PLUGIN_URL . 'assets/css/seat-map.css',
+            array('hope-seating-frontend'),
             HOPE_SEATING_VERSION
         );
         
