@@ -9,6 +9,7 @@ class HOPEModalHandler {
         this.isOpen = false;
         this.seatMap = null;
         this.lastClickTime = 0;
+        this.lastFooterHeight = null; // Track previous footer height for change detection
         
         this.init();
     }
@@ -38,6 +39,8 @@ class HOPEModalHandler {
         
         // Setup event listeners
         this.setupEventListeners();
+        
+        // Setup legend toggle will be handled in setupEventListeners
         
         // Initialize seat map when modal opens
         this.modal.addEventListener('modal-opened', () => {
@@ -80,11 +83,7 @@ class HOPEModalHandler {
             }
         }, { capture: true }); // Use capture phase to catch events early
         
-        // Close button
-        const closeBtn = this.modal.querySelector('.hope-modal-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.closeModal());
-        }
+        // X close button removed for cleaner UI
         
         // Cancel button
         const cancelBtn = this.modal.querySelector('.hope-cancel-btn');
@@ -92,10 +91,27 @@ class HOPEModalHandler {
             cancelBtn.addEventListener('click', () => this.closeModal());
         }
         
-        // Add to cart button
-        const addToCartBtn = this.modal.querySelector('.hope-add-to-cart-btn');
-        if (addToCartBtn) {
-            addToCartBtn.addEventListener('click', () => this.addToCart());
+        // Confirm seats button (was add to cart)
+        const confirmSeatsBtn = this.modal.querySelector('.hope-confirm-seats-btn');
+        if (confirmSeatsBtn) {
+            confirmSeatsBtn.addEventListener('click', () => this.confirmSeats());
+        }
+        
+        // Legend toggle button - use event delegation for reliability
+        document.addEventListener('click', (e) => {
+            if (e.target && (e.target.id === 'legend-toggle' || e.target.closest('#legend-toggle'))) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Legend toggle clicked via event delegation');
+                this.toggleLegend();
+            }
+        });
+        
+        // Seats toggle button
+        const seatsToggle = this.modal.querySelector('#seats-toggle');
+        const seatsPanel = this.modal.querySelector('#selected-seats-panel');
+        if (seatsToggle && seatsPanel) {
+            seatsToggle.addEventListener('click', () => this.toggleSeatsPanel());
         }
         
         // Overlay click
@@ -115,6 +131,16 @@ class HOPEModalHandler {
         if (hope_ajax.is_mobile) {
             this.setupMobileHandlers();
         }
+        
+        // Add resize listener to recalculate footer height
+        window.addEventListener('resize', () => {
+            if (this.isOpen) {
+                setTimeout(() => this.updateFooterHeight(), 100);
+            }
+        });
+        
+        // Watch for footer content changes (like timer appearing)
+        this.setupFooterObserver();
     }
     
     setupMobileHandlers() {
@@ -128,7 +154,7 @@ class HOPEModalHandler {
         if (mobileDone) {
             mobileDone.addEventListener('click', () => {
                 if (this.seatMap && this.seatMap.selectedSeats.size > 0) {
-                    this.addToCart();
+                    this.confirmSeats();
                 } else {
                     this.closeModal();
                 }
@@ -163,6 +189,9 @@ class HOPEModalHandler {
         this.modal.setAttribute('aria-hidden', 'false');
         this.isOpen = true;
         
+        // Reset footer height tracker for fresh calculation
+        this.lastFooterHeight = null;
+        
         // Add body class to prevent scrolling
         document.body.classList.add('hope-modal-open');
         
@@ -181,16 +210,29 @@ class HOPEModalHandler {
             // Initialize or refresh seat map
             if (window.hopeSeatMap) {
                 window.hopeSeatMap.initializeMap();
-                // Try to restore previously selected seats from cart - with longer delay
-                setTimeout(() => this.restoreSeatsFromCart(), 750);
+                // Clear any previous selections and refresh availability
+                setTimeout(() => {
+                    this.syncWithCartState();
+                }, 800);
             } else {
                 // Create new instance if needed
                 if (typeof HOPESeatMap !== 'undefined' && typeof hope_ajax !== 'undefined') {
                     window.hopeSeatMap = new HOPESeatMap();
-                    // Try to restore previously selected seats from cart - with longer delay
-                    setTimeout(() => this.restoreSeatsFromCart(), 1000);
+                    // Still need a bit more time for new instance
+                    setTimeout(() => {
+                        this.syncWithCartState();
+                    }, 1200);
                 }
             }
+            
+            // Show navigation hint
+            this.showNavigationHint();
+            
+            // Refresh legend toggle event listeners now that content is visible
+            this.refreshLegendToggle();
+            
+            // Calculate and set footer height for panel positioning
+            this.updateFooterHeight();
         }, 500);
         
         // Focus management for accessibility
@@ -202,16 +244,16 @@ class HOPEModalHandler {
         this.trapFocus();
     }
     
-    closeModal() {
+    closeModal(skipConfirmation = false) {
         if (!this.modal || !this.isOpen) return;
         
-        // Confirm if seats are selected
-        if (this.seatMap && this.seatMap.selectedSeats.size > 0) {
+        // Confirm if seats are selected (unless called from confirmSeats)
+        if (!skipConfirmation && this.seatMap && this.seatMap.selectedSeats.size > 0) {
             if (!confirm('You have selected seats. Are you sure you want to close without adding them to cart?')) {
                 return;
             }
             
-            // Release held seats
+            // Release held seats only if user really wants to close
             this.seatMap.releaseAllSeats();
         }
         
@@ -236,6 +278,9 @@ class HOPEModalHandler {
             this.seatMap.stopAvailabilityRefresh();
         }
         
+        // Cleanup footer observer
+        this.cleanupFooterObserver();
+        
         // Emit modal closed event
         const modalClosedEvent = new CustomEvent('hope-modal-closed', {
             detail: { seats: this.seatMap ? Array.from(this.seatMap.selectedSeats) : [] }
@@ -243,19 +288,14 @@ class HOPEModalHandler {
         document.dispatchEvent(modalClosedEvent);
     }
     
-    addToCart() {
+    confirmSeats() {
         if (!this.seatMap || this.seatMap.selectedSeats.size === 0) {
             return;
         }
         
-        const addToCartBtn = this.modal.querySelector('.hope-add-to-cart-btn');
-        if (addToCartBtn) {
-            addToCartBtn.disabled = true;
-            addToCartBtn.innerHTML = '<span class="spinner"></span> Adding to cart...';
-        }
-        
         const seats = Array.from(this.seatMap.selectedSeats);
         
+        // Add seats to cart via AJAX to ensure persistence
         fetch(hope_ajax.ajax_url, {
             method: 'POST',
             headers: {
@@ -271,63 +311,128 @@ class HOPEModalHandler {
         })
         .then(response => response.json())
         .then(data => {
+            console.log('AJAX response from hope_add_to_cart:', data);
             if (data.success) {
-                // Update button on product page - support multiple button IDs
+                console.log('Seats successfully added to cart:', data);
+                
+                // Update button on product page
                 const productBtn = document.getElementById('hope-select-seats') || 
                                   document.getElementById('hope-select-seats-main');
                 if (productBtn) {
                     productBtn.innerHTML = `<span class="btn-text">${seats.length} Seats Selected</span> <span class="btn-icon">✓</span>`;
                     productBtn.classList.add('seats-selected');
-                }
-                
-                // Show selected seats summary
-                const summary = document.querySelector('.hope-selected-seats-summary') || 
-                              document.querySelector('.hope-selected-seats-display');
-                if (summary) {
-                    summary.style.display = 'block';
-                    const listEl = summary.querySelector('.selected-seats-list') ||
-                                  summary.querySelector('.hope-seats-list');
-                    if (listEl) {
-                        listEl.innerHTML = seats.join(', ');
-                    }
-                }
-                
-                // Close modal
-                this.isOpen = false; // Prevent confirmation
-                this.modal.style.display = 'none';
-                document.body.classList.remove('hope-modal-open');
-                
-                // Emit event for WooCommerce integration
-                const seatsUpdatedEvent = new CustomEvent('hope-seats-updated', {
-                    detail: { seats: Array.from(this.seatMap.selectedSeats) }
-                });
-                document.dispatchEvent(seatsUpdatedEvent);
-                
-                // Redirect to cart or show success message
-                if (data.data.cart_url) {
-                    window.location.href = data.data.cart_url;
+                    console.log('Updated product page button');
                 } else {
-                    this.showSuccessMessage(data.data.message);
+                    console.log('Product page button not found');
                 }
-            } else {
-                this.showErrorMessage(data.data.message);
                 
-                // Re-enable button
-                if (addToCartBtn) {
-                    addToCartBtn.disabled = false;
-                    addToCartBtn.innerHTML = 'Add to Cart <span class="seat-count-badge">' + seats.length + '</span>';
+                // Always manually update the seat display elements to ensure they show
+                const prompt = document.querySelector('.hope-seat-selection-prompt');
+                const display = document.querySelector('.hope-selected-seats-display');
+                
+                console.log('Looking for seat display elements - prompt:', !!prompt, 'display:', !!display);
+                
+                if (prompt && display) {
+                    console.log('Found seat display elements, updating them');
+                    prompt.style.display = 'none';
+                    display.style.display = 'block';
+                    
+                    const seatsList = display.querySelector('.hope-seats-list');
+                    const totalAmount = display.querySelector('.total-amount');
+                    
+                    console.log('Found seatsList:', !!seatsList, 'totalAmount:', !!totalAmount);
+                    
+                    if (seatsList) {
+                        seatsList.innerHTML = '';
+                        seats.forEach(seatId => {
+                            const seatTag = document.createElement('span');
+                            seatTag.className = 'hope-seat-tag';
+                            seatTag.textContent = seatId;
+                            seatTag.style.backgroundColor = '#7c3aed'; // Default purple
+                            seatTag.style.color = 'white';
+                            seatTag.style.padding = '6px 12px';
+                            seatTag.style.margin = '0 8px 8px 0';
+                            seatTag.style.borderRadius = '16px';
+                            seatTag.style.fontSize = '14px';
+                            seatTag.style.display = 'inline-block';
+                            seatsList.appendChild(seatTag);
+                        });
+                        console.log('Added seat tags to list');
+                    }
+                    
+                    if (totalAmount) {
+                        const calculatedTotal = data.data?.total || (seats.length * 25); // fallback calculation
+                        totalAmount.textContent = `$${calculatedTotal}`;
+                        console.log('Updated total amount to:', calculatedTotal);
+                    }
+                    
+                    console.log('Successfully updated seat display manually');
+                } else {
+                    console.error('Could not find seat display elements - prompt:', !!prompt, 'display:', !!display);
+                    
+                    // Log all elements with class names that might be relevant
+                    const allElements = document.querySelectorAll('[class*="hope"], [class*="seat"]');
+                    console.log('Found elements with hope/seat in class:', Array.from(allElements).map(el => el.className));
                 }
+                
+                // Always ensure the checkout button is enabled after seat selection
+                const checkoutButton = document.querySelector('.single_add_to_cart_button');
+                if (checkoutButton) {
+                    checkoutButton.disabled = false;
+                    checkoutButton.classList.remove('disabled');
+                    checkoutButton.style.opacity = '1';
+                    checkoutButton.textContent = 'Checkout';
+                    console.log('Enabled checkout button');
+                } else {
+                    console.error('Checkout button not found');
+                }
+                
+                // Trigger seat change event for WooCommerce integration
+                const seatChangeEvent = new CustomEvent('hope-seats-updated', {
+                    detail: { seats: seats }
+                });
+                document.dispatchEvent(seatChangeEvent);
+                console.log('Dispatched hope-seats-updated event with seats:', seats);
+                
+                // Force WooCommerce integration update if available
+                if (window.hopeWooCommerceInstance) {
+                    console.log('Found existing WooCommerce integration instance, updating directly');
+                    window.hopeWooCommerceInstance.selectedSeats = new Set(seats);
+                    if (seats.length > 0) {
+                        const serverTotal = data.data?.total;
+                        window.hopeWooCommerceInstance.updateSelectedSeatsDisplay(seats, serverTotal);
+                        window.hopeWooCommerceInstance.getVariationForSeats(seats);
+                        window.hopeWooCommerceInstance.enableAddToCart();
+                    } else {
+                        window.hopeWooCommerceInstance.clearSelectedSeatsDisplay();
+                    }
+                } else {
+                    console.log('WooCommerce integration instance not found, dispatching event');
+                    // Fallback to event system
+                    const integrationEvent = new CustomEvent('hope-force-update', {
+                        detail: { seats: seats }
+                    });
+                    document.dispatchEvent(integrationEvent);
+                }
+                
+                // Trigger cart refresh for slide cart and mini cart
+                if (typeof jQuery !== 'undefined' && jQuery(document.body).triggerHandler) {
+                    console.log('Triggering WooCommerce cart refresh');
+                    jQuery(document.body).trigger('wc_fragment_refresh');
+                    jQuery(document.body).trigger('added_to_cart', [data.fragments, data.cart_hash, jQuery('<div>')]);
+                }
+                
+                // Redirect directly to checkout instead of closing modal
+                console.log('Seats successfully added to cart, redirecting to checkout');
+                window.location.href = data.data?.cart_url || hope_ajax.checkout_url || '/checkout';
+            } else {
+                console.error('Failed to add seats to cart:', data);
+                alert('Failed to add seats to cart: ' + (data.data?.message || 'Unknown error'));
             }
         })
         .catch(error => {
-            console.error('Error adding to cart:', error);
-            this.showErrorMessage('Failed to add seats to cart. Please try again.');
-            
-            // Re-enable button
-            if (addToCartBtn) {
-                addToCartBtn.disabled = false;
-                addToCartBtn.innerHTML = 'Add to Cart <span class="seat-count-badge">' + seats.length + '</span>';
-            }
+            console.error('Error adding seats to cart:', error);
+            alert('An error occurred while adding seats to cart. Please try again.');
         });
     }
     
@@ -421,7 +526,42 @@ class HOPEModalHandler {
     }
     
     /**
-     * Try to restore previously selected seats from page data
+     * Sync seat map with current cart state (handles both additions and removals)
+     */
+    syncWithCartState() {
+        if (!window.hopeSeatMap) {
+            console.log('Cannot sync with cart state - seat map not initialized');
+            return;
+        }
+        
+        console.log('syncWithCartState: Syncing seat map with current cart state');
+        
+        // First, clear any existing seat selections to start fresh
+        if (window.hopeSeatMap.selectedSeats) {
+            window.hopeSeatMap.selectedSeats.clear();
+        }
+        
+        // Get current cart seats and restore only those
+        this.getSeatsFromCart().then((cartSeats) => {
+            if (cartSeats && cartSeats.length > 0) {
+                console.log('Found seats in current cart:', cartSeats);
+                this.attemptSeatRestore(cartSeats);
+            } else {
+                console.log('No seats found in current cart - map will show all seats as available');
+                // Update display to show no seats selected
+                if (window.hopeSeatMap.updateSelectedDisplay) {
+                    window.hopeSeatMap.updateSelectedDisplay();
+                }
+            }
+        }).catch((error) => {
+            console.log('Error syncing with cart state:', error);
+            // Fallback to DOM parsing for backward compatibility
+            this.fallbackRestoreFromDOM();
+        });
+    }
+    
+    /**
+     * Try to restore previously selected seats from page data (legacy method)
      */
     restoreSeatsFromCart() {
         if (!window.hopeSeatMap) {
@@ -481,8 +621,8 @@ class HOPEModalHandler {
             // Check if seats are rendered
             const allSeats = document.querySelectorAll('#seat-map .seat');
             if (allSeats.length === 0 && retryCount < maxRetries) {
-                console.log('Seats not yet rendered, retrying in 200ms...');
-                setTimeout(attemptRestore, 200);
+                console.log('Seats not yet rendered, retrying in 100ms...');
+                setTimeout(attemptRestore, 100);
                 return;
             }
             
@@ -569,6 +709,262 @@ class HOPEModalHandler {
             this.attemptSeatRestore(seatsToRestore);
         } else {
             console.log('No seats found to restore via DOM fallback');
+        }
+    }
+    
+    /**
+     * Toggle the pricing legend
+     */
+    toggleLegend() {
+        console.log('toggleLegend method called');
+        const legendToggle = this.modal.querySelector('#legend-toggle');
+        const legend = this.modal.querySelector('#pricing-legend');
+        
+        console.log('Legend toggle elements - toggle:', !!legendToggle, 'legend:', !!legend);
+        
+        if (!legendToggle || !legend) {
+            console.error('Legend elements not found');
+            return;
+        }
+        
+        const isVisible = legend.classList.contains('visible');
+        console.log('Legend is currently visible:', isVisible);
+        
+        if (isVisible) {
+            console.log('Hiding legend');
+            legend.classList.remove('visible');
+            legendToggle.classList.remove('active');
+        } else {
+            console.log('Showing legend');
+            // Remove display:none from inline styles and add visible class
+            legend.style.display = '';
+            legend.classList.add('visible');
+            legendToggle.classList.add('active');
+        }
+    }
+    
+    /**
+     * Refresh legend toggle event listeners (called when content becomes visible)
+     */
+    refreshLegendToggle() {
+        console.log('refreshLegendToggle called');
+        const legendToggle = this.modal.querySelector('#legend-toggle');
+        const legend = this.modal.querySelector('#pricing-legend');
+        
+        console.log('Refresh legend elements - toggle:', !!legendToggle, 'legend:', !!legend);
+        
+        if (legendToggle) {
+            console.log('Legend toggle button found:', legendToggle.outerHTML);
+            console.log('Button is visible:', legendToggle.offsetParent !== null);
+            console.log('Button rect:', legendToggle.getBoundingClientRect());
+        }
+        
+        if (legend) {
+            console.log('Legend element found with display:', window.getComputedStyle(legend).display);
+            console.log('Legend max-height:', window.getComputedStyle(legend).maxHeight);
+        }
+        
+        // No need to add listeners here since we're using event delegation
+        console.log('Using event delegation for legend toggle - no additional setup needed');
+    }
+    
+    /**
+     * Toggle the selected seats panel
+     */
+    toggleSeatsPanel() {
+        const seatsToggle = this.modal.querySelector('#seats-toggle');
+        const seatsPanel = this.modal.querySelector('#selected-seats-panel');
+        
+        if (!seatsToggle || !seatsPanel) return;
+        
+        const isVisible = seatsPanel.classList.contains('visible');
+        
+        if (isVisible) {
+            seatsPanel.classList.remove('visible');
+            seatsToggle.classList.remove('active');
+            setTimeout(() => {
+                seatsPanel.style.display = 'none';
+            }, 300);
+        } else {
+            seatsPanel.style.display = 'block';
+            setTimeout(() => {
+                seatsPanel.classList.add('visible');
+                seatsToggle.classList.add('active');
+            }, 10);
+        }
+    }
+    
+    /**
+     * Show navigation hint that fades on interaction
+     */
+    showNavigationHint() {
+        const hint = this.modal.querySelector('#navigation-hint');
+        if (!hint) return;
+        
+        // Show hint
+        hint.style.display = 'block';
+        
+        // Auto-fade after 3 seconds
+        const autoFadeTimeout = setTimeout(() => {
+            this.fadeNavigationHint();
+        }, 3000);
+        
+        // Fade on any interaction
+        const fadeOnInteraction = () => {
+            clearTimeout(autoFadeTimeout);
+            this.fadeNavigationHint();
+            
+            // Remove event listeners
+            this.modal.removeEventListener('click', fadeOnInteraction);
+            this.modal.removeEventListener('touchstart', fadeOnInteraction);
+            document.removeEventListener('keydown', fadeOnInteraction);
+        };
+        
+        this.modal.addEventListener('click', fadeOnInteraction);
+        this.modal.addEventListener('touchstart', fadeOnInteraction);
+        document.addEventListener('keydown', fadeOnInteraction);
+    }
+    
+    /**
+     * Fade out the navigation hint
+     */
+    fadeNavigationHint() {
+        const hint = this.modal.querySelector('#navigation-hint');
+        if (!hint) return;
+        
+        hint.classList.add('fade-out');
+        setTimeout(() => {
+            hint.style.display = 'none';
+            hint.classList.remove('fade-out');
+        }, 500);
+    }
+    
+    /**
+     * Calculate footer height and update CSS custom property for panel positioning
+     */
+    updateFooterHeight() {
+        const footer = this.modal.querySelector('.hope-modal-footer');
+        if (!footer) {
+            // Only log once if footer not found
+            if (this.lastFooterHeight !== 'not-found') {
+                console.log('HOPE: Footer not found for height calculation');
+                this.lastFooterHeight = 'not-found';
+            }
+            return;
+        }
+        
+        // Wait for footer to be fully rendered
+        setTimeout(() => {
+            // Get the actual computed height of the footer
+            const footerRect = footer.getBoundingClientRect();
+            const footerHeight = footerRect.height;
+            const footerOffsetHeight = footer.offsetHeight;
+            
+            // Use the larger of the two measurements
+            const actualHeight = Math.max(footerHeight, footerOffsetHeight);
+            
+            // Only log and update if height has actually changed
+            if (actualHeight !== this.lastFooterHeight && actualHeight > 0) {
+                console.log('HOPE: Footer height changed from', this.lastFooterHeight, 'to', actualHeight + 'px');
+                
+                // Set CSS custom property on the modal body (where panel is positioned)
+                const modalBody = this.modal.querySelector('.hope-modal-body');
+                if (modalBody) {
+                    modalBody.style.setProperty('--footer-height', actualHeight + 'px');
+                }
+                
+                // Also set on the modal itself
+                this.modal.style.setProperty('--footer-height', actualHeight + 'px');
+                
+                // Set on document root for global access
+                document.documentElement.style.setProperty('--hope-footer-height', actualHeight + 'px');
+                
+                // Special handling for mobile - ensure panel is visible
+                if (hope_ajax.is_mobile || window.innerWidth <= 768) {
+                    const panel = this.modal.querySelector('.selected-seats-panel');
+                    if (panel) {
+                        // Force the panel to be visible by setting inline styles as backup
+                        panel.style.setProperty('--footer-height', actualHeight + 'px');
+                    }
+                }
+                
+                // Update stored height
+                this.lastFooterHeight = actualHeight;
+                console.log('HOPE: Footer height successfully updated to', actualHeight + 'px');
+            } else if (actualHeight === 0) {
+                // Only warn once about zero height
+                if (this.lastFooterHeight !== 'zero-height') {
+                    console.warn('HOPE: Footer height calculation returned 0, using fallback');
+                    this.lastFooterHeight = 'zero-height';
+                }
+            }
+            // If height hasn't changed, don't log anything
+        }, 100);
+    }
+    
+    /**
+     * Setup MutationObserver to watch for footer changes (like timer appearing)
+     */
+    setupFooterObserver() {
+        if (!this.modal) return;
+        
+        const footer = this.modal.querySelector('.hope-modal-footer');
+        if (!footer) return;
+        
+        // Create observer to watch for changes in footer content
+        this.footerObserver = new MutationObserver((mutations) => {
+            let shouldUpdate = false;
+            
+            mutations.forEach((mutation) => {
+                // Check for added/removed nodes or style changes
+                if (mutation.type === 'childList' || 
+                    mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    shouldUpdate = true;
+                }
+                
+                // Check for timer-related changes
+                if (mutation.target.className && 
+                    (mutation.target.className.includes('timer') || 
+                     mutation.target.className.includes('session'))) {
+                    shouldUpdate = true;
+                    console.log('HOPE: Timer-related change detected in footer');
+                }
+            });
+            
+            if (shouldUpdate && this.isOpen) {
+                // Only log if we haven't already detected this change recently
+                if (!this.recentFooterChange) {
+                    console.log('HOPE: Footer content changed, recalculating height');
+                    this.recentFooterChange = true;
+                    // Reset the flag after a short delay to allow for batched changes
+                    setTimeout(() => {
+                        this.recentFooterChange = false;
+                    }, 1000);
+                }
+                // Delay to allow DOM to settle
+                setTimeout(() => this.updateFooterHeight(), 200);
+            }
+        });
+        
+        // Observe footer and its children for changes
+        this.footerObserver.observe(footer, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        });
+        
+        console.log('HOPE: Footer observer setup complete');
+    }
+    
+    /**
+     * Cleanup observer when modal closes
+     */
+    cleanupFooterObserver() {
+        if (this.footerObserver) {
+            this.footerObserver.disconnect();
+            this.footerObserver = null;
+            console.log('HOPE: Footer observer cleaned up');
         }
     }
 }

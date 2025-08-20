@@ -164,6 +164,13 @@ class HOPE_Session_Manager {
     }
     
     /**
+     * Release hold for a single seat
+     */
+    public function release_seat_hold($event_id, $seat_id, $session_id) {
+        return $this->release_seat_holds($event_id, array($seat_id), $session_id);
+    }
+    
+    /**
      * Extend hold duration
      */
     public function extend_hold($session_id, $additional_time = null) {

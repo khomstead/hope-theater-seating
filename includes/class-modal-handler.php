@@ -80,9 +80,6 @@ class HOPE_Modal_Handler {
         <div id="hope-seat-modal" class="hope-modal" style="display: none;" aria-hidden="true" role="dialog">
             <div class="hope-modal-overlay"></div>
             <div class="hope-modal-content">
-                <button type="button" class="hope-modal-close" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
                 
                 <div class="hope-modal-body">
                     <!-- Loading indicator -->
@@ -96,7 +93,9 @@ class HOPE_Modal_Handler {
                         <div class="theater-container">
                             <div class="header">
                                 <div class="header-content">
-                                    <h1>HOPE Theater</h1>
+                                    <button class="legend-toggle" id="legend-toggle" title="Show pricing legend">
+                                        <span>?</span>
+                                    </button>
                                     <div class="floor-selector">
                                         <button class="floor-btn active" data-floor="orchestra">Orchestra</button>
                                         <button class="floor-btn" data-floor="balcony">Balcony</button>
@@ -112,75 +111,85 @@ class HOPE_Modal_Handler {
                                 </div>
                                 
                                 <div class="seating-wrapper" id="seating-wrapper">
-                                    <svg id="seat-map" viewBox="0 50 1200 600" preserveAspectRatio="xMidYMid meet">
+                                    <svg id="seat-map" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet">
                                         <!-- Seats will be generated dynamically via JavaScript -->
                                     </svg>
                                 </div>
                             </div>
                             
-                            <div class="legend">
-                                <div class="legend-item">
-                                    <div class="legend-color" style="background: #9b59b6;"></div>
-                                    <span>P1 - Premium ($150)</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color" style="background: #3498db;"></div>
-                                    <span>P2 - Standard ($120)</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color" style="background: #17a2b8;"></div>
-                                    <span>P3 - Value ($90)</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color" style="background: #e67e22;"></div>
-                                    <span>AA - Accessible ($120)</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color" style="background: #6c757d;"></div>
-                                    <span>Unavailable</span>
+                            <div class="legend" id="pricing-legend" style="display: none;">
+                                <div class="legend-content">
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #9b59b6;"></div>
+                                        <span>P1 - Premium ($150)</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #3498db;"></div>
+                                        <span>P2 - Standard ($120)</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #17a2b8;"></div>
+                                        <span>P3 - Value ($90)</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #e67e22;"></div>
+                                        <span>AA - Accessible ($120)</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #6c757d;"></div>
+                                        <span>Unavailable</span>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <div class="selected-seats-panel">
-                                <h3 class="selected-seats-title">Selected Seats</h3>
+                            <div class="selected-seats-panel" id="selected-seats-panel" style="display: none;">
                                 <div class="seats-list" id="selected-seats-list">
                                     <span class="empty-message">No seats selected</span>
                                 </div>
-                                <div class="total-price">Total: $0</div>
                             </div>
                         </div>
                         
                         <div class="tooltip" id="tooltip"></div>
+                        
+                        <!-- Navigation hint -->
+                        <div class="navigation-hint" id="navigation-hint">
+                            <div class="hint-content">
+                                <span class="hint-icon">👆</span>
+                                <span class="hint-text">Click and drag to explore the theater</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
                 <div class="hope-modal-footer">
                     <div class="hope-modal-info">
-                        <span class="seat-count-display">
-                            <?php _e('No seats selected', 'hope-theater-seating'); ?>
-                        </span>
+                        <button class="seats-toggle" id="seats-toggle" title="Show selected seats">
+                            <span class="seat-count-display">No seats selected</span>
+                            <span class="toggle-icon">▲</span>
+                        </button>
                         <span class="total-price-display">
                             <?php _e('Total: $0', 'hope-theater-seating'); ?>
                         </span>
                     </div>
+                    
+                    <!-- Session timer moved to footer -->
+                    <div class="hope-session-timer" style="display: none;">
+                        <span class="timer-icon">⏱️</span>
+                        <span class="timer-text">
+                            <?php _e('Seats held for:', 'hope-theater-seating'); ?>
+                            <span class="timer-countdown">10:00</span>
+                        </span>
+                    </div>
+                    
                     <div class="hope-modal-actions">
                         <button type="button" class="hope-cancel-btn button">
                             <?php _e('Cancel', 'hope-theater-seating'); ?>
                         </button>
-                        <button type="button" class="hope-add-to-cart-btn button alt" disabled>
-                            <?php _e('Add to Cart', 'hope-theater-seating'); ?>
+                        <button type="button" class="hope-confirm-seats-btn button alt" disabled>
+                            <?php _e('Confirm Seats', 'hope-theater-seating'); ?>
                             <span class="seat-count-badge" style="display: none;">0</span>
                         </button>
                     </div>
-                </div>
-                
-                <!-- Session timer -->
-                <div class="hope-session-timer" style="display: none;">
-                    <span class="timer-icon">⏱️</span>
-                    <span class="timer-text">
-                        <?php _e('Seats held for:', 'hope-theater-seating'); ?>
-                        <span class="timer-countdown">10:00</span>
-                    </span>
                 </div>
             </div>
         </div>

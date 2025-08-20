@@ -18,8 +18,12 @@ class HOPE_WooCommerce_Integration {
         
         // Handle cart integration
         add_filter('woocommerce_add_cart_item_data', array($this, 'add_seat_data_to_cart'), 10, 4);
-        add_action('woocommerce_cart_item_name', array($this, 'display_seat_info_in_cart'), 10, 3);
+        add_filter('woocommerce_cart_item_name', array($this, 'display_seat_info_in_cart'), 10, 3);
+        add_filter('woocommerce_widget_cart_item_quantity', array($this, 'display_seat_info_in_mini_cart'), 10, 3);
         add_action('woocommerce_order_item_meta_start', array($this, 'display_seat_info_in_order'), 10, 4);
+        
+        // Additional cart display hooks for compatibility with different themes
+        add_filter('woocommerce_get_item_data', array($this, 'display_seat_info_as_item_data'), 10, 2);
         
         // Handle pricing for seat products
         add_action('woocommerce_before_calculate_totals', array($this, 'set_seat_pricing'));
@@ -30,6 +34,9 @@ class HOPE_WooCommerce_Integration {
         
         // Integration with FooEvents ticket system
         add_action('woocommerce_checkout_order_processed', array($this, 'create_fooevents_ticket_data'), 10, 3);
+        
+        // Redirect theater seating products to checkout instead of cart
+        add_filter('woocommerce_add_to_cart_redirect', array($this, 'redirect_to_checkout_for_seating'), 10, 1);
     }
     
     /**
@@ -92,10 +99,27 @@ class HOPE_WooCommerce_Integration {
         }
         </style>';
         
-        // Add class to product form
+        // Add class to product form and hide notices
+        echo '<style>
+        .hope-seating-enabled .woocommerce-notices-wrapper,
+        .hope-seating-enabled .woocommerce-message,
+        .hope-seating-enabled .woocommerce-error,
+        .hope-seating-enabled .woocommerce-info,
+        .hope-seating-enabled .wc-block-components-notice-banner {
+            display: none !important;
+        }
+        </style>';
+        
         echo '<script>
         jQuery(document).ready(function($) {
             $(".product").addClass("hope-seating-enabled");
+            // Aggressively hide WooCommerce notices
+            $(".woocommerce-notices-wrapper, .woocommerce-message, .woocommerce-error, .woocommerce-info").hide();
+            
+            // Also remove them from DOM after a delay
+            setTimeout(function() {
+                $(".woocommerce-notices-wrapper, .woocommerce-message, .woocommerce-error, .woocommerce-info").remove();
+            }, 1000);
         });
         </script>';
     }
@@ -140,15 +164,9 @@ class HOPE_WooCommerce_Integration {
         
         ?>
         <div class="hope-seat-selection-interface" data-product-id="<?php echo esc_attr($product_id); ?>">
-            <div class="hope-seat-selection-prompt">
-                <h4><?php _e('Seat Selection Required', 'hope-seating'); ?></h4>
-                <p><?php printf(__('This event takes place at %s. Please select your seats to continue.', 'hope-seating'), esc_html($venue->name)); ?></p>
-            </div>
-            
             <div class="hope-seat-selection-button-wrapper">
                 <button type="button" class="button alt hope-select-seats-btn" id="hope-select-seats-main">
                     <span class="btn-text"><?php _e('Select Your Seats', 'hope-seating'); ?></span>
-                    <span class="btn-icon">🎭</span>
                 </button>
             </div>
             
@@ -337,6 +355,74 @@ class HOPE_WooCommerce_Integration {
         }
         
         return $name;
+    }
+    
+    /**
+     * Display seat info in mini cart (slide cart)
+     */
+    public function display_seat_info_in_mini_cart($quantity_html, $cart_item, $cart_item_key) {
+        error_log('HOPE Mini Cart Display: Cart item data: ' . print_r($cart_item, true));
+        
+        // Check for seats in either key (backwards compatibility)
+        $seats = null;
+        if (isset($cart_item['hope_theater_seats']) && !empty($cart_item['hope_theater_seats'])) {
+            $seats = $cart_item['hope_theater_seats'];
+            error_log('HOPE Mini Cart Display: Found hope_theater_seats: ' . print_r($seats, true));
+        } elseif (isset($cart_item['hope_selected_seats']) && !empty($cart_item['hope_selected_seats'])) {
+            $seats = $cart_item['hope_selected_seats'];
+            error_log('HOPE Mini Cart Display: Found hope_selected_seats: ' . print_r($seats, true));
+        }
+        
+        if ($seats) {
+            $seat_list = is_array($seats) ? implode(', ', $seats) : $seats;
+            $seat_count = is_array($seats) ? count($seats) : 1;
+            
+            error_log("HOPE Mini Cart Display: Displaying {$seat_count} seats: {$seat_list}");
+            
+            $quantity_html .= '<br><small><strong>' . __('Seats:', 'hope-seating') . '</strong> ' . esc_html($seat_list) . '</small>';
+        } else {
+            error_log('HOPE Mini Cart Display: No seat data found in cart item');
+        }
+        
+        return $quantity_html;
+    }
+    
+    /**
+     * Display seat info as item data (for compatibility with more themes)
+     */
+    public function display_seat_info_as_item_data($item_data, $cart_item) {
+        error_log('HOPE Item Data Display: Cart item data: ' . print_r($cart_item, true));
+        
+        // Check for seats in either key (backwards compatibility)
+        $seats = null;
+        if (isset($cart_item['hope_theater_seats']) && !empty($cart_item['hope_theater_seats'])) {
+            $seats = $cart_item['hope_theater_seats'];
+            error_log('HOPE Item Data Display: Found hope_theater_seats: ' . print_r($seats, true));
+        } elseif (isset($cart_item['hope_selected_seats']) && !empty($cart_item['hope_selected_seats'])) {
+            $seats = $cart_item['hope_selected_seats'];
+            error_log('HOPE Item Data Display: Found hope_selected_seats: ' . print_r($seats, true));
+        }
+        
+        if ($seats) {
+            $seat_list = is_array($seats) ? implode(', ', $seats) : $seats;
+            $seat_count = is_array($seats) ? count($seats) : 1;
+            
+            error_log("HOPE Item Data Display: Displaying {$seat_count} seats: {$seat_list}");
+            
+            $item_data[] = array(
+                'key'   => __('Theater Seats', 'hope-seating'),
+                'value' => $seat_list
+            );
+            
+            $item_data[] = array(
+                'key'   => __('Seat Count', 'hope-seating'),
+                'value' => $seat_count . ' ' . __('seats', 'hope-seating')
+            );
+        } else {
+            error_log('HOPE Item Data Display: No seat data found in cart item');
+        }
+        
+        return $item_data;
     }
     
     /**
@@ -559,6 +645,33 @@ class HOPE_WooCommerce_Integration {
             'row' => '1',
             'seat' => $seat_id
         );
+    }
+    
+    /**
+     * Redirect theater seating products to checkout instead of cart
+     */
+    public function redirect_to_checkout_for_seating($url) {
+        // Check if any items in cart have theater seating data
+        if (!WC()->cart) {
+            return $url;
+        }
+        
+        $has_seating_products = false;
+        
+        foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+            // Check if this item has seat data
+            if (isset($cart_item['hope_theater_seats']) || isset($cart_item['hope_selected_seats'])) {
+                $has_seating_products = true;
+                break;
+            }
+        }
+        
+        if ($has_seating_products) {
+            // Redirect to checkout instead of cart
+            return wc_get_checkout_url();
+        }
+        
+        return $url;
     }
 }
 

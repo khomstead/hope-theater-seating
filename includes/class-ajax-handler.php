@@ -10,6 +10,8 @@ if (!defined('ABSPATH')) {
 
 class HOPE_Ajax_Handler {
     
+    private $current_product_id = 0;
+    
     public function __construct() {
         // Register AJAX actions
         add_action('wp_ajax_hope_check_availability', array($this, 'check_availability'));
@@ -230,6 +232,9 @@ class HOPE_Ajax_Handler {
         $seats = json_decode(stripslashes($_POST['seats']), true);
         $session_id = sanitize_text_field($_POST['session_id']);
         
+        // Set current product ID for pricing methods
+        $this->current_product_id = $product_id;
+        
         error_log("HOPE: Processing add_to_cart - Product ID: {$product_id}, Seats: " . print_r($seats, true) . ", Session: {$session_id}");
         
         if (empty($seats)) {
@@ -252,6 +257,9 @@ class HOPE_Ajax_Handler {
         
         error_log("HOPE: Product found: {$product->get_name()}, Type: {$product->get_type()}");
         
+        // Remove any existing cart items for this product to prevent duplicates
+        $this->remove_existing_seats_from_cart($product_id);
+        
         // Handle variable products - need to map seats to their appropriate variations
         $available_variations = [];
         $variation_map = [];
@@ -267,7 +275,18 @@ class HOPE_Ajax_Handler {
             
             // Create a map of seating-tier to variation_id
             foreach ($available_variations as $variation) {
-                $tier = $variation['attributes']['attribute_seating-tier'] ?? '';
+                $attributes = $variation['attributes'];
+                $tier = null;
+                
+                // Look for tier attribute with different possible names and cases
+                foreach ($attributes as $attr_key => $attr_value) {
+                    if (stripos($attr_key, 'tier') !== false || stripos($attr_key, 'seating') !== false) {
+                        $tier = strtolower($attr_value); // Normalize to lowercase
+                        error_log("HOPE: Found tier attribute {$attr_key} = {$attr_value} (normalized: {$tier})");
+                        break;
+                    }
+                }
+                
                 if ($tier) {
                     $variation_map[$tier] = [
                         'variation_id' => $variation['variation_id'],
@@ -396,10 +415,20 @@ class HOPE_Ajax_Handler {
             }
         }
         
+        // Calculate total from actual cart items added
+        $cart_total = 0;
+        foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+            if ($cart_item['product_id'] == $product_id && isset($cart_item['hope_theater_seats'])) {
+                $cart_total += $cart_item['line_total'];
+            }
+        }
+        
         // Send response based on results
         if ($successful_additions > 0) {
             wp_send_json_success([
                 'cart_url' => wc_get_checkout_url(),
+                'total' => $cart_total,
+                'seats_added' => $total_seats_added,
                 'message' => sprintf(
                     __('%d seats added from %d pricing tiers - proceeding to checkout', 'hope-theater-seating'),
                     $total_seats_added,
@@ -409,6 +438,33 @@ class HOPE_Ajax_Handler {
         } else {
             error_log('HOPE: No cart items were successfully added');
             wp_send_json_error(['message' => 'Could not add any seats to cart']);
+        }
+    }
+    
+    /**
+     * Remove existing cart items for this product to prevent duplicates
+     */
+    private function remove_existing_seats_from_cart($product_id) {
+        if (!function_exists('WC') || !WC()->cart) {
+            return;
+        }
+        
+        $removed_count = 0;
+        
+        // Loop through cart items and remove any for this product
+        foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+            if ($cart_item['product_id'] == $product_id) {
+                // Check if this item has seat data (to avoid removing non-seat items)
+                if (isset($cart_item['hope_theater_seats']) || isset($cart_item['hope_seat_details'])) {
+                    WC()->cart->remove_cart_item($cart_item_key);
+                    $removed_count++;
+                    error_log("HOPE: Removed existing cart item for product {$product_id}, key: {$cart_item_key}");
+                }
+            }
+        }
+        
+        if ($removed_count > 0) {
+            error_log("HOPE: Removed {$removed_count} existing cart items for product {$product_id}");
         }
     }
     
@@ -621,9 +677,10 @@ class HOPE_Ajax_Handler {
             // Must match the tier assignments in seat-map.js exactly
             
             if ($section === 'A') {
-                // Section A: rows 1-2 are p1, rows 3-9 are p2, row 10 is aa
+                // Section A: rows 1-2 are p1, rows 3-7 are p2, rows 8-9 are p3, row 10 is aa
                 if ($row <= 2) return 'p1';
-                elseif ($row <= 9) return 'p2';
+                elseif ($row <= 7) return 'p2';
+                elseif ($row <= 9) return 'p3';
                 else return 'aa'; // row 10
             } 
             elseif ($section === 'B') {
@@ -675,11 +732,30 @@ class HOPE_Ajax_Handler {
     }
     
     /**
-     * Get price for a specific pricing tier
+     * Get price for a specific pricing tier from actual WooCommerce variations
      */
     private function get_price_for_tier($tier) {
-        // Default tier pricing - these are fallbacks only
-        // Actual prices should come from WooCommerce variations
+        global $wpdb;
+        
+        // Try to get actual variation price for this tier
+        $product = wc_get_product($this->current_product_id ?? 0);
+        
+        if ($product && $product->is_type('variable')) {
+            $variations = $product->get_available_variations();
+            
+            foreach ($variations as $variation_data) {
+                $attributes = $variation_data['attributes'];
+                if (isset($attributes['attribute_seating-tier']) && $attributes['attribute_seating-tier'] === $tier) {
+                    $variation = wc_get_product($variation_data['variation_id']);
+                    if ($variation) {
+                        error_log("HOPE: Found WooCommerce variation price for tier {$tier}: " . $variation->get_price());
+                        return floatval($variation->get_price());
+                    }
+                }
+            }
+        }
+        
+        // Fallback to hardcoded prices if no variation found
         $tier_prices = [
             'p1' => 50.00, // Premium - default fallback
             'p2' => 35.00, // Standard - default fallback
@@ -687,19 +763,28 @@ class HOPE_Ajax_Handler {
             'aa' => 25.00  // Accessible - default fallback
         ];
         
-        return isset($tier_prices[$tier]) ? $tier_prices[$tier] : $tier_prices['p2'];
+        $fallback_price = isset($tier_prices[$tier]) ? $tier_prices[$tier] : $tier_prices['p2'];
+        error_log("HOPE: Using fallback price for tier {$tier}: {$fallback_price}");
+        return $fallback_price;
     }
     
     /**
      * Find a variation that matches the given pricing tier
      */
     private function find_variation_for_tier($available_variations, $tier) {
+        $target_tier = strtolower($tier); // Normalize target tier
+        
         foreach ($available_variations as $variation) {
-            // Check if this variation has a seating-tier attribute that matches
-            if (isset($variation['attributes']['attribute_seating-tier'])) {
-                $variation_tier = $variation['attributes']['attribute_seating-tier'];
-                if ($variation_tier === $tier) {
-                    return $variation;
+            $attributes = $variation['attributes'];
+            
+            // Check all attributes for tier information
+            foreach ($attributes as $attr_key => $attr_value) {
+                if (stripos($attr_key, 'tier') !== false || stripos($attr_key, 'seating') !== false) {
+                    $variation_tier = strtolower($attr_value);
+                    if ($variation_tier === $target_tier) {
+                        error_log("HOPE: Found matching variation via attribute {$attr_key}: {$attr_value} for tier {$tier}");
+                        return $variation;
+                    }
                 }
             }
             
@@ -710,11 +795,13 @@ class HOPE_Ajax_Handler {
                 
                 // Match if prices are within $1 of each other
                 if (abs($variation_price - $tier_price) < 1.0) {
+                    error_log("HOPE: Found matching variation via price matching: {$variation_price} for tier {$tier}");
                     return $variation;
                 }
             }
         }
         
+        error_log("HOPE: No matching variation found for tier {$tier}");
         return null;
     }
 }

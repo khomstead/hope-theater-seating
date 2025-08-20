@@ -41,6 +41,7 @@
     flex-direction: column;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     animation: slideUp 0.3s ease;
+    overflow: hidden;
 }
 
 @keyframes fadeIn {
@@ -59,31 +60,7 @@
     }
 }
 
-/* Modal Close Button */
-.hope-modal-close {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    width: 40px;
-    height: 40px;
-    border: none;
-    background: rgba(255, 255, 255, 0.9);
-    color: #7c3aed;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    transition: all 0.3s;
-    z-index: 1000;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.hope-modal-close:hover {
-    background: rgba(255, 255, 255, 1);
-    transform: rotate(90deg);
-}
+/* Modal Close Button - Removed for cleaner UI */
 
 /* Modal Body */
 .hope-modal-body {
@@ -130,6 +107,8 @@
     background: white;
     border-top: 1px solid #e2e8f0;
     border-radius: 0 0 12px 12px;
+    position: relative;
+    z-index: 10;
 }
 
 .hope-modal-info {
@@ -155,7 +134,8 @@
 }
 
 .hope-cancel-btn,
-.hope-add-to-cart-btn {
+.hope-add-to-cart-btn,
+.hope-confirm-seats-btn {
     padding: 10px 24px;
     border: none;
     border-radius: 6px;
@@ -174,19 +154,27 @@
     background: #cbd5e0;
 }
 
-.hope-add-to-cart-btn {
+/* Hide old add to cart buttons in modal */
+.hope-modal .hope-add-to-cart-btn {
+    display: none !important;
+}
+
+.hope-add-to-cart-btn,
+.hope-confirm-seats-btn {
     background: #7c3aed;
     color: white;
     position: relative;
 }
 
-.hope-add-to-cart-btn:hover:not(:disabled) {
+.hope-add-to-cart-btn:hover:not(:disabled),
+.hope-confirm-seats-btn:hover:not(:disabled) {
     background: #6b21a8;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
 }
 
-.hope-add-to-cart-btn:disabled {
+.hope-add-to-cart-btn:disabled,
+.hope-confirm-seats-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -201,21 +189,17 @@
     margin-left: 8px;
 }
 
-/* Session Timer */
+/* Session Timer - Now in footer */
 .hope-session-timer {
-    position: absolute;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 8px 16px;
+    background: rgba(251, 191, 36, 0.1);
+    color: #d97706;
+    padding: 8px 12px;
     border-radius: 20px;
     display: flex;
     align-items: center;
     gap: 8px;
-    z-index: 100;
     font-size: 14px;
+    border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
 .timer-icon {
@@ -275,9 +259,9 @@
     }
     
     .hope-session-timer {
-        top: auto;
-        bottom: 100px;
-        background: rgba(0, 0, 0, 0.9);
+        /* Timer is now in footer - mobile styles handled by footer responsive design */
+        font-size: 12px;
+        padding: 6px 10px;
     }
 }
 

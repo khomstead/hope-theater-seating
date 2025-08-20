@@ -21,6 +21,20 @@ class HOPEWooCommerceIntegration {
     }
     
     setupIntegration() {
+        console.log('WooCommerce integration setup starting');
+        
+        // Check if required elements exist
+        const seatInterface = document.querySelector('.hope-seat-selection-interface');
+        const addToCartForm = document.querySelector('.cart');
+        
+        console.log('Found seat interface:', !!seatInterface);
+        console.log('Found add to cart form:', !!addToCartForm);
+        
+        if (!seatInterface) {
+            console.warn('Seat selection interface not found - skipping WooCommerce integration');
+            return;
+        }
+        
         // Connect to the modal handler
         this.connectToModal();
         
@@ -35,6 +49,17 @@ class HOPEWooCommerceIntegration {
         
         // Check for existing cart seats and restore display
         this.restoreProductPageDisplay();
+        
+        // Listen for browser back/forward navigation
+        window.addEventListener('pageshow', (event) => {
+            // Only restore if coming from cache (back button)
+            if (event.persisted) {
+                console.log('Page restored from cache, checking for cart seats...');
+                setTimeout(() => this.restoreProductPageDisplay(), 500);
+            }
+        });
+        
+        console.log('WooCommerce integration setup completed');
     }
     
     connectToModal() {
@@ -77,20 +102,42 @@ class HOPEWooCommerceIntegration {
         }
     }
     
-    updateSelectedSeatsDisplay(seats) {
+    updateSelectedSeatsDisplay(seats, serverTotal = null) {
+        console.log('updateSelectedSeatsDisplay called with seats:', seats, 'serverTotal:', serverTotal);
+        
         const prompt = document.querySelector('.hope-seat-selection-prompt');
         const display = document.querySelector('.hope-selected-seats-display');
+        
+        console.log('Found prompt element:', !!prompt);
+        console.log('Found display element:', !!display);
+        
+        if (!display) {
+            console.error('Could not find .hope-selected-seats-display element');
+            // Still continue to enable the checkout button
+            this.enableAddToCart();
+            return;
+        }
+        
         const seatsList = display.querySelector('.hope-seats-list');
         const totalAmount = display.querySelector('.total-amount');
         
+        console.log('Found seatsList:', !!seatsList);
+        console.log('Found totalAmount:', !!totalAmount);
+        
         // Hide prompt, show display
-        if (prompt) prompt.style.display = 'none';
-        if (display) display.style.display = 'block';
+        if (prompt) {
+            prompt.style.display = 'none';
+            console.log('Hid prompt');
+        }
+        if (display) {
+            display.style.display = 'block';
+            console.log('Showed display');
+        }
         
         // Update seats list
         if (seatsList) {
             seatsList.innerHTML = '';
-            let total = 0;
+            let calculatedTotal = 0;
             
             seats.forEach(seatId => {
                 const seatTag = document.createElement('span');
@@ -108,13 +155,17 @@ class HOPEWooCommerceIntegration {
                 
                 seatsList.appendChild(seatTag);
                 
-                // Calculate price
-                total += this.getSeatPrice(seatId);
+                // Calculate price (for fallback)
+                calculatedTotal += this.getSeatPrice(seatId);
             });
             
-            this.totalPrice = total;
+            // Use server total if available, otherwise use calculated total
+            const finalTotal = serverTotal !== null ? serverTotal : calculatedTotal;
+            this.totalPrice = finalTotal;
+            
             if (totalAmount) {
-                totalAmount.textContent = '$' + total.toFixed(2);
+                totalAmount.textContent = '$' + parseFloat(finalTotal).toFixed(2);
+                console.log('Updated total to server value:', finalTotal);
             }
         }
         
@@ -244,6 +295,12 @@ class HOPEWooCommerceIntegration {
             return;
         }
         
+        // Additional safety check for required data
+        if (!hopeWooIntegration.product_id || hopeWooIntegration.product_id === '0') {
+            console.log('HOPE: Skipping variation request - invalid product ID');
+            return;
+        }
+        
         fetch(hopeWooIntegration.ajax_url, {
             method: 'POST',
             headers: {
@@ -308,13 +365,38 @@ class HOPEWooCommerceIntegration {
         
         // Override form submission
         form.addEventListener('submit', (e) => {
-            if (this.selectedSeats.size === 0) {
+            console.log('Form submission intercepted, selectedSeats size:', this.selectedSeats.size);
+            
+            const addToCartButton = form.querySelector('.single_add_to_cart_button');
+            
+            // Check if Add to Cart button is disabled (no seats selected)
+            if (addToCartButton && addToCartButton.disabled) {
+                console.log('Checkout button is disabled, preventing form submission');
                 e.preventDefault();
                 alert(hopeWooIntegration.messages.select_seats_first);
                 return false;
             }
             
-            // Add variation ID to form if it's a variable product
+            // If button text is "Checkout", it means seats are already in cart - redirect to checkout
+            if (addToCartButton && addToCartButton.textContent === 'Checkout') {
+                console.log('Checkout button clicked - seats already in cart, redirecting to checkout');
+                e.preventDefault();
+                
+                // Redirect to checkout using the URL from our localized script
+                window.location.href = hope_ajax?.checkout_url || '/checkout';
+                return false;
+            }
+            
+            // If we reach here, allow normal WooCommerce form submission (fallback case)
+            console.log('Allowing normal WooCommerce form submission');
+            
+            // Set quantity to 1 since each seat is a separate cart item
+            const qtyInput = form.querySelector('[name="quantity"]');
+            if (qtyInput) {
+                qtyInput.value = 1;
+            }
+            
+            // Add variation ID if needed (for variable products)
             if (hopeWooIntegration.is_variable && this.variationId) {
                 const variationInput = form.querySelector('[name="variation_id"]');
                 if (!variationInput) {
@@ -328,11 +410,7 @@ class HOPEWooCommerceIntegration {
                 }
             }
             
-            // Set quantity based on seat count
-            const qtyInput = form.querySelector('[name="quantity"]');
-            if (qtyInput) {
-                qtyInput.value = this.selectedSeats.size;
-            }
+            // Allow form to submit normally - WooCommerce will handle the redirect
         });
     }
     
@@ -342,7 +420,7 @@ class HOPEWooCommerceIntegration {
             addToCartButton.disabled = false;
             addToCartButton.classList.remove('disabled');
             addToCartButton.style.opacity = '1';
-            addToCartButton.textContent = addToCartButton.textContent.replace('Select seats first', 'Add to cart');
+            addToCartButton.textContent = 'Checkout';
         }
     }
     
@@ -360,7 +438,18 @@ class HOPEWooCommerceIntegration {
         // Listen for custom events from the seat map
         document.addEventListener('hope-seats-updated', (e) => {
             const seats = e.detail.seats || [];
-            this.syncSeatDisplay();
+            console.log('hope-seats-updated event received with seats:', seats);
+            
+            // Update our local selectedSeats and display
+            this.selectedSeats = new Set(seats);
+            
+            if (seats.length > 0) {
+                this.updateSelectedSeatsDisplay(seats);
+                this.getVariationForSeats(seats);
+                this.enableAddToCart();
+            } else {
+                this.clearSelectedSeatsDisplay();
+            }
         });
         
         // Listen for modal close to sync display
@@ -369,11 +458,29 @@ class HOPEWooCommerceIntegration {
                 this.syncSeatDisplay();
             }
         });
+        
+        // Listen for forced updates from modal
+        document.addEventListener('hope-force-update', (e) => {
+            const seats = e.detail.seats || [];
+            console.log('hope-force-update event received with seats:', seats);
+            
+            // Update our local selectedSeats and display
+            this.selectedSeats = new Set(seats);
+            
+            if (seats.length > 0) {
+                this.updateSelectedSeatsDisplay(seats);
+                this.getVariationForSeats(seats);
+                this.enableAddToCart();
+            } else {
+                this.clearSelectedSeatsDisplay();
+            }
+        });
     }
     
     restoreProductPageDisplay() {
         // Check if there are seats in the cart for this product
-        if (typeof hope_ajax === 'undefined' || !hope_ajax.product_id) {
+        if (typeof hope_ajax === 'undefined' || !hope_ajax.product_id || hope_ajax.product_id === '0') {
+            console.log('HOPE: Skipping product page display restore - missing product data');
             return;
         }
         
@@ -392,8 +499,10 @@ class HOPEWooCommerceIntegration {
         .then(data => {
             if (data.success && data.data.seats && data.data.seats.length > 0) {
                 console.log('Found seats in cart for product page display:', data.data.seats);
+                console.log('Cart total from server:', data.data.total);
+                
                 this.selectedSeats = new Set(data.data.seats);
-                this.updateSelectedSeatsDisplay(data.data.seats);
+                this.updateSelectedSeatsDisplay(data.data.seats, data.data.total);
                 this.getVariationForSeats(data.data.seats);
                 
                 // Update the select seats button
@@ -402,8 +511,13 @@ class HOPEWooCommerceIntegration {
                     selectButton.innerHTML = `<span class="btn-text">${data.data.seats.length} Seats Selected</span> <span class="btn-icon">✓</span>`;
                     selectButton.classList.add('seats-selected');
                 }
+                
+                // CRITICAL: Enable the Add to Cart button since we have seats in cart
+                this.enableAddToCart();
             } else {
                 console.log('No seats found in cart for this product');
+                // Keep Add to Cart disabled if no seats
+                this.disableAddToCart();
             }
         })
         .catch(error => {
@@ -414,8 +528,14 @@ class HOPEWooCommerceIntegration {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    if (typeof hopeWooIntegration !== 'undefined') {
-        new HOPEWooCommerceIntegration();
+    // Only initialize if we have the required data and are on a product page
+    if (typeof hopeWooIntegration !== 'undefined' && 
+        hopeWooIntegration.product_id && 
+        hopeWooIntegration.product_id !== '0') {
+        window.hopeWooCommerceInstance = new HOPEWooCommerceIntegration();
+        console.log('WooCommerce integration instance created and stored globally');
+    } else {
+        console.log('HOPE: WooCommerce integration not initialized - missing required data or not on product page');
     }
 });
 

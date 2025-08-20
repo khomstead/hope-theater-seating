@@ -9,6 +9,7 @@ class HOPESeatMap {
         this.heldSeats = new Set();
         this.currentFloor = 'orchestra';
         this.currentScale = 1.5; // Start at 150% zoom
+        this.lastUnavailableSeats = new Set(); // Track previous unavailable seats for change detection
         this.isDragging = false;
         this.startX = 0;
         this.startY = 0;
@@ -22,6 +23,7 @@ class HOPESeatMap {
         this.countdownInterval = null;
         this.availabilityRefreshInterval = null;
         this.variationPricing = null; // Will hold actual WooCommerce pricing
+        this.isRestoringSeats = false; // Flag to prevent availability refresh from interfering
         
         this.theaterData = this.getTheaterConfiguration();
         this.pricing = this.getPricingTiers();
@@ -498,16 +500,16 @@ class HOPESeatMap {
         const totalEl = document.querySelector('.total-price');
         const modalCount = document.querySelector('.seat-count-display');
         const modalTotal = document.querySelector('.total-price-display');
-        const addToCartBtn = document.querySelector('.hope-add-to-cart-btn');
+        const confirmSeatsBtn = document.querySelector('.hope-confirm-seats-btn');
         
         if (this.selectedSeats.size === 0) {
             if (listEl) listEl.innerHTML = '<span class="empty-message">No seats selected</span>';
             if (totalEl) totalEl.textContent = 'Total: $0';
             if (modalCount) modalCount.textContent = 'No seats selected';
             if (modalTotal) modalTotal.textContent = 'Total: $0';
-            if (addToCartBtn) {
-                addToCartBtn.disabled = true;
-                addToCartBtn.querySelector('.seat-count-badge').style.display = 'none';
+            if (confirmSeatsBtn) {
+                confirmSeatsBtn.disabled = true;
+                confirmSeatsBtn.querySelector('.seat-count-badge').style.display = 'none';
             }
             return;
         }
@@ -527,6 +529,12 @@ class HOPESeatMap {
             if (listEl) {
                 const tag = document.createElement('div');
                 tag.className = 'seat-tag';
+                
+                // Add tier-based color coding
+                const tierColor = this.pricing[tier] ? this.pricing[tier].color : '#7c3aed';
+                tag.style.backgroundColor = tierColor;
+                tag.setAttribute('data-tier', tier);
+                
                 tag.innerHTML = `
                     ${seatId}
                     <span class="remove" data-seat="${seatId}">×</span>
@@ -542,9 +550,9 @@ class HOPESeatMap {
         if (modalCount) modalCount.textContent = `${this.selectedSeats.size} seat${this.selectedSeats.size > 1 ? 's' : ''} selected`;
         if (modalTotal) modalTotal.textContent = `Total: $${total}`;
         
-        if (addToCartBtn) {
-            addToCartBtn.disabled = false;
-            const badge = addToCartBtn.querySelector('.seat-count-badge');
+        if (confirmSeatsBtn) {
+            confirmSeatsBtn.disabled = false;
+            const badge = confirmSeatsBtn.querySelector('.seat-count-badge');
             if (badge) {
                 badge.textContent = this.selectedSeats.size;
                 badge.style.display = 'inline-block';
@@ -651,14 +659,29 @@ class HOPESeatMap {
         .then(response => response.json())
         .then(data => {
             if (data.success && data.data.unavailable_seats) {
+                // Don't interfere with seat restoration
+                if (this.isRestoringSeats) {
+                    console.log('HOPE: Skipping availability update during seat restoration');
+                    return;
+                }
+                
                 // First, clear all existing unavailable markings
                 document.querySelectorAll('.seat.unavailable').forEach(seat => {
                     seat.classList.remove('unavailable');
-                    const tier = seat.getAttribute('data-tier');
-                    if (tier && this.pricing[tier]) {
-                        seat.setAttribute('fill', this.pricing[tier].color);
+                    // Only restore original color if seat is not selected
+                    if (!seat.classList.contains('selected')) {
+                        const tier = seat.getAttribute('data-tier');
+                        if (tier && this.pricing[tier]) {
+                            seat.setAttribute('fill', this.pricing[tier].color);
+                        }
                     }
                 });
+                
+                // Check if unavailable seats have changed
+                const currentUnavailable = new Set(data.data.unavailable_seats);
+                const hasChanges = this.lastUnavailableSeats.size !== currentUnavailable.size ||
+                    [...this.lastUnavailableSeats].some(seat => !currentUnavailable.has(seat)) ||
+                    [...currentUnavailable].some(seat => !this.lastUnavailableSeats.has(seat));
                 
                 // Then mark the currently unavailable seats
                 data.data.unavailable_seats.forEach(seatId => {
@@ -669,7 +692,11 @@ class HOPESeatMap {
                     }
                 });
                 
-                console.log(`HOPE: Marked ${data.data.unavailable_seats.length} seats as unavailable`);
+                // Only log if there are changes
+                if (hasChanges) {
+                    console.log(`HOPE: Seat availability changed - ${data.data.unavailable_seats.length} seats now unavailable`);
+                    this.lastUnavailableSeats = currentUnavailable;
+                }
             }
         })
         .catch(error => {
@@ -795,9 +822,11 @@ class HOPESeatMap {
     }
     
     startAvailabilityRefresh() {
+        // Stop any existing refresh to prevent duplicates
+        this.stopAvailabilityRefresh();
+        
         // Refresh availability every 10 seconds (more frequent for better UX)
         this.availabilityRefreshInterval = setInterval(() => {
-            console.log('HOPE: Refreshing seat availability...');
             this.loadSeatAvailability();
         }, 10000);
     }
@@ -846,17 +875,32 @@ class HOPESeatMap {
     selectSeats(seatIds) {
         if (!Array.isArray(seatIds)) return;
         
+        // Set flag to prevent availability refresh from interfering
+        this.isRestoringSeats = true;
+        
         seatIds.forEach(seatId => {
             if (!this.selectedSeats.has(seatId)) {
                 this.selectSeat(seatId);
             }
         });
+        
+        // Clear flag after a short delay to allow restoration to complete
+        setTimeout(() => {
+            this.isRestoringSeats = false;
+        }, 1000);
     }
 }
 
 // Initialize when document is ready
 document.addEventListener('DOMContentLoaded', () => {
-    if (typeof hope_ajax !== 'undefined') {
+    // Only initialize if we have the required data and are in the right context
+    if (typeof hope_ajax !== 'undefined' && 
+        hope_ajax.product_id && 
+        hope_ajax.product_id !== '0' && 
+        hope_ajax.venue_id && 
+        hope_ajax.venue_id !== '0') {
         window.hopeSeatMap = new HOPESeatMap();
+    } else {
+        console.log('HOPE: Seat map not initialized - missing required product/venue data or not on product page');
     }
 });

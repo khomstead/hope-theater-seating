@@ -11,6 +11,7 @@
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     overflow: hidden;
+    position: relative;
 }
 
 /* Header Section */
@@ -19,14 +20,17 @@
     color: white;
     padding: 15px 20px;
     text-align: center;
+    border-radius: 12px 12px 0 0;
+    position: relative;
 }
 
 .header-content {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     max-width: 1200px;
     margin: 0 auto;
+    position: relative;
 }
 
 .header h1 {
@@ -99,6 +103,35 @@
     color: white;
 }
 
+/* Legend Toggle Button */
+.legend-toggle {
+    position: absolute;
+    left: 20px;
+    width: 32px;
+    height: 32px;
+    border: 2px solid rgba(255,255,255,0.5);
+    background: transparent;
+    color: white;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.legend-toggle:hover {
+    background: rgba(255,255,255,0.2);
+    border-color: white;
+}
+
+.legend-toggle.active {
+    background: white;
+    color: #7c3aed;
+}
+
 /* Zoom Controls */
 .zoom-controls {
     position: absolute;
@@ -145,14 +178,14 @@
 .seating-container {
     padding: 20px;
     background: #fafafa;
-    min-height: 600px;
+    min-height: 650px;
     position: relative;
     overflow: hidden;
 }
 
 .seating-wrapper {
     width: 100%;
-    height: 600px;
+    height: 650px;
     position: relative;
     transform-origin: center center;
     transition: transform 0.3s ease;
@@ -267,12 +300,33 @@
 
 /* Legend */
 .legend {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    right: 0;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    transform: translateY(-200%); /* Hidden well above header to avoid blocking clicks */
+    opacity: 0;
+    z-index: 5; /* Lower z-index when hidden */
+    pointer-events: none; /* Prevent blocking clicks when hidden */
+}
+
+.legend.visible {
+    transform: translateY(0); /* Slide down into view */
+    opacity: 1;
+    z-index: 15; /* Higher z-index when visible */
+    pointer-events: auto; /* Allow clicks when visible */
+}
+
+.legend-content {
     display: flex;
     justify-content: center;
     gap: 20px;
     padding: 15px;
-    background: white;
-    border-top: 1px solid #e2e8f0;
     flex-wrap: wrap;
 }
 
@@ -350,6 +404,157 @@
     font-style: italic;
 }
 
+/* Selected Seats Panel Toggle Animation */
+.selected-seats-panel {
+    position: absolute;
+    bottom: var(--footer-height, 80px); /* Position above footer */
+    left: 0;
+    right: 0;
+    background: #f1f5f9;
+    border-top: 1px solid #e2e8f0;
+    z-index: 5;
+    padding: 12px 20px 20px 20px; /* Minimal bottom padding */
+    transform: translateY(0); /* Show by default on desktop */
+    transition: transform 0.3s ease;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.selected-seats-panel.visible {
+    transform: translateY(100%); /* Hide when visible class is added on desktop */
+}
+
+/* Navigation Hint */
+.navigation-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 15px 25px;
+    border-radius: 25px;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.navigation-hint.fade-out {
+    opacity: 0;
+}
+
+.hint-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.hint-icon {
+    font-size: 18px;
+}
+
+/* Seats Toggle Button in Footer */
+.seats-toggle {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px;
+    transition: color 0.3s ease;
+}
+
+.seats-toggle:hover {
+    color: #374151;
+}
+
+.seats-toggle.active {
+    color: #7c3aed;
+}
+
+.toggle-icon {
+    font-size: 12px;
+    transition: transform 0.3s ease;
+}
+
+.seats-toggle.active .toggle-icon {
+    transform: rotate(180deg);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    /* Header spacing adjustments */
+    .header {
+        padding: 12px 10px; /* Reduced padding on mobile */
+    }
+    
+    .header-content {
+        gap: 8px; /* Add gap between elements */
+    }
+    
+    /* Legend toggle button - move closer to edge */
+    .legend-toggle {
+        left: 10px; /* Closer to edge on mobile */
+        width: 28px; /* Slightly smaller */
+        height: 28px;
+        font-size: 14px;
+    }
+    
+    /* Floor selector - smaller on mobile */
+    .floor-selector {
+        padding: 3px; /* Smaller padding */
+        border-radius: 20px;
+    }
+    
+    .floor-btn {
+        padding: 6px 16px; /* Smaller buttons on mobile */
+        font-size: 14px; /* Smaller text */
+        border-radius: 16px;
+    }
+    
+    /* Selected seats panel adjustments */
+    /* Ensure modal content allows panel positioning */
+    .hope-modal-content {
+        overflow: visible; /* Allow panel to show outside modal bounds */
+    }
+    
+    .hope-modal-body {
+        overflow: visible; /* Allow panel to show outside body bounds */
+    }
+    
+    .selected-seats-panel {
+        /* On mobile, use simpler positioning approach */
+        position: fixed;
+        bottom: 0; /* Start at very bottom of viewport */
+        left: 0;
+        right: 0;
+        max-height: 150px;
+        padding: 15px 20px 0px 20px; /* 0px bottom padding on mobile */
+        transform: translateY(calc(100% - 60px)); /* Show just a peek (60px visible) */
+        z-index: 5; /* Below footer (footer has z-index: 10) */
+        transition: transform 0.3s ease;
+    }
+    
+    .selected-seats-panel.visible {
+        /* Show most of panel, leaving space for footer interaction */
+        transform: translateY(calc(-100% + 120px)); /* Show panel but leave 120px for footer */
+    }
+    
+    /* Alternative approach - if footer height is calculated correctly, use it */
+    .selected-seats-panel[style*="--footer-height"] {
+        bottom: var(--footer-height, 100px); /* Use calculated footer height if available */
+        transform: translateY(100%); /* Hidden below */
+    }
+    
+    .selected-seats-panel.visible[style*="--footer-height"] {
+        transform: translateY(0); /* Show above footer */
+    }
+}
+
 /* Tooltip */
 .tooltip {
     position: absolute;
@@ -385,10 +590,20 @@
     margin: 20px 0;
 }
 
+.hope-seat-selection-interface {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    width: 100% !important;
+}
+
 .hope-select-seats-btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: center;
+    width: 100%;
     padding: 12px 24px;
     font-size: 16px;
     font-weight: 600;
@@ -396,7 +611,7 @@
 }
 
 .hope-select-seats-btn .btn-icon {
-    font-size: 20px;
+    display: none !important;
 }
 
 .hope-selected-seats-summary {
