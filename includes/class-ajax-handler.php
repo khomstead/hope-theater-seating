@@ -362,8 +362,8 @@ class HOPE_Ajax_Handler {
                 continue;
             }
             
-            // Calculate pricing for this tier
-            $price_per_seat = $this->get_price_for_tier($tier);
+            // Calculate pricing for this tier using the actual variation price
+            $price_per_seat = $this->get_variation_price($variation_id, $tier);
             
             // Add each seat as a separate cart item with quantity=1
             foreach ($tier_seats as $individual_seat) {
@@ -732,6 +732,23 @@ class HOPE_Ajax_Handler {
     }
     
     /**
+     * Get actual variation price by variation ID
+     */
+    private function get_variation_price($variation_id, $tier) {
+        if ($variation_id > 0) {
+            $variation = wc_get_product($variation_id);
+            if ($variation && $variation->exists()) {
+                $price = $variation->get_price();
+                error_log("HOPE: Got actual variation price for tier {$tier} (variation_id {$variation_id}): {$price}");
+                return floatval($price);
+            }
+        }
+        
+        error_log("HOPE: Could not get variation price for variation_id {$variation_id}, using fallback");
+        return $this->get_price_for_tier($tier);
+    }
+
+    /**
      * Get price for a specific pricing tier from actual WooCommerce variations
      */
     private function get_price_for_tier($tier) {
@@ -745,11 +762,19 @@ class HOPE_Ajax_Handler {
             
             foreach ($variations as $variation_data) {
                 $attributes = $variation_data['attributes'];
-                if (isset($attributes['attribute_seating-tier']) && $attributes['attribute_seating-tier'] === $tier) {
-                    $variation = wc_get_product($variation_data['variation_id']);
-                    if ($variation) {
-                        error_log("HOPE: Found WooCommerce variation price for tier {$tier}: " . $variation->get_price());
-                        return floatval($variation->get_price());
+                
+                // Use flexible attribute matching like we do elsewhere
+                foreach ($attributes as $attr_key => $attr_value) {
+                    if (stripos($attr_key, 'tier') !== false || stripos($attr_key, 'seating') !== false) {
+                        $normalized_value = strtolower($attr_value);
+                        if ($normalized_value === $tier) {
+                            $variation = wc_get_product($variation_data['variation_id']);
+                            if ($variation) {
+                                $price = $variation->get_price();
+                                error_log("HOPE: Found WooCommerce variation price for tier {$tier}: {$price}");
+                                return floatval($price);
+                            }
+                        }
                     }
                 }
             }

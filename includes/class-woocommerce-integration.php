@@ -610,6 +610,9 @@ class HOPE_WooCommerce_Integration {
     
     /**
      * Set custom pricing for seat products
+     * 
+     * Note: This method is kept for backward compatibility but may not be needed
+     * since we now add items with correct variation IDs that should have proper pricing
      */
     public function set_seat_pricing($cart) {
         if (is_admin() && !defined('DOING_AJAX')) {
@@ -617,10 +620,18 @@ class HOPE_WooCommerce_Integration {
         }
 
         foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
-            // Check if this cart item has seat data
+            // Check if this cart item has seat data and no variation ID (legacy items)
             if (isset($cart_item['hope_price_per_seat']) && isset($cart_item['hope_seat_count'])) {
+                
+                // If this item has a variation ID, let WooCommerce handle the pricing
+                if ($cart_item['variation_id'] > 0) {
+                    error_log("HOPE Pricing: Item has variation ID {$cart_item['variation_id']}, letting WooCommerce handle pricing");
+                    continue; // Let WooCommerce use the variation price
+                }
+                
+                // Only override pricing for items without proper variation IDs (legacy)
                 $price_per_seat = floatval($cart_item['hope_price_per_seat']);
-                error_log("HOPE Pricing: Setting price per seat to {$price_per_seat}");
+                error_log("HOPE Pricing: Setting price per seat to {$price_per_seat} for legacy item without variation");
                 $cart_item['data']->set_price($price_per_seat);
             }
         }
