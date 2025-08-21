@@ -68,6 +68,15 @@
     overflow: auto;
     position: relative;
     background: #fafafa;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Seat map container should fill modal body height */
+#hope-seat-map-container {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
 /* Loading Indicator */

@@ -3,8 +3,9 @@
  * Styles for the interactive seating chart
  */
 
-/* Theater Container */
+/* Theater Container - Uses flexbox for consistent height */
 .theater-container {
+    width: 100%;
     max-width: 1400px;
     margin: 0 auto;
     background: white;
@@ -12,6 +13,9 @@
     box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     overflow: hidden;
     position: relative;
+    height: 100%; /* Use full available height */
+    display: flex;
+    flex-direction: column;
 }
 
 /* Header Section */
@@ -174,23 +178,26 @@
     justify-content: center;
 }
 
-/* Main Seating Area */
+/* Seating container - Uses flexbox to fill remaining space */
 .seating-container {
+    flex: 1; /* Take remaining space after header */
     padding: 20px;
     background: #fafafa;
-    min-height: 650px;
+    min-height: 450px; /* Minimum usable height */
     position: relative;
     overflow: hidden;
 }
 
 .seating-wrapper {
     width: 100%;
-    height: 650px;
+    height: 100%; /* Use full container height */
     position: relative;
     transform-origin: center center;
     transition: transform 0.3s ease;
     cursor: grab;
 }
+
+/* Height is now managed dynamically by JavaScript */
 
 .seating-wrapper.dragging {
     cursor: grabbing;

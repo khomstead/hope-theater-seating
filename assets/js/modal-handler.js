@@ -201,7 +201,11 @@ class HOPEModalHandler {
             const content = this.modal.querySelector('#hope-seat-map-container');
             
             if (loader) loader.style.display = 'none';
-            if (content) content.style.display = 'block';
+            if (content) {
+                content.style.display = 'flex';
+                content.style.flexDirection = 'column';
+                content.style.height = '100%';
+            }
             
             // Trigger custom event
             const event = new CustomEvent('modal-opened');
@@ -233,6 +237,9 @@ class HOPEModalHandler {
             
             // Calculate and set footer height for panel positioning
             this.updateFooterHeight();
+            
+            // Calculate and set container height dynamically
+            this.updateContainerHeight();
         }, 500);
         
         // Focus management for accessibility
@@ -242,6 +249,10 @@ class HOPEModalHandler {
         
         // Trap focus within modal
         this.trapFocus();
+        
+        // Add resize listener to recalculate height on window resize
+        this.resizeHandler = () => this.updateContainerHeight();
+        window.addEventListener('resize', this.resizeHandler);
     }
     
     closeModal(skipConfirmation = false) {
@@ -280,6 +291,12 @@ class HOPEModalHandler {
         
         // Cleanup footer observer
         this.cleanupFooterObserver();
+        
+        // Remove resize listener
+        if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+            this.resizeHandler = null;
+        }
         
         // Emit modal closed event
         const modalClosedEvent = new CustomEvent('hope-modal-closed', {
@@ -955,6 +972,45 @@ class HOPEModalHandler {
         });
         
         console.log('HOPE: Footer observer setup complete');
+    }
+    
+    /**
+     * Calculate and set container height dynamically based on modal size
+     */
+    updateContainerHeight() {
+        console.log('HOPE: updateContainerHeight called - using flexbox layout');
+        const modal = this.modal;
+        if (!modal) {
+            console.log('HOPE: No modal found');
+            return;
+        }
+        
+        const theaterContainer = modal.querySelector('.theater-container');
+        const seatingContainer = modal.querySelector('.seating-container');
+        
+        if (!theaterContainer || !seatingContainer) {
+            console.log('HOPE: Missing required elements for height calculation');
+            return;
+        }
+        
+        // Reset any inline styles to let CSS flexbox handle the layout
+        theaterContainer.style.height = '';
+        seatingContainer.style.height = '';
+        
+        // Apply mobile-specific adjustments if needed
+        const isMobile = window.innerWidth <= 768;
+        if (isMobile) {
+            theaterContainer.style.height = '100vh';
+        }
+        
+        console.log('HOPE: Container heights reset to use flexbox layout, mobile:', isMobile);
+        
+        // Trigger resize event for seat map to adjust
+        if (window.hopeSeatMap && window.hopeSeatMap.handleResize) {
+            setTimeout(() => {
+                window.hopeSeatMap.handleResize();
+            }, 100);
+        }
     }
     
     /**
