@@ -69,7 +69,7 @@ class HOPE_Seating_Frontend {
             );
             
             wp_localize_script('hope-seating-frontend', 'hopeSeating', array(
-                'ajaxurl' => admin_url('admin-ajax.php'),
+                'ajaxurl' => '/wp-admin/admin-ajax.php', // Use relative path to avoid CORS issues
                 'nonce' => wp_create_nonce('hope_seating_nonce'),
                 'pluginUrl' => HOPE_SEATING_PLUGIN_URL,
                 'strings' => array(

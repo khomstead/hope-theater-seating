@@ -240,6 +240,23 @@ class HOPE_Theater_Seating {
     }
     
     public function enqueue_frontend_assets() {
+        // Check if we need seating scripts - only on product pages with seating enabled
+        $should_enqueue_seating = false;
+        $product_id = 0;
+        $venue_id = 0;
+        
+        if (is_product()) {
+            global $product;
+            if ($product && is_object($product)) {
+                $product_id = $product->get_id();
+                $seating_enabled = get_post_meta($product_id, '_hope_seating_enabled', true);
+                if ($seating_enabled === 'yes') {
+                    $venue_id = get_post_meta($product_id, '_hope_seating_venue_id', true);
+                    $should_enqueue_seating = true;
+                }
+            }
+        }
+        
         // Get mobile detector instance if available
         $viewport_config = array();
         if (class_exists('HOPE_Mobile_Detector')) {
@@ -247,86 +264,87 @@ class HOPE_Theater_Seating {
             $viewport_config = $mobile_detector->get_viewport_config();
         }
         
-        // Enqueue styles - both frontend basics and seat map animations
-        wp_enqueue_style(
-            'hope-seating-frontend',
-            HOPE_SEATING_PLUGIN_URL . 'assets/css/frontend.css',
-            array(),
-            HOPE_SEATING_VERSION
-        );
-        
-        wp_enqueue_style(
-            'hope-seating-seat-map',
-            HOPE_SEATING_PLUGIN_URL . 'assets/css/seat-map.css',
-            array('hope-seating-frontend'),
-            HOPE_SEATING_VERSION
-        );
-        
-        wp_enqueue_style(
-            'hope-seating-modal',
-            HOPE_SEATING_PLUGIN_URL . 'assets/css/modal.css',
-            array(),
-            HOPE_SEATING_VERSION
-        );
-        
-        // Enqueue scripts
-        wp_enqueue_script(
-            'hope-seating-seat-map',
-            HOPE_SEATING_PLUGIN_URL . 'assets/js/seat-map.js',
-            array(),
-            HOPE_SEATING_VERSION,
-            true
-        );
-        
-        wp_enqueue_script(
-            'hope-seating-modal',
-            HOPE_SEATING_PLUGIN_URL . 'assets/js/modal-handler.js',
-            array('hope-seating-seat-map'),
-            HOPE_SEATING_VERSION,
-            true
-        );
-        
-        // Add mobile handler if touch device
-        if (isset($mobile_detector) && $mobile_detector->is_touch_device()) {
+        // Only enqueue seating assets if we're on a product page with seating enabled
+        if ($should_enqueue_seating) {
+            // Enqueue styles - both frontend basics and seat map animations
+            wp_enqueue_style(
+                'hope-seating-frontend',
+                HOPE_SEATING_PLUGIN_URL . 'assets/css/frontend.css',
+                array(),
+                HOPE_SEATING_VERSION
+            );
+            
+            wp_enqueue_style(
+                'hope-seating-seat-map',
+                HOPE_SEATING_PLUGIN_URL . 'assets/css/seat-map.css',
+                array('hope-seating-frontend'),
+                HOPE_SEATING_VERSION
+            );
+            
+            wp_enqueue_style(
+                'hope-seating-modal',
+                HOPE_SEATING_PLUGIN_URL . 'assets/css/modal.css',
+                array(),
+                HOPE_SEATING_VERSION
+            );
+            
+            // Enqueue scripts
             wp_enqueue_script(
-                'hope-seating-mobile',
-                HOPE_SEATING_PLUGIN_URL . 'assets/js/mobile-handler.js',
+                'hope-seating-seat-map',
+                HOPE_SEATING_PLUGIN_URL . 'assets/js/seat-map.js',
+                array(),
+                HOPE_SEATING_VERSION,
+                true
+            );
+            
+            wp_enqueue_script(
+                'hope-seating-modal',
+                HOPE_SEATING_PLUGIN_URL . 'assets/js/modal-handler.js',
                 array('hope-seating-seat-map'),
                 HOPE_SEATING_VERSION,
                 true
             );
+            
+            // Add mobile handler if touch device
+            if (isset($mobile_detector) && $mobile_detector->is_touch_device()) {
+                wp_enqueue_script(
+                    'hope-seating-mobile',
+                    HOPE_SEATING_PLUGIN_URL . 'assets/js/mobile-handler.js',
+                    array('hope-seating-seat-map'),
+                    HOPE_SEATING_VERSION,
+                    true
+                );
+            }
         }
         
-        // Get session ID
-        $session_id = '';
-        if (class_exists('HOPE_Session_Manager')) {
-            $session_id = HOPE_Session_Manager::get_current_session_id();
+        // Only localize scripts if we enqueued them
+        if ($should_enqueue_seating) {
+            // Get session ID
+            $session_id = '';
+            if (class_exists('HOPE_Session_Manager')) {
+                $session_id = HOPE_Session_Manager::get_current_session_id();
+            }
+            
+            // Localize script with configuration (using the variables we already calculated)
+            wp_localize_script('hope-seating-seat-map', 'hope_ajax', array(
+                'ajax_url' => '/wp-admin/admin-ajax.php', // Use relative path to avoid CORS issues
+                'nonce' => wp_create_nonce('hope_seating_nonce'),
+                'session_id' => $session_id,
+                'product_id' => $product_id,
+                'venue_id' => $venue_id,
+                'hold_duration' => 600, // 10 minutes
+                'device_type' => isset($mobile_detector) ? $mobile_detector->get_device_type() : 'desktop',
+                'is_mobile' => isset($mobile_detector) ? $mobile_detector->is_mobile() : false,
+                'viewport_config' => $viewport_config,
+                'checkout_url' => wc_get_checkout_url(),
+                'messages' => array(
+                    'seat_unavailable' => __('This seat is no longer available', 'hope-seating'),
+                    'max_seats' => __('Maximum number of seats selected', 'hope-seating'),
+                    'connection_error' => __('Connection error. Please try again.', 'hope-seating'),
+                    'session_expired' => __('Your session has expired. Please refresh the page.', 'hope-seating')
+                )
+            ));
         }
-        
-        // Get current product data for seat map
-        global $product;
-        $product_id = $product ? $product->get_id() : 0;
-        $venue_id = $product ? get_post_meta($product->get_id(), '_hope_seating_venue_id', true) : 0;
-        
-        // Localize script with configuration
-        wp_localize_script('hope-seating-seat-map', 'hope_ajax', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('hope_seating_nonce'),
-            'session_id' => $session_id,
-            'product_id' => $product_id,
-            'venue_id' => $venue_id,
-            'hold_duration' => 600, // 10 minutes
-            'device_type' => isset($mobile_detector) ? $mobile_detector->get_device_type() : 'desktop',
-            'is_mobile' => isset($mobile_detector) ? $mobile_detector->is_mobile() : false,
-            'viewport_config' => $viewport_config,
-            'checkout_url' => function_exists('wc_get_checkout_url') ? wc_get_checkout_url() : '/checkout',
-            'messages' => array(
-                'seat_unavailable' => __('This seat is no longer available', 'hope-seating'),
-                'max_seats' => __('Maximum number of seats selected', 'hope-seating'),
-                'connection_error' => __('Connection error. Please try again.', 'hope-seating'),
-                'session_expired' => __('Your session has expired. Please refresh the page.', 'hope-seating')
-            )
-        ));
     }
     
     public function enqueue_admin_assets($hook) {
@@ -370,10 +388,21 @@ class HOPE_Theater_Seating {
         $current_version = get_option('hope_seating_db_version', '0');
         $plugin_version = HOPE_SEATING_VERSION;
         
-        // Only update if version has changed and is 2.2.17 or later
-        if (version_compare($current_version, '2.2.17', '<')) {
+        // Check if tables exist first
+        global $wpdb;
+        $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$bookings_table'") == $bookings_table;
+        
+        if (!$table_exists || version_compare($current_version, '2.2.17', '<')) {
             if (class_exists('HOPE_Seating_Database')) {
-                HOPE_Seating_Database::update_database_schema();
+                // Create tables if they don't exist
+                if (!$table_exists) {
+                    HOPE_Seating_Database::create_tables();
+                    error_log('HOPE Seating: Database tables created during version check');
+                } else {
+                    HOPE_Seating_Database::update_database_schema();
+                }
+                
                 update_option('hope_seating_db_version', $plugin_version);
                 
                 // Show admin notice
@@ -723,6 +752,21 @@ function hope_seating_create_default_venues() {
     // Final verification
     $final_count = $wpdb->get_var("SELECT COUNT(*) FROM {$venues_table}");
     error_log('HOPE Seating: Venue creation complete. Total venues: ' . $final_count);
+}
+
+// Activation hook to create database tables
+register_activation_hook(__FILE__, 'hope_seating_activate_plugin');
+
+function hope_seating_activate_plugin() {
+    // Create database tables
+    if (class_exists('HOPE_Seating_Database')) {
+        HOPE_Seating_Database::create_tables();
+        update_option('hope_seating_db_version', HOPE_SEATING_VERSION);
+        error_log('HOPE Seating: Database tables created during plugin activation');
+    }
+    
+    // Create default venues
+    hope_seating_create_default_venues();
 }
 
 // Initialize plugin
