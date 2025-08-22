@@ -381,6 +381,38 @@ public function seat_button_shortcode($atts) {
             return;
         }
         
+        // DEBUG: Log first few seats to verify pricing tiers
+        error_log('HOPE DEBUG: ===== AJAX REQUEST RECEIVED =====');
+        error_log('HOPE DEBUG: Pricing Map ID: ' . $pricing_map_id);
+        error_log('HOPE DEBUG: Event ID: ' . $event_id);
+        error_log('HOPE DEBUG: Total seats from DB: ' . count($seats_with_pricing));
+        
+        error_log('HOPE DEBUG: First 3 seats from database:');
+        for ($i = 0; $i < min(3, count($seats_with_pricing)); $i++) {
+            $seat = $seats_with_pricing[$i];
+            error_log(sprintf('HOPE DEBUG: Seat %s: Section %s, Row %s, Tier %s', 
+                $seat->seat_id, $seat->section, $seat->row_number, $seat->pricing_tier));
+        }
+        
+        // Count seats by tier
+        $tier_counts = array();
+        foreach ($seats_with_pricing as $seat) {
+            $tier = $seat->pricing_tier;
+            $tier_counts[$tier] = isset($tier_counts[$tier]) ? $tier_counts[$tier] + 1 : 1;
+        }
+        error_log('HOPE DEBUG: Database seat tier counts: ' . json_encode($tier_counts));
+        
+        // DEBUG: Show Section C seats specifically
+        error_log('HOPE DEBUG: Section C seats from database:');
+        $c_count = 0;
+        foreach ($seats_with_pricing as $seat) {
+            if ($seat->section === 'C' && $c_count < 10) {
+                error_log(sprintf('HOPE DEBUG: C%s-%s: Tier %s', 
+                    $seat->row_number, $seat->seat_number, $seat->pricing_tier));
+                $c_count++;
+            }
+        }
+        
         // Convert to frontend format
         $seats = array();
         foreach ($seats_with_pricing as $seat) {

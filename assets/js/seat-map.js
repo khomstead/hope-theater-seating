@@ -32,20 +32,56 @@ class HOPESeatMap {
     }
     
     init() {
+        // Initialize data loading flags
+        this.dataLoadingStatus = {
+            variationPricing: false,
+            realSeatData: false
+        };
+        
         // Load actual pricing from WooCommerce variations first
         this.loadVariationPricing().then(() => {
+            console.log('HOPE: ✅ Variation pricing loaded');
+            this.dataLoadingStatus.variationPricing = true;
+            
             // Load real seat data from database
             this.loadRealSeatData().then(() => {
-                // Wait for modal to be visible
-                const checkModal = setInterval(() => {
-                    const modal = document.getElementById('hope-seat-modal');
-                    if (modal && modal.style.display !== 'none') {
-                        clearInterval(checkModal);
-                        this.initializeMap();
-                    }
-                }, 100);
+                console.log('HOPE: ✅ Real seat data loaded');
+                this.dataLoadingStatus.realSeatData = true;
+                
+                // Only proceed when both are loaded
+                this.waitForModal();
+            }).catch(() => {
+                console.log('HOPE: ❌ Failed to load real seat data, will use fallback');
+                this.dataLoadingStatus.realSeatData = false; // Explicitly mark as failed
+                this.waitForModal();
+            });
+        }).catch(() => {
+            console.log('HOPE: ❌ Failed to load variation pricing');
+            this.dataLoadingStatus.variationPricing = false;
+            // Still try to load seat data
+            this.loadRealSeatData().then(() => {
+                console.log('HOPE: ✅ Real seat data loaded (without variation pricing)');
+                this.dataLoadingStatus.realSeatData = true;
+                this.waitForModal();
+            }).catch(() => {
+                console.log('HOPE: ❌ Failed to load both pricing and seat data');
+                this.dataLoadingStatus.realSeatData = false;
+                this.waitForModal();
             });
         });
+    }
+    
+    waitForModal() {
+        // Wait for modal to be visible
+        const checkModal = setInterval(() => {
+            const modal = document.getElementById('hope-seat-modal');
+            if (modal && modal.style.display !== 'none') {
+                clearInterval(checkModal);
+                console.log('HOPE: ✅ Modal is visible, initializing map');
+                console.log('HOPE: Data loading status:', this.dataLoadingStatus);
+                this.initializeMap();
+            }
+        }, 100);
     }
     
     /**
@@ -61,19 +97,35 @@ class HOPESeatMap {
                 action: 'hope_get_venue_seats',
                 nonce: hope_ajax.nonce,
                 venue_id: hope_ajax.venue_id,
-                event_id: hope_ajax.product_id
+                event_id: hope_ajax.product_id,
+                cache_buster: Date.now() // Force fresh data from server
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success && data.data.seats) {
                 this.realSeatData = data.data.seats;
-                console.log('HOPE: Loaded real seat data:', this.realSeatData.length, 'seats');
+                console.log('HOPE: ✅ Loaded real seat data:', this.realSeatData.length, 'seats');
+                
+                // DEBUG: Count pricing tiers in received data
+                const tierCounts = {};
+                this.realSeatData.forEach(seat => {
+                    const tier = seat.pricing_tier;
+                    tierCounts[tier] = (tierCounts[tier] || 0) + 1;
+                });
+                console.log('HOPE: DEBUG - JavaScript received tier counts:', tierCounts);
+                
+                // DEBUG: Show first few seats
+                console.log('HOPE: DEBUG - First 3 seats received:');
+                for (let i = 0; i < Math.min(3, this.realSeatData.length); i++) {
+                    const seat = this.realSeatData[i];
+                    console.log(`HOPE: DEBUG - Seat ${seat.id}: Section ${seat.section}, Row ${seat.row_number}, Tier ${seat.pricing_tier}`);
+                }
                 
                 // Group seats by section and level for rendering
                 this.processRealSeatData();
             } else {
-                console.error('HOPE: Failed to load real seat data:', data);
+                console.error('HOPE: ❌ Failed to load real seat data:', data);
                 // Fall back to hardcoded data
                 this.realSeatData = null;
             }
@@ -131,7 +183,30 @@ class HOPESeatMap {
             this.processedSeatData[level][section].push(processedSeat);
         });
         
-        console.log('HOPE: Processed seat data:', this.processedSeatData);
+        console.log('HOPE: ✅ Processed seat data:', this.processedSeatData);
+        
+        // DEBUG: Specifically check what's in each level
+        Object.keys(this.processedSeatData).forEach(level => {
+            const sections = Object.keys(this.processedSeatData[level]);
+            console.log(`HOPE: DEBUG - Level ${level} has sections: [${sections.join(', ')}]`);
+            sections.forEach(section => {
+                const sectionSeats = this.processedSeatData[level][section];
+                const tierCounts = {};
+                sectionSeats.forEach(seat => {
+                    tierCounts[seat.tier] = (tierCounts[seat.tier] || 0) + 1;
+                });
+                console.log(`HOPE: DEBUG - Section ${section}: ${sectionSeats.length} seats, tiers: ${JSON.stringify(tierCounts)}`);
+                
+                // Show first few seats of Section C
+                if (section === 'C') {
+                    console.log('HOPE: DEBUG - First 5 Section C seats:');
+                    for (let i = 0; i < Math.min(5, sectionSeats.length); i++) {
+                        const seat = sectionSeats[i];
+                        console.log(`HOPE: DEBUG - C${seat.row}-${seat.seat}: Tier ${seat.tier}`);
+                    }
+                }
+            });
+        });
     }
 
     /**
@@ -390,11 +465,30 @@ class HOPESeatMap {
         this.createStage(svg);
         
         // Use real seat data if available, otherwise fall back to hardcoded
-        if (this.processedSeatData && this.processedSeatData[floor]) {
-            console.log('HOPE: Rendering real seat data for floor:', floor);
+        console.log('HOPE: DEBUG - processedSeatData exists?', !!this.processedSeatData);
+        console.log('HOPE: DEBUG - processedSeatData[floor] exists?', !!(this.processedSeatData && this.processedSeatData[floor]));
+        console.log('HOPE: DEBUG - realSeatData exists?', !!this.realSeatData);
+        console.log('HOPE: DEBUG - realSeatData length:', this.realSeatData ? this.realSeatData.length : 'N/A');
+        console.log('HOPE: DEBUG - dataLoadingStatus:', this.dataLoadingStatus);
+        
+        // More robust condition: check if we have processed data AND it has sections for this floor
+        const hasRealData = this.processedSeatData && 
+                           this.processedSeatData[floor] && 
+                           Object.keys(this.processedSeatData[floor]).length > 0;
+        
+        console.log('HOPE: DEBUG - hasRealData?', hasRealData);
+        if (hasRealData) {
+            console.log('HOPE: DEBUG - Sections available for', floor, ':', Object.keys(this.processedSeatData[floor]));
+        }
+                           
+        if (hasRealData) {
+            console.log('HOPE: ✅ Rendering REAL seat data for floor:', floor);
             this.createRealSeats(svg, floor);
         } else {
-            console.log('HOPE: Falling back to hardcoded seat data for floor:', floor);
+            console.log('HOPE: ❌ Falling back to HARDCODED seat data for floor:', floor);
+            console.log('HOPE: ❌ Reason: processedSeatData?', !!this.processedSeatData, 
+                       'floor exists?', !!(this.processedSeatData && this.processedSeatData[floor]),
+                       'sections count?', this.processedSeatData && this.processedSeatData[floor] ? Object.keys(this.processedSeatData[floor]).length : 'N/A');
             const floorData = this.theaterData[floor];
             Object.entries(floorData).forEach(([sectionName, sectionData]) => {
                 this.createSection(svg, sectionName, sectionData);
@@ -483,6 +577,7 @@ class HOPESeatMap {
         seat.setAttribute('width', '22');
         seat.setAttribute('height', '22');
         seat.setAttribute('rx', '4');
+        
         seat.setAttribute('class', `seat ${seatData.tier}`);
         seat.setAttribute('data-section', seatData.section);
         seat.setAttribute('data-row', seatData.row);
