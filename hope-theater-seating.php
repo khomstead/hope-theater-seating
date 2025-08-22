@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.3.1
+ * Version: 2.3.2
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.3.1');
+define('HOPE_SEATING_VERSION', '2.3.2');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -237,6 +237,10 @@ class HOPE_Theater_Seating {
         // Add AJAX endpoint for getting cart seats
         add_action('wp_ajax_hope_get_cart_seats', array($this, 'get_cart_seats'));
         add_action('wp_ajax_nopriv_hope_get_cart_seats', array($this, 'get_cart_seats'));
+        
+        // Add AJAX endpoint for clearing product seats
+        add_action('wp_ajax_hope_clear_product_seats', array($this, 'clear_product_seats'));
+        add_action('wp_ajax_nopriv_hope_clear_product_seats', array($this, 'clear_product_seats'));
         
         // Temporary debug endpoint
         add_action('wp_ajax_hope_debug_cart', array($this, 'debug_cart'));
@@ -564,6 +568,73 @@ class HOPE_Theater_Seating {
         wp_send_json_success(array(
             'seats' => array_unique($cart_seats),
             'total' => $cart_total
+        ));
+    }
+    
+    /**
+     * AJAX handler to clear all seats for a specific product from cart and release holds
+     */
+    public function clear_product_seats() {
+        // Check nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'hope_seating_nonce')) {
+            wp_send_json_error('Invalid nonce');
+            return;
+        }
+        
+        $product_id = intval($_POST['product_id']);
+        $session_id = sanitize_text_field($_POST['session_id']);
+        
+        if (!$product_id) {
+            wp_send_json_error('Invalid product ID');
+            return;
+        }
+        
+        $removed_items = 0;
+        $released_holds = 0;
+        
+        // Remove cart items for this product
+        if (function_exists('WC') && WC()->cart) {
+            foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+                if ($cart_item['product_id'] == $product_id) {
+                    WC()->cart->remove_cart_item($cart_item_key);
+                    $removed_items++;
+                }
+            }
+        }
+        
+        // Release holds from database
+        global $wpdb;
+        $holds_table = $wpdb->prefix . 'hope_seating_holds';
+        
+        $where_conditions = array('product_id = %d');
+        $where_values = array($product_id);
+        
+        if ($session_id) {
+            $where_conditions[] = 'session_id = %s';
+            $where_values[] = $session_id;
+        }
+        
+        $where_clause = implode(' AND ', $where_conditions);
+        
+        $released_holds = $wpdb->query($wpdb->prepare(
+            "DELETE FROM {$holds_table} WHERE {$where_clause}",
+            ...$where_values
+        ));
+        
+        // Also clear from bookings table if exists
+        $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+        if ($wpdb->get_var("SHOW TABLES LIKE '$bookings_table'") == $bookings_table) {
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$bookings_table} WHERE product_id = %d AND session_id = %s AND status = 'pending'",
+                $product_id,
+                $session_id
+            ));
+        }
+        
+        wp_send_json_success(array(
+            'message' => 'Seats cleared successfully',
+            'removed_items' => $removed_items,
+            'released_holds' => $released_holds
         ));
     }
     

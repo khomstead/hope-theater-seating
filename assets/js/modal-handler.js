@@ -184,6 +184,23 @@ class HOPEModalHandler {
         
         console.log('Opening modal...');
         
+        // Detect mobile and apply correct initial positioning to prevent jump
+        const isMobile = window.innerWidth <= 768;
+        if (isMobile) {
+            // Pre-apply mobile styles before showing to prevent positioning jump
+            const modalContent = this.modal.querySelector('.hope-modal-content');
+            if (modalContent) {
+                modalContent.style.width = '100%';
+                modalContent.style.height = '100%';
+                modalContent.style.maxWidth = 'none';
+                modalContent.style.borderRadius = '0';
+                modalContent.style.transform = 'none';
+                modalContent.style.top = '0';
+                modalContent.style.left = '0';
+                modalContent.style.animation = 'mobileSlideUp 0.3s ease';
+            }
+        }
+        
         // Show modal
         this.modal.style.display = 'block';
         this.modal.setAttribute('aria-hidden', 'false');
@@ -268,6 +285,19 @@ class HOPEModalHandler {
             this.seatMap.releaseAllSeats();
         }
         
+        // Clean up any inline styles applied for mobile positioning
+        const modalContent = this.modal.querySelector('.hope-modal-content');
+        if (modalContent) {
+            modalContent.style.width = '';
+            modalContent.style.height = '';
+            modalContent.style.maxWidth = '';
+            modalContent.style.borderRadius = '';
+            modalContent.style.transform = '';
+            modalContent.style.top = '';
+            modalContent.style.left = '';
+            modalContent.style.animation = '';
+        }
+        
         // Hide modal
         this.modal.style.display = 'none';
         this.modal.setAttribute('aria-hidden', 'true');
@@ -305,13 +335,85 @@ class HOPEModalHandler {
         document.dispatchEvent(modalClosedEvent);
     }
     
+    /**
+     * Clear all seat holds and cart items when user continues with no seats
+     */
+    clearSeatsAndClose() {
+        // First, release all seat holds on the server
+        if (this.seatMap && this.seatMap.releaseAllSeats) {
+            console.log('Releasing all seat holds...');
+            this.seatMap.releaseAllSeats();
+        }
+        
+        // Clear any cart items for this product via AJAX
+        fetch(hope_ajax.ajax_url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                action: 'hope_clear_product_seats',
+                nonce: hope_ajax.nonce,
+                product_id: hope_ajax.product_id,
+                session_id: hope_ajax.session_id
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Clear seats response:', data);
+            
+            // Update product page display to show no seats selected
+            this.updateProductPageDisplay([]);
+            
+            // Close the modal
+            this.closeModal(true);
+        })
+        .catch(error => {
+            console.error('Error clearing seats:', error);
+            // Still close modal even if AJAX fails
+            this.closeModal(true);
+        });
+    }
+    
+    /**
+     * Update product page display with selected seats
+     */
+    updateProductPageDisplay(seats) {
+        const productBtn = document.getElementById('hope-select-seats') || 
+                          document.getElementById('hope-select-seats-main');
+        
+        if (productBtn) {
+            if (seats && seats.length > 0) {
+                productBtn.innerHTML = `<span class="btn-text">${seats.length} Seats Selected</span> <span class="btn-icon">✓</span>`;
+                productBtn.classList.add('seats-selected');
+            } else {
+                productBtn.innerHTML = 'Select Seats';
+                productBtn.classList.remove('seats-selected');
+            }
+        }
+        
+        // Update any seat display elements
+        const prompt = document.querySelector('.hope-seat-selection-prompt');
+        const display = document.querySelector('.hope-selected-seats-display');
+        
+        if (prompt && display) {
+            if (seats && seats.length > 0) {
+                prompt.style.display = 'none';
+                display.style.display = 'block';
+            } else {
+                prompt.style.display = 'block';
+                display.style.display = 'none';
+            }
+        }
+    }
+    
     confirmSeats() {
         console.log('confirmSeats called, selectedSeats size:', this.seatMap ? this.seatMap.selectedSeats.size : 'no seatMap');
         
         if (!this.seatMap || this.seatMap.selectedSeats.size === 0) {
-            // If no seats selected, just close modal (user chose "Continue with No Seats")
-            console.log('No seats selected, calling closeModal()');
-            this.closeModal(true); // Skip confirmation since no seats are selected
+            // If no seats selected, clear any existing holds and cart items (user chose "Continue with No Seats")
+            console.log('No seats selected, clearing holds and cart before closing modal');
+            this.clearSeatsAndClose();
             return;
         }
         
@@ -337,65 +439,8 @@ class HOPEModalHandler {
             if (data.success) {
                 console.log('Seats successfully added to cart:', data);
                 
-                // Update button on product page
-                const productBtn = document.getElementById('hope-select-seats') || 
-                                  document.getElementById('hope-select-seats-main');
-                if (productBtn) {
-                    productBtn.innerHTML = `<span class="btn-text">${seats.length} Seats Selected</span> <span class="btn-icon">✓</span>`;
-                    productBtn.classList.add('seats-selected');
-                    console.log('Updated product page button');
-                } else {
-                    console.log('Product page button not found');
-                }
-                
-                // Always manually update the seat display elements to ensure they show
-                const prompt = document.querySelector('.hope-seat-selection-prompt');
-                const display = document.querySelector('.hope-selected-seats-display');
-                
-                console.log('Looking for seat display elements - prompt:', !!prompt, 'display:', !!display);
-                
-                if (prompt && display) {
-                    console.log('Found seat display elements, updating them');
-                    prompt.style.display = 'none';
-                    display.style.display = 'block';
-                    
-                    const seatsList = display.querySelector('.hope-seats-list');
-                    const totalAmount = display.querySelector('.total-amount');
-                    
-                    console.log('Found seatsList:', !!seatsList, 'totalAmount:', !!totalAmount);
-                    
-                    if (seatsList) {
-                        seatsList.innerHTML = '';
-                        seats.forEach(seatId => {
-                            const seatTag = document.createElement('span');
-                            seatTag.className = 'hope-seat-tag';
-                            seatTag.textContent = seatId;
-                            seatTag.style.backgroundColor = '#7c3aed'; // Default purple
-                            seatTag.style.color = 'white';
-                            seatTag.style.padding = '6px 12px';
-                            seatTag.style.margin = '0 8px 8px 0';
-                            seatTag.style.borderRadius = '16px';
-                            seatTag.style.fontSize = '14px';
-                            seatTag.style.display = 'inline-block';
-                            seatsList.appendChild(seatTag);
-                        });
-                        console.log('Added seat tags to list');
-                    }
-                    
-                    if (totalAmount) {
-                        const calculatedTotal = data.data?.total || (seats.length * 25); // fallback calculation
-                        totalAmount.textContent = `$${calculatedTotal}`;
-                        console.log('Updated total amount to:', calculatedTotal);
-                    }
-                    
-                    console.log('Successfully updated seat display manually');
-                } else {
-                    console.error('Could not find seat display elements - prompt:', !!prompt, 'display:', !!display);
-                    
-                    // Log all elements with class names that might be relevant
-                    const allElements = document.querySelectorAll('[class*="hope"], [class*="seat"]');
-                    console.log('Found elements with hope/seat in class:', Array.from(allElements).map(el => el.className));
-                }
+                // Update product page display with selected seats
+                this.updateProductPageDisplay(seats);
                 
                 // Always ensure the checkout button is enabled after seat selection
                 const checkoutButton = document.querySelector('.single_add_to_cart_button');

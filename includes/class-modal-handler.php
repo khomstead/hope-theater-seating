@@ -123,7 +123,7 @@ class HOPE_Modal_Handler {
                                 </div>
                                 
                                 <div class="seating-wrapper" id="seating-wrapper">
-                                    <svg id="seat-map" viewBox="0 0 1200 1200" preserveAspectRatio="xMidYMid meet">
+                                    <svg id="seat-map" viewBox="-100 0 1400 1200" preserveAspectRatio="xMidYMid meet">
                                         <!-- Seats will be generated dynamically via JavaScript -->
                                     </svg>
                                 </div>
@@ -163,8 +163,8 @@ class HOPE_Modal_Handler {
                         
                         <div class="tooltip" id="tooltip"></div>
                         
-                        <!-- Navigation hint -->
-                        <div class="navigation-hint" id="navigation-hint">
+                        <!-- Navigation hint (desktop only) -->
+                        <div class="navigation-hint desktop-only" id="navigation-hint">
                             <div class="hint-content">
                                 <span class="hint-icon">👆</span>
                                 <span class="hint-text">Click and drag to explore the theater</span>
