@@ -480,7 +480,7 @@ class HOPE_Theater_Seating {
             // Look for tier attribute (might be pa_tier, attribute_tier, seating-tier, etc.)
             foreach ($attributes as $key => $value) {
                 if (stripos($key, 'tier') !== false || stripos($key, 'seating') !== false) {
-                    $tier = strtolower($value);
+                    $tier = strtoupper($value); // Keep uppercase to match pricing map tiers (P1, P2, P3, AA)
                     error_log("HOPE: Found pricing tier attribute {$key} = {$value} (normalized: {$tier})");
                     break;
                 }
