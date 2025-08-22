@@ -352,12 +352,143 @@ class HOPE_Seating_Admin {
     
     // Seats management page
     public function seats_page() {
+        // Handle delete request
+        if (isset($_GET['delete_map']) && isset($_GET['map_id']) && wp_verify_nonce($_GET['_wpnonce'], 'delete_map_' . $_GET['map_id'])) {
+            $this->delete_pricing_map($_GET['map_id']);
+            echo '<div class="notice notice-success is-dismissible"><p><strong>Success!</strong> Pricing map deleted successfully.</p></div>';
+        }
+        
         ?>
         <div class="wrap">
-            <h1><?php _e('Seat Map Editor', 'hope-seating'); ?></h1>
-            <p><?php _e('Visual seat editor coming soon. Currently, seats are managed through the database.', 'hope-seating'); ?></p>
+            <h1><?php _e('Seat Map Management', 'hope-seating'); ?></h1>
+            
+            <?php $this->display_pricing_maps_table(); ?>
+            
         </div>
         <?php
+    }
+    
+    /**
+     * Display pricing maps management table
+     */
+    private function display_pricing_maps_table() {
+        if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+            echo '<p>Pricing maps system not available.</p>';
+            return;
+        }
+        
+        $pricing_manager = new HOPE_Pricing_Maps_Manager();
+        $pricing_maps = $pricing_manager->get_pricing_maps();
+        
+        ?>
+        <div class="pricing-maps-management">
+            <h2>Pricing Maps</h2>
+            
+            <?php if (empty($pricing_maps)): ?>
+                <p>No pricing maps found.</p>
+            <?php else: ?>
+                <table class="widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Total Seats</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pricing_maps as $map): ?>
+                            <?php
+                            // Get seat count for this map
+                            $seat_count = $this->get_pricing_map_seat_count($map->id);
+                            $delete_url = wp_nonce_url(
+                                admin_url('admin.php?page=hope-seating-seats&delete_map=1&map_id=' . $map->id),
+                                'delete_map_' . $map->id
+                            );
+                            ?>
+                            <tr>
+                                <td><strong><?php echo esc_html($map->id); ?></strong></td>
+                                <td><?php echo esc_html($map->name); ?></td>
+                                <td>
+                                    <?php echo esc_html($seat_count); ?> seats
+                                    <?php if ($seat_count == 0): ?>
+                                        <span style="color: #d63638; font-weight: bold;">(EMPTY)</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?php echo esc_html(date('M j, Y', strtotime($map->created_at))); ?></td>
+                                <td>
+                                    <?php if ($seat_count == 0): ?>
+                                        <a href="<?php echo esc_url($delete_url); ?>" 
+                                           class="button button-secondary"
+                                           style="background: #d63638; border-color: #d63638; color: white;"
+                                           onclick="return confirm('Are you sure you want to delete this empty pricing map? This action cannot be undone.');">
+                                            🗑️ Delete Empty Map
+                                        </a>
+                                    <?php else: ?>
+                                        <span style="color: #50575e;">Contains <?php echo $seat_count; ?> seats - Cannot delete</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-left: 4px solid #0073aa;">
+                <h3>Seat Map Management</h3>
+                <p><strong>Safe Operations:</strong></p>
+                <ul>
+                    <li>✅ <strong>Delete empty maps</strong> - Remove pricing maps with 0 seats (safe cleanup)</li>
+                    <li>⚠️ <strong>Maps with seats</strong> - Cannot be deleted to prevent data loss</li>
+                </ul>
+                <p><strong>Note:</strong> For seat count or pricing adjustments, use manual SQL queries or contact the developer.</p>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Get seat count for a pricing map
+     */
+    private function get_pricing_map_seat_count($map_id) {
+        if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+            return 0;
+        }
+        
+        $pricing_manager = new HOPE_Pricing_Maps_Manager();
+        $seats = $pricing_manager->get_seats_with_pricing($map_id);
+        return count($seats);
+    }
+    
+    /**
+     * Delete a pricing map (only if empty)
+     */
+    private function delete_pricing_map($map_id) {
+        global $wpdb;
+        
+        $map_id = intval($map_id);
+        $seat_count = $this->get_pricing_map_seat_count($map_id);
+        
+        if ($seat_count > 0) {
+            echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> Cannot delete pricing map with seats. It contains ' . $seat_count . ' seats.</p></div>';
+            return false;
+        }
+        
+        // Safe to delete - no seats associated
+        $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
+        $result = $wpdb->delete(
+            $pricing_maps_table,
+            array('id' => $map_id),
+            array('%d')
+        );
+        
+        if ($result === false) {
+            echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> Failed to delete pricing map.</p></div>';
+            return false;
+        }
+        
+        return true;
     }
     
     // Settings page
@@ -390,11 +521,12 @@ class HOPE_Seating_Admin {
         $seat_pricing_table = $wpdb->prefix . 'hope_seating_seat_pricing';
         $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
         
-        // Handle manual fix request
+        // Handle manual fix request - DISABLED DUE TO BUGS
         if (isset($_GET['fix_assignments']) && $_GET['fix_assignments'] == '1') {
-            $this->manual_fix_seat_assignments();
-            echo '<div class="notice notice-success is-dismissible"><p><strong>Success!</strong> Seat assignments have been updated. Please refresh to see new counts.</p></div>';
+            echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> This function has been disabled due to bugs that multiply seats. Please contact developer for manual fixes.</p></div>';
+            return; // Exit early to prevent execution
         }
+        
         
         // Handle complete fix for product 2272
         if (isset($_GET['fix_map_214']) && $_GET['fix_map_214'] == '1') {
@@ -420,8 +552,14 @@ class HOPE_Seating_Admin {
             }
         }
 
-        // Handle physical seats regeneration request
+        // Handle physical seats regeneration request - DISABLED DUE TO BUGS
         if (isset($_GET['regenerate_seats']) && $_GET['regenerate_seats'] == '1') {
+            echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> Regenerate Seats function has been disabled due to bugs that create thousands of duplicate seats. Please contact developer for manual fixes.</p></div>';
+            return; // Exit early to prevent execution
+        }
+        
+        // Original regenerate seats code (disabled)
+        if (false && isset($_GET['regenerate_seats']) && $_GET['regenerate_seats'] == '1') {
             // Ensure classes are loaded
             if (!class_exists('HOPE_Physical_Seats_Manager')) {
                 require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-physical-seats.php';
@@ -570,27 +708,17 @@ class HOPE_Seating_Admin {
             <?php $fix_url = admin_url('admin.php?page=hope-seating-diagnostics&fix_assignments=1'); ?>
             <?php $regenerate_url = admin_url('admin.php?page=hope-seating-diagnostics&regenerate_seats=1'); ?>
             <?php $fix_214_url = admin_url('admin.php?page=hope-seating-diagnostics&fix_map_214=1'); ?>
-            <p>
-                <a href="<?php echo esc_url($fix_url); ?>" 
-                   class="button button-primary" 
-                   onclick="return confirm('Are you sure you want to reassign all seats to match the spreadsheet targets? This cannot be undone.');">
-                    Fix Seat Assignments Now
-                </a>
-                
-                <a href="<?php echo esc_url($regenerate_url); ?>" 
-                   class="button button-secondary" 
-                   onclick="return confirm('Are you sure you want to regenerate all physical seats with corrected section positioning? This will fix the visual layout but will take a moment.');"
-                   style="margin-left: 10px;">
-                    Regenerate Seats with Corrected Layout
-                </a>
-                
-                <a href="<?php echo esc_url($fix_214_url); ?>" 
-                   class="button button-secondary" 
-                   onclick="return confirm('Fix pricing map 214 specifically for your product?');"
-                   style="margin-left: 10px; background: #e74c3c; border-color: #e74c3c;">
-                    Fix Map 214 (For Product 2272)
-                </a>
-            </p>
+            <div style="padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+                <h4 style="color: #856404; margin-top: 0;">⚠️ Diagnostic Tools Disabled</h4>
+                <p><strong>These buttons have been temporarily disabled due to bugs that multiply seats instead of fixing them.</strong></p>
+                <p>For seat count or pricing tier issues, please contact the developer for manual SQL fixes.</p>
+                <p style="margin-bottom: 0;">
+                    <button class="button button-primary" disabled style="opacity: 0.5;">❌ Fix Seat Assignments Now (DISABLED)</button>
+                    <button class="button button-secondary" disabled style="opacity: 0.5; margin-left: 10px;">❌ Regenerate Seats (DISABLED)</button>
+                    <button class="button button-secondary" disabled style="opacity: 0.5; margin-left: 10px;">❌ Fix Map 214 (DISABLED)</button>
+                </p>
+            </div>
+            
             
             <h3>Section Layout Fix</h3>
             <p>If sections appear in the wrong order on the visual map (Section A should be leftmost, Section E rightmost from audience perspective), use the "Regenerate Seats" button above. This will:</p>
