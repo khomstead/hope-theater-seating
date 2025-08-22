@@ -333,11 +333,11 @@ public function seat_button_shortcode($atts) {
             return;
         }
         
-        $venue_id = isset($_POST['venue_id']) ? intval($_POST['venue_id']) : 0;
+        $pricing_map_id = isset($_POST['venue_id']) ? intval($_POST['venue_id']) : 0; // Actually pricing map ID now
         $event_id = isset($_POST['event_id']) ? intval($_POST['event_id']) : 0;
         
-        if (!$venue_id) {
-            wp_send_json_error('Invalid venue ID');
+        if (!$pricing_map_id) {
+            wp_send_json_error('Invalid pricing map ID');
             return;
         }
         
@@ -350,71 +350,99 @@ public function seat_button_shortcode($atts) {
             }
         }
         
-        global $wpdb;
-        
-        // Get venue data
-        $venues_table = $wpdb->prefix . 'hope_seating_venues';
-        $venue = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $venues_table WHERE id = %d",
-            $venue_id
-        ));
-        
-        if (!$venue) {
-            wp_send_json_error('Venue not found');
+        // Use new architecture
+        if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+            wp_send_json_error('New seating architecture not available');
             return;
         }
         
-        // Get seats - FIXED: Don't use ORDER BY with row_number
-        $seats_table = $wpdb->prefix . 'hope_seating_seat_maps';
-        $seats = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $seats_table WHERE venue_id = %d",
-            $venue_id
-        ), ARRAY_A);
+        $pricing_manager = new HOPE_Pricing_Maps_Manager();
         
-        // Sort in PHP to avoid MariaDB issues
-        if (!empty($seats)) {
-            usort($seats, function($a, $b) {
-                $section_compare = strcmp($a['section'], $b['section']);
-                if ($section_compare !== 0) return $section_compare;
-                
-                $row_compare = intval($a['row_number']) - intval($b['row_number']);
-                if ($row_compare !== 0) return $row_compare;
-                
-                return intval($a['seat_number']) - intval($b['seat_number']);
-            });
-        }
-        
-        // Get booked seats
-        $booked_seats = array();
-        if ($event_id) {
-            $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
-            if ($wpdb->get_var("SHOW TABLES LIKE '$bookings_table'") == $bookings_table) {
-                $booked = $wpdb->get_results($wpdb->prepare(
-                    "SELECT seat_id FROM $bookings_table 
-                    WHERE event_id = %d AND status IN ('confirmed', 'reserved')",
-                    $event_id
-                ));
-                
-                foreach ($booked as $booking) {
-                    $booked_seats[] = $booking->seat_id;
-                }
+        // Get pricing map data
+        $pricing_maps = $pricing_manager->get_pricing_maps();
+        $pricing_map = null;
+        foreach ($pricing_maps as $map) {
+            if ($map->id == $pricing_map_id) {
+                $pricing_map = $map;
+                break;
             }
         }
         
+        if (!$pricing_map) {
+            wp_send_json_error('Pricing map not found');
+            return;
+        }
+        
+        // Get seats with pricing from new architecture
+        $seats_with_pricing = $pricing_manager->get_seats_with_pricing($pricing_map_id);
+        
+        if (empty($seats_with_pricing)) {
+            wp_send_json_error('No seats found for this pricing map');
+            return;
+        }
+        
+        // Convert to frontend format
+        $seats = array();
+        foreach ($seats_with_pricing as $seat) {
+            $seats[] = array(
+                'id' => $seat->seat_id,
+                'section' => $seat->section,
+                'row_number' => $seat->row_number,
+                'seat_number' => $seat->seat_number,
+                'level' => $seat->level,
+                'x' => $seat->x_coordinate,
+                'y' => $seat->y_coordinate,
+                'pricing_tier' => $seat->pricing_tier,
+                'price' => $seat->price,
+                'is_accessible' => $seat->is_accessible,
+                'is_blocked' => $seat->is_blocked
+            );
+        }
+        
+        // Sort seats for consistent display
+        usort($seats, function($a, $b) {
+            $section_compare = strcmp($a['section'], $b['section']);
+            if ($section_compare !== 0) return $section_compare;
+            
+            $row_compare = intval($a['row_number']) - intval($b['row_number']);
+            if ($row_compare !== 0) return $row_compare;
+            
+            return intval($a['seat_number']) - intval($b['seat_number']);
+        });
+        
+        // Get booked seats (still using event seats table)
+        global $wpdb;
+        $booked_seats = array();
+        if ($event_id) {
+            $bookings_table = $wpdb->prefix . 'hope_seating_event_seats';
+            $booked = $wpdb->get_results($wpdb->prepare(
+                "SELECT seat_id FROM $bookings_table 
+                WHERE event_id = %d AND status IN ('booked', 'reserved')",
+                $event_id
+            ));
+            
+            foreach ($booked as $booking) {
+                $booked_seats[] = $booking->seat_id;
+            }
+        }
+        
+        // Get pricing tiers configuration
+        $pricing_tiers = $pricing_manager->get_pricing_tiers();
+        
         wp_send_json_success(array(
             'venue' => array(
-                'id' => $venue->id,
-                'name' => $venue->name,
-                'total_seats' => $venue->total_seats,
-                'config' => json_decode($venue->configuration, true)
+                'id' => $pricing_map->id,
+                'name' => $pricing_map->name,
+                'total_seats' => count($seats),
+                'config' => array(
+                    'type' => 'theater',
+                    'levels' => array('orchestra', 'balcony'),
+                    'sections' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H')
+                ),
+                'pricing_tiers' => $pricing_tiers
             ),
             'seats' => $seats,
-            'booked_seats' => $booked_seats,
-            'pricing_tiers' => array(
-                'General' => array('price' => '25.00', 'color' => '#4CAF50'),
-                'Premium' => array('price' => '35.00', 'color' => '#2196F3'),
-                'VIP' => array('price' => '50.00', 'color' => '#9C27B0')
-            )
+            'booked_seats' => $booked_seats
         ));
     }
     

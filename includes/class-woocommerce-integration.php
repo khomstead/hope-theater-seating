@@ -241,35 +241,62 @@ class HOPE_WooCommerce_Integration {
         $seating_enabled = get_post_meta($product_id, '_hope_seating_enabled', true);
         $venue_id = get_post_meta($product_id, '_hope_seating_venue_id', true);
         
-        if ($seating_enabled !== 'yes' || !$venue_id) return;
+        error_log("HOPE: Product {$product_id} - seating_enabled: '{$seating_enabled}', venue_id: '{$venue_id}'");
         
-        // Get venue details
-        global $wpdb;
-        
-        // Check if venues table exists
-        $venues_table = $wpdb->prefix . 'hope_seating_venues';
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$venues_table'") == $venues_table;
-        
-        if (!$table_exists) {
-            error_log('HOPE Seating: Venues table does not exist');
+        if ($seating_enabled !== 'yes' || !$venue_id) {
+            error_log("HOPE: Seating interface not rendered - seating_enabled: '{$seating_enabled}', venue_id: '{$venue_id}'");
             return;
         }
         
-        $venue = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$venues_table} WHERE id = %d",
-            $venue_id
-        ));
+        // Use new pricing maps architecture
+        $pricing_map_id = $venue_id; // Actually pricing map ID now
         
-        if (!$venue) {
-            error_log('HOPE Seating: Venue not found for ID ' . $venue_id);
+        if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+            error_log('HOPE Seating: New architecture not available');
+            return;
+        }
+        
+        $pricing_manager = new HOPE_Pricing_Maps_Manager();
+        $pricing_maps = $pricing_manager->get_pricing_maps();
+        
+        // Find the pricing map
+        $pricing_map = null;
+        foreach ($pricing_maps as $map) {
+            if ($map->id == $pricing_map_id) {
+                $pricing_map = $map;
+                break;
+            }
+        }
+        
+        if (!$pricing_map) {
+            error_log('HOPE Seating: Pricing map not found for ID ' . $pricing_map_id);
+            return;
+        }
+        
+        // Get seats count for display
+        $seats_with_pricing = $pricing_manager->get_seats_with_pricing($pricing_map_id);
+        error_log("HOPE: Found " . count($seats_with_pricing) . " seats for pricing map {$pricing_map_id}");
+        
+        // Direct database check
+        global $wpdb;
+        $direct_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->prefix}hope_seating_seat_pricing WHERE pricing_map_id = %d", $pricing_map_id));
+        $physical_count = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}hope_seating_physical_seats");
+        error_log("HOPE DEBUG: Direct DB count for map $pricing_map_id: $direct_count, Physical seats: $physical_count");
+        
+        if (empty($seats_with_pricing)) {
+            error_log('HOPE Seating: No seats found for pricing map ' . $pricing_map_id);
             return;
         }
         
         ?>
-        <div class="hope-seat-selection-interface" data-product-id="<?php echo esc_attr($product_id); ?>">
+        <div class="hope-seat-selection-interface" 
+             data-product-id="<?php echo esc_attr($product_id); ?>"
+             data-venue-id="<?php echo esc_attr($pricing_map_id); ?>"
+             data-venue-name="<?php echo esc_attr($pricing_map->name); ?>"
+             data-total-seats="<?php echo esc_attr(count($seats_with_pricing)); ?>">
             <div class="hope-seat-selection-button-wrapper">
                 <button type="button" class="button alt hope-select-seats-btn" id="hope-select-seats-main">
-                    <span class="btn-text"><?php _e('Select Your Seats', 'hope-seating'); ?></span>
+                    <?php _e('Select Seats', 'hope-seating'); ?>
                 </button>
             </div>
             
@@ -316,6 +343,7 @@ class HOPE_WooCommerce_Integration {
         .hope-select-seats-btn {
             display: inline-flex;
             align-items: center;
+            flex-direction: column;
             gap: 10px;
             padding: 15px 30px;
             font-size: 16px;
@@ -336,6 +364,13 @@ class HOPE_WooCommerce_Integration {
         
         .hope-select-seats-btn .btn-icon {
             font-size: 20px;
+        }
+        
+        .hope-select-seats-btn .btn-subtitle {
+            font-size: 14px;
+            font-weight: 400;
+            opacity: 0.9;
+            margin-top: 5px;
         }
         
         .hope-selected-seats-display {
@@ -636,26 +671,28 @@ class HOPE_WooCommerce_Integration {
             return;
         }
         
-        // Group seats by pricing tier to find appropriate variation
+        // Group seats by pricing tier using new architecture
         $seat_tiers = array();
-        if (class_exists('HOPE_Seat_Manager')) {
-            $venue_id = get_post_meta($product_id, '_hope_seating_venue_id', true);
-            $seat_manager = new HOPE_Seat_Manager($venue_id);
+        $pricing_map_id = get_post_meta($product_id, '_hope_seating_venue_id', true); // Actually pricing map ID
+        
+        if ($pricing_map_id && class_exists('HOPE_Pricing_Maps_Manager')) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+            $seats_with_pricing = $pricing_manager->get_seats_with_pricing($pricing_map_id);
             
-            global $wpdb;
-            $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
+            // Create lookup array for seat IDs to pricing tiers
+            $seat_pricing_lookup = array();
+            foreach ($seats_with_pricing as $seat) {
+                $seat_pricing_lookup[$seat->seat_id] = $seat->pricing_tier;
+            }
             
+            // Group selected seats by pricing tier
             foreach ($selected_seats as $seat_id) {
-                $seat_data = $wpdb->get_row($wpdb->prepare(
-                    "SELECT pricing_tier FROM $seat_maps_table WHERE venue_id = %d AND seat_id = %s",
-                    $venue_id, $seat_id
-                ));
-                
-                if ($seat_data) {
-                    if (!isset($seat_tiers[$seat_data->pricing_tier])) {
-                        $seat_tiers[$seat_data->pricing_tier] = 0;
+                if (isset($seat_pricing_lookup[$seat_id])) {
+                    $pricing_tier = $seat_pricing_lookup[$seat_id];
+                    if (!isset($seat_tiers[$pricing_tier])) {
+                        $seat_tiers[$pricing_tier] = 0;
                     }
-                    $seat_tiers[$seat_data->pricing_tier]++;
+                    $seat_tiers[$pricing_tier]++;
                 }
             }
         }

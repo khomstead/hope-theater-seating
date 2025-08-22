@@ -17,7 +17,11 @@ class HOPE_Seating_Database {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         
-        // Venues table
+        // OLD VENUE SYSTEM - DISABLED
+        // Tables below are deprecated in favor of new separated architecture
+        
+        /*
+        // DEPRECATED: Venues table (replaced by pricing_maps)
         $venues_table = $wpdb->prefix . 'hope_seating_venues';
         $venues_sql = "CREATE TABLE IF NOT EXISTS $venues_table (
             id int(11) NOT NULL AUTO_INCREMENT,
@@ -33,10 +37,9 @@ class HOPE_Seating_Database {
             PRIMARY KEY (id),
             KEY status (status)
         ) $charset_collate;";
-        
         dbDelta($venues_sql);
         
-        // Seat maps table
+        // DEPRECATED: Seat maps table (replaced by physical_seats + seat_pricing)
         $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
         $seat_maps_sql = "CREATE TABLE IF NOT EXISTS $seat_maps_table (
             id int(11) NOT NULL AUTO_INCREMENT,
@@ -61,8 +64,74 @@ class HOPE_Seating_Database {
             KEY section (section),
             KEY pricing_tier (pricing_tier)
         ) $charset_collate;";
-        
         dbDelta($seat_maps_sql);
+        */
+        
+        // NEW: Physical seats table (fixed layout, no pricing)
+        $physical_seats_table = $wpdb->prefix . 'hope_seating_physical_seats';
+        $physical_seats_sql = "CREATE TABLE IF NOT EXISTS $physical_seats_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            theater_id varchar(50) NOT NULL DEFAULT 'hope_main_theater',
+            seat_id varchar(50) NOT NULL,
+            section varchar(10) NOT NULL,
+            `row_number` int(11) NOT NULL,
+            seat_number int(11) NOT NULL,
+            level varchar(20) NOT NULL DEFAULT 'orchestra',
+            x_coordinate decimal(10,2) NOT NULL,
+            y_coordinate decimal(10,2) NOT NULL,
+            seat_type varchar(20) NOT NULL DEFAULT 'standard',
+            is_accessible boolean NOT NULL DEFAULT false,
+            is_blocked boolean NOT NULL DEFAULT false,
+            notes text,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY theater_seat (theater_id, seat_id),
+            KEY theater_id (theater_id),
+            KEY section (section),
+            KEY level (level)
+        ) $charset_collate;";
+        
+        dbDelta($physical_seats_sql);
+        
+        // NEW: Pricing maps table (different pricing configurations)
+        $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
+        $pricing_maps_sql = "CREATE TABLE IF NOT EXISTS $pricing_maps_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            name varchar(100) NOT NULL,
+            description text,
+            theater_id varchar(50) NOT NULL DEFAULT 'hope_main_theater',
+            is_default boolean NOT NULL DEFAULT false,
+            status varchar(20) NOT NULL DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY theater_id (theater_id),
+            KEY status (status)
+        ) $charset_collate;";
+        
+        dbDelta($pricing_maps_sql);
+        
+        // NEW: Seat pricing table (links physical seats to pricing tiers per map)
+        $seat_pricing_table = $wpdb->prefix . 'hope_seating_seat_pricing';
+        $seat_pricing_sql = "CREATE TABLE IF NOT EXISTS $seat_pricing_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            pricing_map_id int(11) NOT NULL,
+            physical_seat_id int(11) NOT NULL,
+            pricing_tier varchar(10) NOT NULL,
+            price decimal(10,2) NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY map_seat (pricing_map_id, physical_seat_id),
+            KEY pricing_map_id (pricing_map_id),
+            KEY physical_seat_id (physical_seat_id),
+            KEY pricing_tier (pricing_tier),
+            FOREIGN KEY (pricing_map_id) REFERENCES $pricing_maps_table(id) ON DELETE CASCADE,
+            FOREIGN KEY (physical_seat_id) REFERENCES $physical_seats_table(id) ON DELETE CASCADE
+        ) $charset_collate;";
+        
+        dbDelta($seat_pricing_sql);
         
         // Event seats table
         $event_seats_table = $wpdb->prefix . 'hope_seating_event_seats';
@@ -167,9 +236,17 @@ class HOPE_Seating_Database {
         global $wpdb;
         
         $tables = array(
+            // NEW ARCHITECTURE
+            'physical_seats' => $wpdb->prefix . 'hope_seating_physical_seats',
+            'pricing_maps' => $wpdb->prefix . 'hope_seating_pricing_maps',
+            'seat_pricing' => $wpdb->prefix . 'hope_seating_seat_pricing',
+            
+            // LEGACY - Still used for bookings
+            'event_seats' => $wpdb->prefix . 'hope_seating_event_seats',
+            
+            // DEPRECATED - Old venue system
             'venues' => $wpdb->prefix . 'hope_seating_venues',
             'seat_maps' => $wpdb->prefix . 'hope_seating_seat_maps',
-            'event_seats' => $wpdb->prefix . 'hope_seating_event_seats',
             'pricing_tiers' => $wpdb->prefix . 'hope_seating_pricing_tiers'
         );
         

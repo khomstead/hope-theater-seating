@@ -63,24 +63,37 @@ class HOPE_Seating_Integration {
     public function add_venue_selection() {
         global $post;
         
-        // Get venues from database
-        global $wpdb;
-        $venues = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}hope_seating_venues ORDER BY name");
+        // Get pricing maps from new architecture
+        $pricing_maps = array();
+        $venue_options = array('' => __('Select a seat map', 'hope-seating'));
+        
+        if (class_exists('HOPE_Pricing_Maps_Manager')) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+            $pricing_maps = $pricing_manager->get_pricing_maps();
+            
+            foreach ($pricing_maps as $map) {
+                // Get seat count for this pricing map
+                $seats_with_pricing = $pricing_manager->get_seats_with_pricing($map->id);
+                $seat_count = count($seats_with_pricing);
+                $venue_options[$map->id] = $map->name . ' (' . $seat_count . ' seats)';
+            }
+        } else {
+            // Fallback to old system if new classes not available
+            global $wpdb;
+            $venues = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}hope_seating_venues ORDER BY name");
+            foreach ($venues as $venue) {
+                $venue_options[$venue->id] = $venue->name . ' (' . $venue->total_seats . ' seats)';
+            }
+        }
         
         $selected_venue = get_post_meta($post->ID, '_hope_venue_id', true);
         $product_type = get_post_meta($post->ID, 'product-type', true);
         
         echo '<div class="options_group hope_seating_venue">';
         
-        // Venue selection dropdown
-        $venue_options = array('' => __('Select a venue', 'hope-seating'));
-        foreach ($venues as $venue) {
-            $venue_options[$venue->id] = $venue->name . ' (' . $venue->total_seats . ' seats)';
-        }
-        
         woocommerce_wp_select(array(
             'id' => '_hope_venue_id',
-            'label' => __('Theater Venue', 'hope-seating'),
+            'label' => __('Seat Map', 'hope-seating'),
             'options' => $venue_options,
             'desc_tip' => true,
             'description' => __('Select the theater venue for this event', 'hope-seating'),
@@ -222,27 +235,34 @@ class HOPE_Seating_Integration {
             return;
         }
         
-        // Get venue seat data from database
-        global $wpdb;
-        $seats = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}hope_seating_seat_maps WHERE venue_id = %d",
-            $venue_id
-        ));
+        // Get pricing map data using new architecture
+        $pricing_map_id = $venue_id; // Actually pricing map ID now
         
-        if (empty($seats)) {
-            wp_send_json_error(array('message' => 'No seats found for this venue. Please configure venue seats first.'));
+        if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+            wp_send_json_error(array('message' => 'New seating architecture not available'));
+            return;
+        }
+        
+        $pricing_manager = new HOPE_Pricing_Maps_Manager();
+        $seats_with_pricing = $pricing_manager->get_seats_with_pricing($pricing_map_id);
+        
+        if (empty($seats_with_pricing)) {
+            wp_send_json_error(array('message' => 'No seats found for this pricing map. Please configure seats first.'));
             return;
         }
         
         // Count seats by pricing tier
         $tier_counts = array();
-        foreach ($seats as $seat) {
+        foreach ($seats_with_pricing as $seat) {
             $tier = $seat->pricing_tier;
             if (!isset($tier_counts[$tier])) {
                 $tier_counts[$tier] = 0;
             }
             $tier_counts[$tier]++;
         }
+        
+        // Get pricing tiers configuration
+        $pricing_tiers = $pricing_manager->get_pricing_tiers();
         
         // Create the attribute for variations
         $attribute_name = 'Seating Tier';
@@ -254,7 +274,7 @@ class HOPE_Seating_Integration {
         // Create or update the seating tier attribute
         $attribute = new WC_Product_Attribute();
         $attribute->set_name($attribute_name);
-        $attribute->set_options(array_keys($this->pricing_tiers));
+        $attribute->set_options(array_keys($pricing_tiers));
         $attribute->set_position(0);
         $attribute->set_visible(true);
         $attribute->set_variation(true);
@@ -268,7 +288,7 @@ class HOPE_Seating_Integration {
         $data_store = $product->get_data_store();
         
         foreach ($tier_counts as $tier => $count) {
-            if ($count > 0 && isset($this->pricing_tiers[$tier])) {
+            if ($count > 0 && isset($pricing_tiers[$tier])) {
                 // Check if variation already exists
                 $variation_id = $this->find_matching_variation($product_id, $tier);
                 
@@ -278,19 +298,23 @@ class HOPE_Seating_Integration {
                     $variation->set_parent_id($product_id);
                     $variation->set_attributes(array('seating-tier' => $tier));
                     
-                    // Set price
-                    $price = $this->pricing_tiers[$tier]['default_price'];
-                    $variation->set_regular_price($price);
-                    $variation->set_price($price);
+                    // Set PLACEHOLDER pricing - admin will update manually for each event
+                    // Use default pricing tier values as placeholders
+                    $placeholder_price = $pricing_tiers[$tier]['default_price'];
+                    $variation->set_regular_price($placeholder_price);
+                    $variation->set_price($placeholder_price);
                     
-                    // Set stock
+                    // Set stock quantity to match seat count
                     $variation->set_manage_stock(true);
                     $variation->set_stock_quantity($count);
                     $variation->set_stock_status('instock');
                     
-                    // Set name
-                    $tier_label = $this->pricing_tiers[$tier]['label'];
+                    // Set descriptive name
+                    $tier_label = $pricing_tiers[$tier]['name'];
                     $variation->set_name($product->get_name() . ' - ' . $tier_label);
+                    
+                    // Add a note about placeholder pricing
+                    $variation->set_description("Placeholder pricing - update manually for each event. $count seats available in this tier.");
                     
                     // Set as downloadable and virtual
                     $variation->set_downloadable(true);
@@ -315,8 +339,8 @@ class HOPE_Seating_Integration {
         wc_delete_product_transients($product_id);
         
         $message = $created_count > 0 
-            ? sprintf('Successfully created %d variations with seat inventory.', $created_count)
-            : 'Variations updated with current seat inventory.';
+            ? sprintf('Successfully created %d variations with placeholder pricing. Please update variation prices manually for each event.', $created_count)
+            : 'Variations updated with current seat inventory. Please review pricing for each variation.';
             
         wp_send_json_success(array('message' => $message));
     }

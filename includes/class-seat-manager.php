@@ -19,9 +19,9 @@ class HOPE_Seat_Manager {
     private $seat_distribution = array(
         'orchestra' => array(
             'A' => array(
-                'rows' => array('A', 'B', 'C', 'D', 'E', 'F', 'G'),
-                'seats_per_row' => array('A' => 6, 'B' => 7, 'C' => 7, 'D' => 8, 'E' => 8, 'F' => 8, 'G' => 9),
-                'pricing' => 'P2',
+                'rows' => array(1, 2, 3, 4, 5, 6, 7, 8),
+                'seats_per_row' => array(1 => 8, 2 => 8, 3 => 8, 4 => 8, 5 => 8, 6 => 8, 7 => 8, 8 => 8),
+                'pricing' => 'P1', // Premium seats closest to stage
                 'angle_start' => -60,
                 'angle_end' => -30
             ),
@@ -85,9 +85,9 @@ class HOPE_Seat_Manager {
      * Pricing tier configuration
      */
     private $pricing_tiers = array(
-        'P1' => array('name' => 'VIP', 'price' => 50, 'color' => '#9b59b6'),
-        'P2' => array('name' => 'Premium', 'price' => 35, 'color' => '#3498db'),
-        'P3' => array('name' => 'General', 'price' => 25, 'color' => '#17a2b8'),
+        'P1' => array('name' => 'Premium', 'price' => 50, 'color' => '#9b59b6'),
+        'P2' => array('name' => 'Standard', 'price' => 35, 'color' => '#3498db'),
+        'P3' => array('name' => 'Value', 'price' => 25, 'color' => '#17a2b8'),
         'AA' => array('name' => 'Accessible', 'price' => 25, 'color' => '#e67e22')
     );
     

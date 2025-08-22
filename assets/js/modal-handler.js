@@ -306,7 +306,12 @@ class HOPEModalHandler {
     }
     
     confirmSeats() {
+        console.log('confirmSeats called, selectedSeats size:', this.seatMap ? this.seatMap.selectedSeats.size : 'no seatMap');
+        
         if (!this.seatMap || this.seatMap.selectedSeats.size === 0) {
+            // If no seats selected, just close modal (user chose "Continue with No Seats")
+            console.log('No seats selected, calling closeModal()');
+            this.closeModal(true); // Skip confirmation since no seats are selected
             return;
         }
         

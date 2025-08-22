@@ -66,14 +66,26 @@ class HOPE_Modal_Handler {
         
         if ($seating_enabled !== 'yes' || !$venue_id) return;
         
-        // Get venue details
-        global $wpdb;
-        $venue = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}hope_seating_venues WHERE id = %d",
-            $venue_id
-        ));
+        // Use new pricing maps architecture
+        $pricing_map_id = $venue_id; // Actually pricing map ID now
         
-        if (!$venue) {
+        if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+            return;
+        }
+        
+        $pricing_manager = new HOPE_Pricing_Maps_Manager();
+        $pricing_maps = $pricing_manager->get_pricing_maps();
+        
+        // Find the pricing map
+        $pricing_map = null;
+        foreach ($pricing_maps as $map) {
+            if ($map->id == $pricing_map_id) {
+                $pricing_map = $map;
+                break;
+            }
+        }
+        
+        if (!$pricing_map) {
             return;
         }
         ?>
@@ -111,7 +123,7 @@ class HOPE_Modal_Handler {
                                 </div>
                                 
                                 <div class="seating-wrapper" id="seating-wrapper">
-                                    <svg id="seat-map" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet">
+                                    <svg id="seat-map" viewBox="0 0 1200 1200" preserveAspectRatio="xMidYMid meet">
                                         <!-- Seats will be generated dynamically via JavaScript -->
                                     </svg>
                                 </div>

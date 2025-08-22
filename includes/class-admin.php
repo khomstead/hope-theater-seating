@@ -66,6 +66,15 @@ class HOPE_Seating_Admin {
             'hope-seating-settings',
             array($this, 'settings_page')
         );
+        
+        add_submenu_page(
+            'hope-seating',
+            'Diagnostics',
+            'Diagnostics',
+            'manage_options',
+            'hope-seating-diagnostics',
+            array($this, 'diagnostics_page')
+        );
     }
     
     public function init_settings() {
@@ -76,13 +85,36 @@ class HOPE_Seating_Admin {
     public function main_page() {
         global $wpdb;
         
-        // Get statistics
-        $venues_table = $wpdb->prefix . 'hope_seating_venues';
-        $seats_table = $wpdb->prefix . 'hope_seating_seat_maps';
+        // Get statistics from new architecture (with fallback to old system)
+        $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
+        $physical_seats_table = $wpdb->prefix . 'hope_seating_physical_seats';
         $events_table = $wpdb->prefix . 'hope_seating_event_seats';
         
-        $total_venues = $wpdb->get_var("SELECT COUNT(*) FROM $venues_table");
-        $total_seats = $wpdb->get_var("SELECT COUNT(*) FROM $seats_table");
+        // Try new architecture first
+        $total_venues = 0;
+        $total_seats = 0;
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '$pricing_maps_table'") == $pricing_maps_table) {
+            $total_venues = $wpdb->get_var("SELECT COUNT(*) FROM $pricing_maps_table WHERE status = 'active'");
+        }
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '$physical_seats_table'") == $physical_seats_table) {
+            $total_seats = $wpdb->get_var("SELECT COUNT(*) FROM $physical_seats_table");
+        }
+        
+        // Fallback to old system if new tables are empty
+        if ($total_venues == 0 || $total_seats == 0) {
+            $venues_table = $wpdb->prefix . 'hope_seating_venues';
+            $seats_table = $wpdb->prefix . 'hope_seating_seat_maps';
+            
+            if ($total_venues == 0) {
+                $total_venues = $wpdb->get_var("SELECT COUNT(*) FROM $venues_table");
+            }
+            if ($total_seats == 0) {
+                $total_seats = $wpdb->get_var("SELECT COUNT(*) FROM $seats_table");
+            }
+        }
+        
         $booked_seats = $wpdb->get_var("SELECT COUNT(*) FROM $events_table WHERE status = 'booked'");
         
         ?>
@@ -92,12 +124,17 @@ class HOPE_Seating_Admin {
             <div class="hope-seating-dashboard">
                 <div class="hope-stats-grid">
                     <div class="hope-stat-box">
-                        <h3><?php _e('Venues', 'hope-seating'); ?></h3>
+                        <h3><?php _e('Seat Maps', 'hope-seating'); ?></h3>
                         <p class="hope-stat-number"><?php echo esc_html($total_venues); ?></p>
                     </div>
                     <div class="hope-stat-box">
                         <h3><?php _e('Total Seats', 'hope-seating'); ?></h3>
                         <p class="hope-stat-number"><?php echo esc_html($total_seats); ?></p>
+                        <?php if (class_exists('HOPE_Pricing_Maps_Manager')): ?>
+                            <p class="hope-stat-detail">Using new architecture</p>
+                        <?php else: ?>
+                            <p class="hope-stat-detail">Using legacy system</p>
+                        <?php endif; ?>
                     </div>
                     <div class="hope-stat-box">
                         <h3><?php _e('Booked Seats', 'hope-seating'); ?></h3>
@@ -105,10 +142,39 @@ class HOPE_Seating_Admin {
                     </div>
                 </div>
                 
+                <?php if (class_exists('HOPE_Pricing_Maps_Manager')): ?>
+                    <?php
+                    // Show pricing breakdown from new architecture
+                    $pricing_manager = new HOPE_Pricing_Maps_Manager();
+                    $pricing_maps = $pricing_manager->get_pricing_maps();
+                    
+                    if (!empty($pricing_maps)) {
+                        $default_map = $pricing_maps[0]; // First map should be default
+                        $pricing_summary = $pricing_manager->get_pricing_summary($default_map->id);
+                        if (!empty($pricing_summary)): ?>
+                            <div class="hope-pricing-summary" style="margin: 20px 0; padding: 20px; background: #f0f8ff; border-radius: 5px; border-left: 4px solid #2271b1;">
+                                <h3>Current Pricing Breakdown (<?php echo esc_html($default_map->name); ?>)</h3>
+                                <div class="hope-pricing-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0;">
+                                    <?php foreach ($pricing_summary as $tier_code => $tier_data): ?>
+                                        <div class="hope-pricing-tier" style="padding: 15px; background: white; border-radius: 5px; border-left: 3px solid <?php echo esc_attr($tier_data['color']); ?>;">
+                                            <h4 style="margin: 0 0 5px 0; color: <?php echo esc_attr($tier_data['color']); ?>;">
+                                                <?php echo esc_html($tier_data['name']); ?> (<?php echo esc_html($tier_code); ?>)
+                                            </h4>
+                                            <p style="margin: 0; font-size: 18px; font-weight: bold;"><?php echo esc_html($tier_data['count']); ?> seats</p>
+                                            <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">$<?php echo number_format($tier_data['avg_price'], 2); ?> avg</p>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php endif;
+                    }
+                    ?>
+                <?php endif; ?>
+                
                 <div class="hope-actions">
                     <h2><?php _e('Quick Actions', 'hope-seating'); ?></h2>
                     <a href="<?php echo admin_url('admin.php?page=hope-seating-venues'); ?>" class="button button-primary">
-                        <?php _e('Manage Venues', 'hope-seating'); ?>
+                        <?php _e('Manage Seat Maps', 'hope-seating'); ?>
                     </a>
                     <a href="<?php echo admin_url('admin.php?page=hope-seating-seats'); ?>" class="button">
                         <?php _e('Edit Seat Maps', 'hope-seating'); ?>
@@ -140,6 +206,12 @@ class HOPE_Seating_Admin {
             color: #2271b1;
             margin: 10px 0;
         }
+        .hope-stat-detail {
+            margin: 5px 0 0 0;
+            font-size: 12px;
+            color: #666;
+            font-style: italic;
+        }
         .hope-actions {
             margin-top: 30px;
         }
@@ -150,49 +222,130 @@ class HOPE_Seating_Admin {
         <?php
     }
     
-    // Venues management page  
+    // Seat Maps management page  
     public function venues_page() {
         global $wpdb;
-        $venues_table = $wpdb->prefix . 'hope_seating_venues';
-        $venues = $wpdb->get_results("SELECT * FROM $venues_table ORDER BY name");
+        
+        // Try new architecture first
+        $pricing_maps = array();
+        if (class_exists('HOPE_Pricing_Maps_Manager')) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+            $pricing_maps = $pricing_manager->get_pricing_maps();
+        }
+        
+        // Fallback to old system if no pricing maps
+        $venues = array();
+        if (empty($pricing_maps)) {
+            $venues_table = $wpdb->prefix . 'hope_seating_venues';
+            $venues = $wpdb->get_results("SELECT * FROM $venues_table ORDER BY name");
+        }
         
         ?>
         <div class="wrap">
-            <h1><?php _e('Venue Management', 'hope-seating'); ?></h1>
+            <h1><?php _e('Seat Map Management', 'hope-seating'); ?></h1>
             
-            <table class="wp-list-table widefat fixed striped">
-                <thead>
-                    <tr>
-                        <th><?php _e('ID', 'hope-seating'); ?></th>
-                        <th><?php _e('Name', 'hope-seating'); ?></th>
-                        <th><?php _e('Slug', 'hope-seating'); ?></th>
-                        <th><?php _e('Total Seats', 'hope-seating'); ?></th>
-                        <th><?php _e('Status', 'hope-seating'); ?></th>
-                        <th><?php _e('Actions', 'hope-seating'); ?></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($venues as $venue): ?>
+            <?php if (!empty($pricing_maps)): ?>
+                <div class="hope-new-architecture" style="margin: 20px 0; padding: 15px; background: #d1ecf1; border-left: 4px solid #bee5eb; border-radius: 5px;">
+                    <h3 style="margin-top: 0;">✅ Using New Separated Architecture</h3>
+                    <p>Physical seats and pricing configurations are now managed separately for better flexibility.</p>
+                </div>
+                
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
                         <tr>
-                            <td><?php echo esc_html($venue->id); ?></td>
-                            <td><strong><?php echo esc_html($venue->name); ?></strong></td>
-                            <td><?php echo esc_html($venue->slug); ?></td>
-                            <td><?php echo esc_html($venue->total_seats); ?></td>
-                            <td>
-                                <span class="status-<?php echo esc_attr($venue->status); ?>">
-                                    <?php echo esc_html($venue->status); ?>
-                                </span>
-                            </td>
-                            <td>
-                                <a href="<?php echo admin_url('admin.php?page=hope-seating-seats&venue_id=' . $venue->id); ?>" 
-                                   class="button button-small">
-                                    <?php _e('Edit Seats', 'hope-seating'); ?>
-                                </a>
-                            </td>
+                            <th><?php _e('ID', 'hope-seating'); ?></th>
+                            <th><?php _e('Seat Map Name', 'hope-seating'); ?></th>
+                            <th><?php _e('Description', 'hope-seating'); ?></th>
+                            <th><?php _e('Total Seats', 'hope-seating'); ?></th>
+                            <th><?php _e('Pricing Breakdown', 'hope-seating'); ?></th>
+                            <th><?php _e('Status', 'hope-seating'); ?></th>
                         </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pricing_maps as $map): 
+                            $seats_with_pricing = $pricing_manager->get_seats_with_pricing($map->id);
+                            $total_seats = count($seats_with_pricing);
+                            $pricing_summary = $pricing_manager->get_pricing_summary($map->id);
+                        ?>
+                            <tr>
+                                <td><?php echo esc_html($map->id); ?></td>
+                                <td><strong><?php echo esc_html($map->name); ?></strong>
+                                    <?php if ($map->is_default): ?>
+                                        <span style="background: #2271b1; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 5px;">DEFAULT</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?php echo esc_html($map->description); ?></td>
+                                <td><strong><?php echo esc_html($total_seats); ?></strong></td>
+                                <td>
+                                    <?php if (!empty($pricing_summary)): ?>
+                                        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                            <?php foreach ($pricing_summary as $tier_code => $tier_data): ?>
+                                                <span style="background: <?php echo esc_attr($tier_data['color']); ?>; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">
+                                                    <?php echo esc_html($tier_code); ?>: <?php echo esc_html($tier_data['count']); ?>
+                                                </span>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <span style="color: #666;">No pricing data</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="status-<?php echo esc_attr($map->status); ?>">
+                                        <?php echo esc_html($map->status); ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                
+            <?php elseif (!empty($venues)): ?>
+                <div class="hope-legacy-warning" style="margin: 20px 0; padding: 15px; background: #fff3cd; border-left: 4px solid #ffeaa7; border-radius: 5px;">
+                    <h3 style="margin-top: 0;">⚠️ Using Legacy Venue System</h3>
+                    <p>Consider migrating to the new separated architecture for better flexibility.</p>
+                </div>
+                
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th><?php _e('ID', 'hope-seating'); ?></th>
+                            <th><?php _e('Name', 'hope-seating'); ?></th>
+                            <th><?php _e('Slug', 'hope-seating'); ?></th>
+                            <th><?php _e('Total Seats', 'hope-seating'); ?></th>
+                            <th><?php _e('Status', 'hope-seating'); ?></th>
+                            <th><?php _e('Actions', 'hope-seating'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($venues as $venue): ?>
+                            <tr>
+                                <td><?php echo esc_html($venue->id); ?></td>
+                                <td><strong><?php echo esc_html($venue->name); ?></strong></td>
+                                <td><?php echo esc_html($venue->slug); ?></td>
+                                <td><?php echo esc_html($venue->total_seats); ?></td>
+                                <td>
+                                    <span class="status-<?php echo esc_attr($venue->status); ?>">
+                                        <?php echo esc_html($venue->status); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="<?php echo admin_url('admin.php?page=hope-seating-seats&venue_id=' . $venue->id); ?>" 
+                                       class="button button-small">
+                                        <?php _e('Edit Seats', 'hope-seating'); ?>
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                
+            <?php else: ?>
+                <div class="hope-no-data" style="margin: 20px 0; padding: 15px; background: #f8d7da; border-left: 4px solid #f5c6cb; border-radius: 5px;">
+                    <h3 style="margin-top: 0;">❌ No Seat Maps Found</h3>
+                    <p>No seat maps or venues found. The plugin may need to be reinitialized.</p>
+                </div>
+            <?php endif; ?>
+            
         </div>
         <?php
     }
@@ -229,6 +382,429 @@ class HOPE_Seating_Admin {
         <?php
     }
     
+    // Diagnostics page for debugging seat assignments
+    public function diagnostics_page() {
+        global $wpdb;
+        
+        $physical_seats_table = $wpdb->prefix . 'hope_seating_physical_seats';
+        $seat_pricing_table = $wpdb->prefix . 'hope_seating_seat_pricing';
+        $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
+        
+        // Handle manual fix request
+        if (isset($_GET['fix_assignments']) && $_GET['fix_assignments'] == '1') {
+            $this->manual_fix_seat_assignments();
+            echo '<div class="notice notice-success is-dismissible"><p><strong>Success!</strong> Seat assignments have been updated. Please refresh to see new counts.</p></div>';
+        }
+        
+        // Handle complete fix for product 2272
+        if (isset($_GET['fix_map_214']) && $_GET['fix_map_214'] == '1') {
+            try {
+                // Step 1: Create physical seats
+                if (class_exists('HOPE_Physical_Seats_Manager')) {
+                    $physical_manager = new HOPE_Physical_Seats_Manager();
+                    $seats_created = $physical_manager->populate_physical_seats();
+                    error_log("HOPE: Created $seats_created physical seats");
+                }
+                
+                // Step 2: Create pricing assignments for map 214
+                if (class_exists('HOPE_Pricing_Maps_Manager')) {
+                    $pricing_manager = new HOPE_Pricing_Maps_Manager();
+                    $assignment_count = $pricing_manager->regenerate_pricing_assignments(214);
+                    error_log("HOPE: Created $assignment_count pricing assignments for map 214");
+                }
+                
+                echo '<div class="notice notice-success is-dismissible"><p><strong>Success!</strong> Created ' . $seats_created . ' physical seats and ' . $assignment_count . ' pricing assignments for map 214. Product 2272 should now work!</p></div>';
+                
+            } catch (Exception $e) {
+                echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> ' . esc_html($e->getMessage()) . '</p></div>';
+            }
+        }
+
+        // Handle physical seats regeneration request
+        if (isset($_GET['regenerate_seats']) && $_GET['regenerate_seats'] == '1') {
+            // Ensure classes are loaded
+            if (!class_exists('HOPE_Physical_Seats_Manager')) {
+                require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-physical-seats.php';
+            }
+            if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+                require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-pricing-maps.php';
+            }
+            
+            try {
+                if (class_exists('HOPE_Physical_Seats_Manager')) {
+                    $physical_manager = new HOPE_Physical_Seats_Manager();
+                    $seats_created = $physical_manager->populate_physical_seats();
+                    
+                    // Also fix pricing assignments after regenerating physical seats
+                    if (class_exists('HOPE_Pricing_Maps_Manager')) {
+                        $pricing_manager = new HOPE_Pricing_Maps_Manager();
+                        // Get ALL pricing maps and regenerate for each
+                        $pricing_maps = $pricing_manager->get_pricing_maps();
+                        if (!empty($pricing_maps)) {
+                            foreach ($pricing_maps as $map) {
+                                $assignment_count = $pricing_manager->regenerate_pricing_assignments($map->id);
+                                error_log("HOPE: Regenerated $assignment_count pricing assignments for map {$map->id} ({$map->name})");
+                            }
+                        } else {
+                            error_log("HOPE: No pricing maps found for regeneration");
+                        }
+                    }
+                    
+                    echo '<div class="notice notice-success is-dismissible"><p><strong>Success!</strong> Regenerated ' . $seats_created . ' physical seats with corrected section positioning. Section A is now leftmost, Section E is rightmost from audience perspective.</p></div>';
+                } else {
+                    echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> Physical seats manager class could not be loaded.</p></div>';
+                }
+            } catch (Exception $e) {
+                echo '<div class="notice notice-error is-dismissible"><p><strong>Error:</strong> ' . esc_html($e->getMessage()) . '</p></div>';
+            }
+        }
+        
+        ?>
+        <div class="wrap">
+            <h1><?php _e('HOPE Seating Diagnostics', 'hope-seating'); ?></h1>
+            
+            <?php
+            // Get current state
+            $current_counts = $wpdb->get_results("
+                SELECT sp.pricing_tier, COUNT(*) as count 
+                FROM $seat_pricing_table sp
+                GROUP BY sp.pricing_tier
+                ORDER BY sp.pricing_tier
+            ");
+            ?>
+            
+            <h2>Current vs Target Seat Counts</h2>
+            <table class="wp-list-table widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th>Tier</th>
+                        <th>Current Count</th>
+                        <th>Target Count</th>
+                        <th>Difference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
+                    $targets = array('P1' => 108, 'P2' => 292, 'P3' => 88, 'AA' => 9);
+                    $currents = array();
+                    
+                    foreach ($current_counts as $tier) {
+                        $currents[$tier->pricing_tier] = $tier->count;
+                    }
+                    
+                    $total_current = 0;
+                    foreach ($targets as $tier => $target) {
+                        $current = isset($currents[$tier]) ? $currents[$tier] : 0;
+                        $diff = $target - $current;
+                        $total_current += $current;
+                        
+                        echo "<tr>";
+                        echo "<td><strong>$tier</strong></td>";
+                        echo "<td>$current</td>";
+                        echo "<td>$target</td>";
+                        echo "<td style='color: " . ($diff == 0 ? 'green' : 'red') . "'>$diff</td>";
+                        echo "</tr>";
+                    }
+                    ?>
+                </tbody>
+            </table>
+            <p><strong>Total Current: <?php echo $total_current; ?> seats | Total Target: 497 seats</strong></p>
+            
+            <?php
+            // Section breakdown
+            $section_breakdown = $wpdb->get_results("
+                SELECT ps.section, sp.pricing_tier, COUNT(*) as count
+                FROM $physical_seats_table ps
+                JOIN $seat_pricing_table sp ON ps.id = sp.physical_seat_id
+                GROUP BY ps.section, sp.pricing_tier
+                ORDER BY ps.section, sp.pricing_tier
+            ");
+            ?>
+            
+            <h2>Current Section Breakdown</h2>
+            <table class="wp-list-table widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th>Section</th>
+                        <th>P1</th>
+                        <th>P2</th>
+                        <th>P3</th>
+                        <th>AA</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
+                    $sections = array();
+                    foreach ($section_breakdown as $row) {
+                        if (!isset($sections[$row->section])) {
+                            $sections[$row->section] = array('P1' => 0, 'P2' => 0, 'P3' => 0, 'AA' => 0);
+                        }
+                        $sections[$row->section][$row->pricing_tier] = $row->count;
+                    }
+                    
+                    foreach ($sections as $section => $counts) {
+                        $total = array_sum($counts);
+                        echo "<tr>";
+                        echo "<td><strong>Section $section</strong></td>";
+                        echo "<td>{$counts['P1']}</td>";
+                        echo "<td>{$counts['P2']}</td>";
+                        echo "<td>{$counts['P3']}</td>";
+                        echo "<td>{$counts['AA']}</td>";
+                        echo "<td><strong>$total</strong></td>";
+                        echo "</tr>";
+                    }
+                    ?>
+                </tbody>
+            </table>
+            
+            <h2>Manual Assignment Fix</h2>
+            <p>This will reassign seats to match your exact spreadsheet targets:</p>
+            <ul>
+                <li><strong>P1:</strong> 108 seats (Premium)</li>
+                <li><strong>P2:</strong> 292 seats (Standard)</li>
+                <li><strong>P3:</strong> 88 seats (Value)</li>
+                <li><strong>AA:</strong> 9 seats (Accessible)</li>
+            </ul>
+            
+            <?php $fix_url = admin_url('admin.php?page=hope-seating-diagnostics&fix_assignments=1'); ?>
+            <?php $regenerate_url = admin_url('admin.php?page=hope-seating-diagnostics&regenerate_seats=1'); ?>
+            <?php $fix_214_url = admin_url('admin.php?page=hope-seating-diagnostics&fix_map_214=1'); ?>
+            <p>
+                <a href="<?php echo esc_url($fix_url); ?>" 
+                   class="button button-primary" 
+                   onclick="return confirm('Are you sure you want to reassign all seats to match the spreadsheet targets? This cannot be undone.');">
+                    Fix Seat Assignments Now
+                </a>
+                
+                <a href="<?php echo esc_url($regenerate_url); ?>" 
+                   class="button button-secondary" 
+                   onclick="return confirm('Are you sure you want to regenerate all physical seats with corrected section positioning? This will fix the visual layout but will take a moment.');"
+                   style="margin-left: 10px;">
+                    Regenerate Seats with Corrected Layout
+                </a>
+                
+                <a href="<?php echo esc_url($fix_214_url); ?>" 
+                   class="button button-secondary" 
+                   onclick="return confirm('Fix pricing map 214 specifically for your product?');"
+                   style="margin-left: 10px; background: #e74c3c; border-color: #e74c3c;">
+                    Fix Map 214 (For Product 2272)
+                </a>
+            </p>
+            
+            <h3>Section Layout Fix</h3>
+            <p>If sections appear in the wrong order on the visual map (Section A should be leftmost, Section E rightmost from audience perspective), use the "Regenerate Seats" button above. This will:</p>
+            <ul>
+                <li>Recalculate all seat coordinates with corrected section positioning</li>
+                <li>Place Section A on the left side of the stage</li>
+                <li>Place Section E on the right side of the stage</li>
+                <li>Maintain all pricing assignments</li>
+            </ul>
+        </div>
+        <?php
+    }
+    
+    // Manual fix for seat assignments
+    private function manual_fix_seat_assignments() {
+        global $wpdb;
+        
+        $physical_seats_table = $wpdb->prefix . 'hope_seating_physical_seats';
+        $seat_pricing_table = $wpdb->prefix . 'hope_seating_seat_pricing';
+        $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
+        
+        // Get the pricing map
+        $pricing_map = $wpdb->get_row("SELECT * FROM $pricing_maps_table LIMIT 1");
+        if (!$pricing_map) {
+            return false;
+        }
+        
+        // Get all physical seats
+        $all_seats = $wpdb->get_results("
+            SELECT * FROM $physical_seats_table 
+            ORDER BY section, `row_number`, seat_number
+        ");
+        
+        // Clear existing assignments
+        $deleted_count = $wpdb->query($wpdb->prepare(
+            "DELETE FROM $seat_pricing_table WHERE pricing_map_id = %d",
+            $pricing_map->id
+        ));
+        error_log("HOPE Seating: Deleted $deleted_count existing assignments");
+        
+        // Direct assignment to hit exact targets: P1=108, P2=292, P3=88, AA=9
+        $assignments = array();
+        $counts = array('P1' => 0, 'P2' => 0, 'P3' => 0, 'AA' => 0);
+        $targets = array('P1' => 108, 'P2' => 292, 'P3' => 88, 'AA' => 9);
+        
+        $debug_log = array();
+        
+        foreach ($all_seats as $seat) {
+            // Use the EXACT spreadsheet mapping - no arbitrary logic
+            $tier = $this->get_exact_spreadsheet_tier($seat->section, $seat->row_number, $seat->seat_number, $seat->is_accessible);
+            
+            // Debug logging for first few seats
+            if (count($debug_log) < 10) {
+                $debug_log[] = "Seat {$seat->seat_id} (Section {$seat->section} Row {$seat->row_number} Seat {$seat->seat_number}) -> {$tier}";
+            }
+            
+            $assignments[] = array(
+                'seat_id' => $seat->id,
+                'tier' => $tier
+            );
+            $counts[$tier]++;
+        }
+        
+        // Log the debug info
+        error_log("HOPE Seating Manual Assignment Debug:");
+        foreach ($debug_log as $log_entry) {
+            error_log("  " . $log_entry);
+        }
+        error_log("Predicted final counts: P1={$counts['P1']}, P2={$counts['P2']}, P3={$counts['P3']}, AA={$counts['AA']}");
+        
+        // Insert new assignments
+        $inserted_count = 0;
+        foreach ($assignments as $assignment) {
+            $price = ($assignment['tier'] == 'P1' ? 50 : 
+                     ($assignment['tier'] == 'P2' ? 35 : 25));
+            
+            $result = $wpdb->insert(
+                $seat_pricing_table,
+                array(
+                    'pricing_map_id' => $pricing_map->id,
+                    'physical_seat_id' => $assignment['seat_id'],
+                    'pricing_tier' => $assignment['tier'],
+                    'price' => $price
+                ),
+                array('%d', '%d', '%s', '%f')
+            );
+            
+            if ($result !== false) {
+                $inserted_count++;
+            } else {
+                error_log("HOPE Seating: Failed to insert assignment for seat {$assignment['seat_id']}: " . $wpdb->last_error);
+            }
+        }
+        
+        error_log("HOPE Seating: Inserted $inserted_count new assignments");
+        
+        error_log("HOPE Seating: Manual assignment complete. Final counts: P1={$counts['P1']}, P2={$counts['P2']}, P3={$counts['P3']}, AA={$counts['AA']}");
+        
+        return true;
+    }
+    
+    // Get exact pricing tier from the original spreadsheet mapping
+    private function get_exact_spreadsheet_tier($section, $row_number, $seat_number, $is_accessible) {
+        // If accessible, always AA
+        if ($is_accessible) {
+            return 'AA';
+        }
+        
+        // Log first few calls to debug
+        static $debug_count = 0;
+        if ($debug_count < 3) {
+            error_log("DEBUG get_exact_spreadsheet_tier: Section='$section', Row='$row_number', Seat='$seat_number', Accessible='$is_accessible'");
+            $debug_count++;
+        }
+        
+        
+        // EXACT SPREADSHEET MAPPING - Using your original data
+        
+        
+        // Orchestra Level
+        if ($section === 'A') {
+            if ($row_number == 1) return 'P1';
+            if (in_array($row_number, [2, 3])) return 'P2';
+            if ($row_number == 4) {
+                return ($seat_number == 1) ? 'P3' : 'P2';
+            }
+            if ($row_number == 5) {
+                return (in_array($seat_number, [1, 2])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 6) {
+                return (in_array($seat_number, [1, 2, 3])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 7) {
+                return (in_array($seat_number, [1, 2, 3, 4])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 8) {
+                return (in_array($seat_number, [1, 2, 3, 4, 5])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 9) return 'P3';
+        }
+        
+        if ($section === 'B') {
+            if (in_array($row_number, [1, 2, 3])) return 'P1';
+            if (in_array($row_number, [4, 5, 6, 7, 8])) return 'P2';
+            if ($row_number == 9) return 'P3';
+            if ($row_number == 10) return 'AA'; // Already handled by is_accessible
+        }
+        
+        if ($section === 'C') {
+            if (in_array($row_number, [1, 2, 3])) return 'P1';
+            if (in_array($row_number, [4, 5, 6, 7, 8, 9])) return 'P2';
+        }
+        
+        if ($section === 'D') {
+            if (in_array($row_number, [1, 2, 3])) return 'P1';
+            if (in_array($row_number, [4, 5, 6, 7, 8])) return 'P2';
+            if ($row_number == 9) {
+                return (in_array($seat_number, [1, 2, 3, 4, 5])) ? 'P3' : 'AA';
+            }
+        }
+        
+        if ($section === 'E') {
+            if ($row_number == 1) return 'P1';
+            if ($row_number == 2) return 'P2';
+            if ($row_number == 3) {
+                return ($seat_number == 7) ? 'P3' : 'P2';
+            }
+            if ($row_number == 4) {
+                return (in_array($seat_number, [6, 7])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 5) {
+                return (in_array($seat_number, [5, 6, 7])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 6) {
+                return (in_array($seat_number, [4, 5, 6, 7])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 7) {
+                return (in_array($seat_number, [3, 4, 5, 6, 7])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 8) {
+                return (in_array($seat_number, [2, 3, 4])) ? 'P3' : 'P2';
+            }
+            if ($row_number == 9) {
+                return (in_array($seat_number, [1, 2])) ? 'AA' : 'P3';
+            }
+        }
+        
+        // Balcony Level
+        if ($section === 'F') {
+            if ($row_number == 1) {
+                return (in_array($seat_number, [6, 7, 8, 9, 10])) ? 'P1' : 'P2';
+            }
+            if (in_array($row_number, [2, 3])) return 'P3';
+        }
+        
+        if ($section === 'G') {
+            if ($row_number == 1) return 'P1';  // Row 1: 24 seats P1
+            if (in_array($row_number, [2, 3])) return 'P2';  // Rows 2-3: P2
+        }
+        
+        if ($section === 'H') {
+            if ($row_number == 1) {
+                return (in_array($seat_number, [1, 2, 3, 4, 5, 6, 7, 8, 9])) ? 'P1' : 'P2';
+            }
+            if (in_array($row_number, [2, 3])) {
+                return (in_array($seat_number, [1, 2, 3, 4, 5, 6, 7, 8, 9])) ? 'P2' : 'P3';
+            }
+            if ($row_number == 4) return 'P3';
+        }
+        
+        // Default fallback
+        return 'P2';
+    }
+    
     // WooCommerce Product Integration
     public function add_product_venue_tab($tabs) {
         $tabs['hope_seating'] = array(
@@ -244,30 +820,52 @@ class HOPE_Seating_Admin {
     public function add_product_venue_fields() {
         global $post, $wpdb;
         
-        // Get all active venues
-        $venues_table = $wpdb->prefix . 'hope_seating_venues';
+        // Get pricing maps from new architecture
+        $pricing_maps = array();
+        $venues = array(); // For backward compatibility
         
-        // Check if table exists first
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$venues_table'") == $venues_table;
-        
-        if ($table_exists) {
-            $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+        if (class_exists('HOPE_Pricing_Maps_Manager')) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+            $pricing_maps = $pricing_manager->get_pricing_maps();
             
-            // If no venues found, try to create default ones
-            if (empty($venues)) {
-                if (function_exists('hope_seating_create_default_venues')) {
-                    hope_seating_create_default_venues();
-                    // Try to get venues again
-                    $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
-                }
+            // Convert pricing maps to venue format for compatibility
+            foreach ($pricing_maps as $map) {
+                $seats_with_pricing = $pricing_manager->get_seats_with_pricing($map->id);
+                $total_seats = count($seats_with_pricing);
+                
+                $venues[] = (object) array(
+                    'id' => $map->id,
+                    'name' => $map->name,
+                    'total_seats' => $total_seats,
+                    'status' => $map->status
+                );
             }
         } else {
-            $venues = array();
-            // Create tables if they don't exist
-            if (class_exists('HOPE_Seating_Database')) {
-                HOPE_Seating_Database::create_tables();
-                hope_seating_create_default_venues();
+            // Fallback to old system
+            $venues_table = $wpdb->prefix . 'hope_seating_venues';
+            
+            // Check if table exists first
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$venues_table'") == $venues_table;
+            
+            if ($table_exists) {
                 $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+                
+                // If no venues found, try to create default ones
+                if (empty($venues)) {
+                    if (function_exists('hope_seating_create_default_venues')) {
+                        hope_seating_create_default_venues();
+                        // Try to get venues again
+                        $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+                    }
+                }
+            } else {
+                $venues = array();
+                // Create tables if they don't exist
+                if (class_exists('HOPE_Seating_Database')) {
+                    HOPE_Seating_Database::create_tables();
+                    hope_seating_create_default_venues();
+                    $venues = $wpdb->get_results("SELECT * FROM $venues_table WHERE status = 'active' ORDER BY name");
+                }
             }
         }
         
@@ -294,9 +892,9 @@ class HOPE_Seating_Admin {
                 <div class="hope-seating-venue-options" style="<?php echo $enable_seating !== 'yes' ? 'display:none;' : ''; ?>">
                     
                     <p class="form-field">
-                        <label for="_hope_seating_venue_id"><?php _e('Select Venue', 'hope-seating'); ?></label>
+                        <label for="_hope_seating_venue_id"><?php _e('Select Seat Map', 'hope-seating'); ?></label>
                         <select id="_hope_seating_venue_id" name="_hope_seating_venue_id" class="select short">
-                            <option value=""><?php _e('— Select a venue —', 'hope-seating'); ?></option>
+                            <option value=""><?php _e('— Select a seat map —', 'hope-seating'); ?></option>
                             <?php if (!empty($venues)): ?>
                                 <?php foreach ($venues as $venue): ?>
                                     <option value="<?php echo esc_attr($venue->id); ?>" 
@@ -364,40 +962,108 @@ class HOPE_Seating_Admin {
                     
                     <?php if ($selected_venue): ?>
                         <?php
-                        // Get venue details
-                        $venue = $wpdb->get_row($wpdb->prepare(
-                            "SELECT * FROM $venues_table WHERE id = %d",
-                            $selected_venue
-                        ));
+                        // Get venue details from new architecture
+                        $venue = null;
+                        $config = array();
+                        
+                        if (class_exists('HOPE_Pricing_Maps_Manager')) {
+                            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+                            $pricing_maps = $pricing_manager->get_pricing_maps();
+                            
+                            // Find the selected pricing map
+                            foreach ($pricing_maps as $map) {
+                                if ($map->id == $selected_venue) {
+                                    $venue = $map;
+                                    break;
+                                }
+                            }
+                            
+                            // Create config from new architecture
+                            if ($venue) {
+                                $config = array(
+                                    'type' => 'theater',
+                                    'levels' => array('orchestra', 'balcony'),
+                                    'sections' => array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H')
+                                );
+                            }
+                        } else {
+                            // Fallback to old system
+                            $venues_table = $wpdb->prefix . 'hope_seating_venues';
+                            $venue = $wpdb->get_row($wpdb->prepare(
+                                "SELECT * FROM $venues_table WHERE id = %d",
+                                $selected_venue
+                            ));
+                            
+                            if ($venue) {
+                                $config = json_decode($venue->configuration, true);
+                            }
+                        }
                         
                         if ($venue) {
-                            $config = json_decode($venue->configuration, true);
+                            // Get seat statistics from new architecture
+                            $seat_stats = array();
+                            $pricing_tiers = array();
                             
-                            // Get seat statistics
-                            $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
-                            $seat_stats = $wpdb->get_results($wpdb->prepare(
-                                "SELECT section, COUNT(*) as count 
-                                 FROM $seat_maps_table 
-                                 WHERE venue_id = %d 
-                                 GROUP BY section",
-                                $selected_venue
-                            ));
-                            
-                            // Get pricing tiers
-                            $pricing_table = $wpdb->prefix . 'hope_seating_pricing_tiers';
-                            $pricing_tiers = $wpdb->get_results($wpdb->prepare(
-                                "SELECT * FROM $pricing_table 
-                                 WHERE venue_id = %d 
-                                 ORDER BY sort_order",
-                                $selected_venue
-                            ));
+                            if (class_exists('HOPE_Pricing_Maps_Manager')) {
+                                $pricing_manager = new HOPE_Pricing_Maps_Manager();
+                                $seats_with_pricing = $pricing_manager->get_seats_with_pricing($selected_venue);
+                                
+                                // Group by section for stats
+                                $sections = array();
+                                foreach ($seats_with_pricing as $seat) {
+                                    if (!isset($sections[$seat->section])) {
+                                        $sections[$seat->section] = 0;
+                                    }
+                                    $sections[$seat->section]++;
+                                }
+                                
+                                foreach ($sections as $section => $count) {
+                                    $seat_stats[] = (object) array('section' => $section, 'count' => $count);
+                                }
+                                
+                                // Get pricing tiers from the manager
+                                $pricing_tier_config = $pricing_manager->get_pricing_tiers();
+                                foreach ($pricing_tier_config as $tier_code => $tier_info) {
+                                    $pricing_tiers[] = (object) array(
+                                        'tier_name' => $tier_code,
+                                        'tier_label' => $tier_info['name'],
+                                        'base_price' => $tier_info['default_price'],
+                                        'color_code' => $tier_info['color']
+                                    );
+                                }
+                            } else {
+                                // Fallback to old system
+                                $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
+                                $seat_stats = $wpdb->get_results($wpdb->prepare(
+                                    "SELECT section, COUNT(*) as count 
+                                     FROM $seat_maps_table 
+                                     WHERE venue_id = %d 
+                                     GROUP BY section",
+                                    $selected_venue
+                                ));
+                                
+                                // Get pricing tiers
+                                $pricing_table = $wpdb->prefix . 'hope_seating_pricing_tiers';
+                                $pricing_tiers = $wpdb->get_results($wpdb->prepare(
+                                    "SELECT * FROM $pricing_table 
+                                     WHERE venue_id = %d 
+                                     ORDER BY sort_order",
+                                    $selected_venue
+                                ));
+                            }
                             ?>
                             
                             <div class="hope-venue-info" style="background: #f7f7f7; padding: 15px; margin: 10px; border-radius: 5px;">
                                 <h4><?php echo esc_html($venue->name); ?> Details</h4>
+                                <?php if (isset($venue->description) && $venue->description): ?>
+                                    <p><strong>Description:</strong> <?php echo esc_html($venue->description); ?></p>
+                                <?php endif; ?>
                                 <p><strong>Configuration:</strong> <?php echo esc_html($config['type']); ?></p>
                                 <p><strong>Levels:</strong> <?php echo esc_html(implode(', ', $config['levels'])); ?></p>
                                 <p><strong>Sections:</strong> <?php echo esc_html(implode(', ', $config['sections'])); ?></p>
+                                <?php if (class_exists('HOPE_Pricing_Maps_Manager')): ?>
+                                    <p><strong>Architecture:</strong> <span style="color: #2271b1;">✓ New Separated System</span></p>
+                                <?php endif; ?>
                                 
                                 <?php if ($seat_stats): ?>
                                     <h5>Seat Distribution:</h5>
@@ -444,50 +1110,62 @@ class HOPE_Seating_Admin {
                             <div class="hope-seating-summary" style="margin: 15px 0; padding: 15px; background: #f0f8ff; border-radius: 5px; border-left: 4px solid #7c3aed;">
                                 <h4>Seating Breakdown</h4>
                                 <?php 
-                                // Get seat counts by pricing tier
-                                if (class_exists('HOPE_Seat_Manager')) {
-                                    $seat_manager = new HOPE_Seat_Manager($selected_venue);
-                                    $pricing_tiers = $seat_manager->get_pricing_tiers();
+                                // Get seat counts by pricing tier from new architecture
+                                if (class_exists('HOPE_Pricing_Maps_Manager')) {
+                                    $pricing_manager = new HOPE_Pricing_Maps_Manager();
+                                    $pricing_summary = $pricing_manager->get_pricing_summary($selected_venue);
                                     
-                                    // Get actual seat counts from database
-                                    $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
-                                    $seat_counts = $wpdb->get_results($wpdb->prepare(
-                                        "SELECT pricing_tier, COUNT(*) as count 
-                                         FROM $seat_maps_table 
-                                         WHERE venue_id = %d 
-                                         GROUP BY pricing_tier
-                                         ORDER BY pricing_tier",
-                                        $selected_venue
-                                    ));
-                                    
-                                    if (!empty($seat_counts)): ?>
+                                    if (!empty($pricing_summary)): ?>
                                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0;">
-                                            <?php foreach ($seat_counts as $tier_count): 
-                                                $tier_info = isset($pricing_tiers[$tier_count->pricing_tier]) ? $pricing_tiers[$tier_count->pricing_tier] : array('name' => $tier_count->pricing_tier, 'color' => '#666');
-                                                ?>
-                                                <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid <?php echo esc_attr($tier_info['color']); ?>;">
-                                                    <strong><?php echo esc_html($tier_info['name']); ?> (<?php echo esc_html($tier_count->pricing_tier); ?>)</strong><br>
-                                                    <span style="color: #666;"><?php echo esc_html($tier_count->count); ?> seats</span>
+                                            <?php foreach ($pricing_summary as $tier_code => $tier_data): ?>
+                                                <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid <?php echo esc_attr($tier_data['color']); ?>;">
+                                                    <strong><?php echo esc_html($tier_data['name']); ?> (<?php echo esc_html($tier_code); ?>)</strong><br>
+                                                    <span style="color: #666;"><?php echo esc_html($tier_data['count']); ?> seats</span>
                                                 </div>
                                             <?php endforeach; ?>
                                         </div>
                                     <?php else: ?>
                                         <p style="color: #e67e22; margin: 10px 0;">
-                                            ⚠️ No seats found for this venue. You may need to populate seats first.
-                                            <br><small>Debug: Venue ID = <?php echo esc_html($selected_venue); ?>, Table = <?php echo esc_html($seat_maps_table); ?></small>
+                                            ⚠️ No pricing data found for this seat map.
+                                            <br><small>Debug: Seat Map ID = <?php echo esc_html($selected_venue); ?></small>
                                         </p>
-                                        <!-- Show default pricing tiers even if no seats found -->
-                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0;">
-                                            <?php foreach ($pricing_tiers as $tier_code => $tier_info): ?>
-                                                <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid <?php echo esc_attr($tier_info['color']); ?>; opacity: 0.7;">
-                                                    <strong><?php echo esc_html($tier_info['name']); ?> (<?php echo esc_html($tier_code); ?>)</strong><br>
-                                                    <span style="color: #666;">0 seats (not populated)</span>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        </div>
                                     <?php endif;
                                 } else {
-                                    echo '<p style="color: red;">HOPE_Seat_Manager class not found</p>';
+                                    // Fallback to old system
+                                    if (class_exists('HOPE_Seat_Manager')) {
+                                        $seat_manager = new HOPE_Seat_Manager($selected_venue);
+                                        $pricing_tiers_old = $seat_manager->get_pricing_tiers();
+                                        
+                                        // Get actual seat counts from database
+                                        $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
+                                        $seat_counts = $wpdb->get_results($wpdb->prepare(
+                                            "SELECT pricing_tier, COUNT(*) as count 
+                                             FROM $seat_maps_table 
+                                             WHERE venue_id = %d 
+                                             GROUP BY pricing_tier
+                                             ORDER BY pricing_tier",
+                                            $selected_venue
+                                        ));
+                                        
+                                        if (!empty($seat_counts)): ?>
+                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0;">
+                                                <?php foreach ($seat_counts as $tier_count): 
+                                                    $tier_info = isset($pricing_tiers_old[$tier_count->pricing_tier]) ? $pricing_tiers_old[$tier_count->pricing_tier] : array('name' => $tier_count->pricing_tier, 'color' => '#666');
+                                                    ?>
+                                                    <div style="padding: 8px; background: white; border-radius: 4px; border-left: 3px solid <?php echo esc_attr($tier_info['color']); ?>;">
+                                                        <strong><?php echo esc_html($tier_info['name']); ?> (<?php echo esc_html($tier_count->pricing_tier); ?>)</strong><br>
+                                                        <span style="color: #666;"><?php echo esc_html($tier_count->count); ?> seats</span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <p style="color: #e67e22; margin: 10px 0;">
+                                                ⚠️ No seats found for this venue (legacy system).
+                                            </p>
+                                        <?php endif;
+                                    } else {
+                                        echo '<p style="color: red;">No seat management system found</p>';
+                                    }
                                 } ?>
                             </div>
                             

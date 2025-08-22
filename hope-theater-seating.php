@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.2.32
+ * Version: 2.3.0
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.2.32');
+define('HOPE_SEATING_VERSION', '2.3.0');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -45,21 +45,28 @@ function hope_seating_activate() {
     
     // Include required files for activation
     require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-database.php';
-    require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-seat-manager.php';
+    require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-physical-seats.php';
+    require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-pricing-maps.php';
     
-    // Create database tables
+    // Create database tables (includes new architecture tables)
     $database = new HOPE_Seating_Database();
     $database->create_tables();
     
-    // Create default venues if they don't exist
-    hope_seating_create_default_venues();
-    
-    // NEW: Populate seats for main venue
-    $seat_manager = new HOPE_Seat_Manager(1); // Venue ID 1 is Main Stage
-    $total_seats = $seat_manager->populate_seats();
-    
-    // Log activation
-    error_log('HOPE Theater Seating v2.0.1 activated. ' . $total_seats . ' seats populated.');
+    // NEW ARCHITECTURE: Initialize separated system
+    try {
+        // Initialize physical seats (497 seats)
+        $physical_manager = new HOPE_Physical_Seats_Manager();
+        $physical_seats_created = $physical_manager->populate_physical_seats();
+        
+        // Initialize standard pricing map
+        $pricing_manager = new HOPE_Pricing_Maps_Manager();
+        $pricing_map_created = $pricing_manager->create_standard_pricing_map();
+        
+        error_log("HOPE Theater Seating v2.3.0 activated. New architecture initialized: {$physical_seats_created} physical seats, pricing map created: " . ($pricing_map_created ? 'yes' : 'no'));
+        
+    } catch (Exception $e) {
+        error_log('HOPE Theater Seating activation error: ' . $e->getMessage());
+    }
     
     // Schedule cleanup cron
     if (!wp_next_scheduled('hope_seating_cleanup')) {
@@ -109,6 +116,9 @@ class HOPE_Theater_Seating {
         
         // Initialize components
         $this->init_hooks();
+        
+        // Initialize new architecture if needed
+        $this->maybe_initialize_new_architecture();
     }
     
     private function check_dependencies() {
@@ -142,13 +152,22 @@ class HOPE_Theater_Seating {
         // Database and core classes
         require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-database.php';
         
-        // Check if files exist before requiring
+        // Include only new architecture and required files
         $files_to_include = array(
-            'includes/class-venues.php',
-            'includes/class-seat-maps.php',
-            'includes/class-seat-manager.php',     // NEW
-            'includes/class-session-manager.php',   // NEW
-            'includes/class-mobile-detector.php',   // NEW
+            // OLD VENUE SYSTEM - DISABLED
+            // 'includes/class-venues.php',        // DEPRECATED: Old venue management
+            // 'includes/class-seat-maps.php',     // DEPRECATED: Old combined seat/pricing
+            
+            // NEW SEPARATED ARCHITECTURE
+            'includes/class-physical-seats.php',   // NEW: Physical layout management
+            'includes/class-pricing-maps.php',     // NEW: Pricing configurations
+            
+            // LEGACY - Keep for now during transition
+            'includes/class-seat-manager.php',     // Still used for legacy compatibility
+            
+            // CORE FUNCTIONALITY
+            'includes/class-session-manager.php',   
+            'includes/class-mobile-detector.php',   
             'includes/class-admin.php',
             'includes/class-frontend.php',
             'includes/class-ajax.php',
@@ -164,6 +183,8 @@ class HOPE_Theater_Seating {
                 require_once $file_path;
             }
         }
+        
+        // Diagnostic functionality is now built into the admin class
     }
     
     private function init_hooks() {
@@ -678,6 +699,162 @@ class HOPE_Theater_Seating {
         // Trigger a custom action that can be hooked by other components
         do_action('hope_cart_seats_removed', $cart_item_key);
     }
+    
+    /**
+     * Initialize new architecture (physical seats + pricing maps)
+     * This runs once to set up the separated architecture
+     */
+    public function maybe_initialize_new_architecture() {
+        // Check if we need to initialize the new architecture
+        $initialized = get_option('hope_seating_new_architecture_initialized', false);
+        
+        // Removed force reinitialization - system is now working
+        
+        // Clean up any duplicate pricing maps (run once)
+        $this->cleanup_duplicate_pricing_maps();
+        
+        // Regenerate pricing with corrected logic (DISABLED - using manual assignment instead)
+        // delete_option('hope_seating_pricing_corrected'); // Force it to run again
+        // $this->regenerate_pricing_with_corrections();
+        
+        if (!$initialized && is_admin()) {
+            // Only initialize if we have the new classes available
+            if (class_exists('HOPE_Physical_Seats_Manager') && class_exists('HOPE_Pricing_Maps_Manager')) {
+                
+                // Create physical seats
+                $physical_seats = new HOPE_Physical_Seats_Manager();
+                $total_seats = $physical_seats->populate_physical_seats();
+                
+                if ($total_seats > 0) {
+                    // Create standard pricing map
+                    $pricing_maps = new HOPE_Pricing_Maps_Manager();
+                    $pricing_map_id = $pricing_maps->create_standard_pricing_map();
+                    
+                    if ($pricing_map_id) {
+                        // Mark as initialized
+                        update_option('hope_seating_new_architecture_initialized', true);
+                        
+                        // Log success
+                        error_log("HOPE Seating: New architecture initialized successfully. {$total_seats} physical seats created with pricing map ID {$pricing_map_id}");
+                        
+                        // Show admin notice
+                        add_action('admin_notices', array($this, 'new_architecture_notice'));
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Show new architecture initialization notice
+     */
+    public function new_architecture_notice() {
+        echo '<div class="notice notice-success is-dismissible">';
+        echo '<p><strong>HOPE Theater Seating:</strong> New separated architecture initialized! Physical seats and pricing maps are now ready.</p>';
+        echo '</div>';
+    }
+    
+    /**
+     * Clean up duplicate pricing maps that were created during testing
+     */
+    private function cleanup_duplicate_pricing_maps() {
+        // Only run once
+        if (get_option('hope_seating_duplicates_cleaned', false)) {
+            return;
+        }
+        
+        global $wpdb;
+        $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
+        $seat_pricing_table = $wpdb->prefix . 'hope_seating_seat_pricing';
+        
+        // Get all pricing maps
+        $all_maps = $wpdb->get_results("SELECT * FROM $pricing_maps_table ORDER BY id");
+        
+        if (count($all_maps) > 1) {
+            // Keep the first one with seats, delete the rest
+            $keep_id = null;
+            
+            foreach ($all_maps as $map) {
+                $seat_count = $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM $seat_pricing_table WHERE pricing_map_id = %d",
+                    $map->id
+                ));
+                
+                if ($seat_count > 0 && !$keep_id) {
+                    $keep_id = $map->id;
+                    break;
+                }
+            }
+            
+            // If no map has seats, keep the first one
+            if (!$keep_id) {
+                $keep_id = $all_maps[0]->id;
+            }
+            
+            // Delete seat pricing for maps we're removing
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM $seat_pricing_table WHERE pricing_map_id != %d",
+                $keep_id
+            ));
+            
+            // Delete duplicate pricing maps
+            $deleted = $wpdb->query($wpdb->prepare(
+                "DELETE FROM $pricing_maps_table WHERE id != %d",
+                $keep_id
+            ));
+            
+            if ($deleted > 0) {
+                error_log("HOPE Seating: Cleaned up $deleted duplicate pricing maps, kept ID $keep_id");
+            }
+        }
+        
+        // Mark as cleaned
+        update_option('hope_seating_duplicates_cleaned', true);
+    }
+    
+    /**
+     * Regenerate pricing assignments with corrected logic
+     */
+    private function regenerate_pricing_with_corrections() {
+        // Only run once
+        if (get_option('hope_seating_pricing_corrected', false)) {
+            return;
+        }
+        
+        if (!class_exists('HOPE_Pricing_Maps_Manager')) {
+            return;
+        }
+        
+        global $wpdb;
+        $pricing_maps_table = $wpdb->prefix . 'hope_seating_pricing_maps';
+        
+        // Get the pricing map
+        $pricing_map = $wpdb->get_row("SELECT * FROM $pricing_maps_table LIMIT 1");
+        
+        if ($pricing_map) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+            $created_count = $pricing_manager->regenerate_pricing_assignments($pricing_map->id);
+            
+            if ($created_count > 0) {
+                error_log("HOPE Seating: Corrected pricing assignments for $created_count seats");
+                
+                // Show admin notice about correction
+                add_action('admin_notices', array($this, 'pricing_corrected_notice'));
+            }
+        }
+        
+        // Mark as corrected
+        update_option('hope_seating_pricing_corrected', true);
+    }
+    
+    /**
+     * Show pricing correction notice
+     */
+    public function pricing_corrected_notice() {
+        echo '<div class="notice notice-success is-dismissible">';
+        echo '<p><strong>HOPE Theater Seating:</strong> Pricing assignments have been corrected to match your spreadsheet exactly!</p>';
+        echo '</div>';
+    }
 }
 
 // Helper function to create default venues
@@ -765,8 +942,8 @@ function hope_seating_activate_plugin() {
         error_log('HOPE Seating: Database tables created during plugin activation');
     }
     
-    // Create default venues
-    hope_seating_create_default_venues();
+    // OLD VENUE SYSTEM - DISABLED
+    // hope_seating_create_default_venues(); // DEPRECATED: Using new pricing maps architecture
 }
 
 // Initialize plugin

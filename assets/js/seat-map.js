@@ -796,8 +796,9 @@ class HOPESeatMap {
             if (modalCount) modalCount.textContent = 'No seats selected';
             if (modalTotal) modalTotal.textContent = 'Total: $0';
             if (confirmSeatsBtn) {
-                confirmSeatsBtn.disabled = true;
-                confirmSeatsBtn.querySelector('.seat-count-badge').style.display = 'none';
+                confirmSeatsBtn.disabled = false; // Enable button for empty selection
+                confirmSeatsBtn.innerHTML = 'Continue with No Seats'; // Change text
+                confirmSeatsBtn.querySelector('.seat-count-badge')?.style.setProperty('display', 'none');
             }
             return;
         }
@@ -840,11 +841,8 @@ class HOPESeatMap {
         
         if (confirmSeatsBtn) {
             confirmSeatsBtn.disabled = false;
-            const badge = confirmSeatsBtn.querySelector('.seat-count-badge');
-            if (badge) {
-                badge.textContent = this.selectedSeats.size;
-                badge.style.display = 'inline-block';
-            }
+            // Restore original button text with badge when seats are selected
+            confirmSeatsBtn.innerHTML = 'Confirm Seats <span class="seat-count-badge" style="display: inline-block;">' + this.selectedSeats.size + '</span>';
         }
     }
     

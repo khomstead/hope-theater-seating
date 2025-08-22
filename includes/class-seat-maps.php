@@ -23,12 +23,71 @@ class HOPE_Seating_Seat_Maps {
     public function get_venue_seats($venue_id) {
         global $wpdb;
         
+        // Try new architecture first (venue_id is actually pricing_map_id)
+        if (class_exists('HOPE_Pricing_Maps_Manager')) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+            $seats_with_pricing = $pricing_manager->get_seats_with_pricing($venue_id);
+            
+            if (!empty($seats_with_pricing)) {
+                // Convert to old format for compatibility
+                $converted_seats = array();
+                foreach ($seats_with_pricing as $seat) {
+                    $converted_seats[] = (object) array(
+                        'id' => $seat->id,
+                        'venue_id' => $venue_id,
+                        'seat_id' => $seat->seat_id,
+                        'section' => $seat->section,
+                        'row_number' => $seat->row_number,
+                        'seat_number' => $seat->seat_number,
+                        'level' => $seat->level,
+                        'x_coordinate' => $seat->x_coordinate,
+                        'y_coordinate' => $seat->y_coordinate,
+                        'pricing_tier' => $seat->pricing_tier,
+                        'seat_type' => $seat->seat_type,
+                        'is_accessible' => $seat->is_accessible,
+                        'is_blocked' => $seat->is_blocked,
+                        'price' => $seat->price,
+                        'tier_name' => $this->get_tier_name($seat->pricing_tier),
+                        'color' => $this->get_tier_color($seat->pricing_tier)
+                    );
+                }
+                return $converted_seats;
+            }
+        }
+        
+        // Fallback to old system
         return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$this->table_name} 
              WHERE venue_id = %d 
              ORDER BY section, `row_number`, seat_number",
             $venue_id
         ));
+    }
+    
+    /**
+     * Get tier name from pricing tier code
+     */
+    private function get_tier_name($pricing_tier) {
+        $tier_names = array(
+            'P1' => 'Premium',
+            'P2' => 'Standard', 
+            'P3' => 'Value',
+            'AA' => 'Accessible'
+        );
+        return isset($tier_names[$pricing_tier]) ? $tier_names[$pricing_tier] : 'Standard';
+    }
+    
+    /**
+     * Get tier color from pricing tier code
+     */
+    private function get_tier_color($pricing_tier) {
+        $tier_colors = array(
+            'P1' => '#9b59b6',
+            'P2' => '#3498db',
+            'P3' => '#17a2b8', 
+            'AA' => '#e67e22'
+        );
+        return isset($tier_colors[$pricing_tier]) ? $tier_colors[$pricing_tier] : '#3498db';
     }
     
     /**

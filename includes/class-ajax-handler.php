@@ -41,6 +41,9 @@ class HOPE_Ajax_Handler {
         $requested_seats = json_decode(stripslashes($_POST['seats']), true);
         $session_id = sanitize_text_field($_POST['session_id']);
         
+        // Set current product ID for use in other methods
+        $this->current_product_id = $product_id;
+        
         global $wpdb;
         $table_bookings = $wpdb->prefix . 'hope_seating_bookings';
         $table_holds = $wpdb->prefix . 'hope_seating_holds';
@@ -127,6 +130,9 @@ class HOPE_Ajax_Handler {
         $product_id = intval($_POST['product_id']);
         $seats = json_decode(stripslashes($_POST['seats']), true);
         $session_id = sanitize_text_field($_POST['session_id']);
+        
+        // Set current product ID for use in other methods
+        $this->current_product_id = $product_id;
         
         // DEBUG: Log what we received
         error_log("HOPE hold_seats: Received raw seats data: " . $_POST['seats']);
@@ -633,26 +639,50 @@ class HOPE_Ajax_Handler {
     }
     
     /**
-     * Group seats by their pricing tier
+     * Group seats by their pricing tier using new architecture
      */
     private function group_seats_by_tier($seats) {
         global $wpdb;
-        $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
         $seats_by_tier = [];
         
-        foreach ($seats as $seat_id) {
-            // Get the pricing tier for this seat
-            $seat_data = $wpdb->get_row($wpdb->prepare(
-                "SELECT pricing_tier FROM $seat_maps_table WHERE seat_id = %s LIMIT 1",
-                $seat_id
-            ));
+        // Use new architecture to get seat pricing data
+        if (class_exists('HOPE_Pricing_Maps_Manager')) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
             
-            if ($seat_data && !empty($seat_data->pricing_tier)) {
-                $tier = $seat_data->pricing_tier;
-            } else {
-                // Fallback: extract tier from seat ID (e.g., E10-1 -> P2)
-                $tier = $this->extract_tier_from_seat_id($seat_id);
+            // Get the pricing map ID for current product
+            $pricing_map_id = get_post_meta($this->current_product_id, '_hope_seating_venue_id', true);
+            
+            if ($pricing_map_id) {
+                // Get all seats with pricing for this map
+                $seats_with_pricing = $pricing_manager->get_seats_with_pricing($pricing_map_id);
+                
+                // Create lookup map: seat_id -> pricing_tier
+                $seat_tier_lookup = [];
+                foreach ($seats_with_pricing as $seat) {
+                    $seat_tier_lookup[$seat->seat_id] = $seat->pricing_tier;
+                }
+                
+                // Group selected seats by their tier
+                foreach ($seats as $seat_id) {
+                    $tier = isset($seat_tier_lookup[$seat_id]) ? $seat_tier_lookup[$seat_id] : 'P2'; // fallback
+                    
+                    if (!isset($seats_by_tier[$tier])) {
+                        $seats_by_tier[$tier] = [];
+                    }
+                    $seats_by_tier[$tier][] = $seat_id;
+                    
+                    error_log("HOPE: Seat {$seat_id} assigned to tier {$tier} via new architecture");
+                }
+                
+                return $seats_by_tier;
             }
+        }
+        
+        // Fallback to old system if new architecture not available
+        error_log("HOPE: WARNING - Using fallback tier assignment, new architecture not available");
+        
+        foreach ($seats as $seat_id) {
+            $tier = $this->extract_tier_from_seat_id($seat_id);
             
             if (!isset($seats_by_tier[$tier])) {
                 $seats_by_tier[$tier] = [];
