@@ -15,8 +15,21 @@ class HOPE_Seating_Initializer {
     /**
      * Initialize HOPE Theater Main Stage with accurate seating
      * Based on the Excel data and architectural drawings
+     * 
+     * DISABLED: To prevent overwriting correct production pricing data
      */
     public static function initialize_hope_theater($venue_id) {
+        // SAFETY CHECK: Prevent reinitialization if pricing data already exists
+        if (self::pricing_assignments_exist()) {
+            error_log('HOPE: Seat initializer disabled - pricing assignments already exist. Use admin interface for changes.');
+            return false;
+        }
+        
+        error_log('HOPE: Seat initializer disabled to protect production data. Use admin interface for seat management.');
+        return false;
+        
+        // ORIGINAL CODE DISABLED BELOW - DO NOT UNCOMMENT WITHOUT BACKUP
+        /*
         $seat_maps = new HOPE_Seating_Seat_Maps();
         
         // Clear existing seats for this venue
@@ -140,6 +153,25 @@ class HOPE_Seating_Initializer {
         self::create_seats_for_level($venue_id, 'balcony', $balcony_config, $seat_maps);
         
         return true;
+        */
+    }
+    
+    /**
+     * Safety check to prevent reinitialization if pricing data already exists
+     */
+    private static function pricing_assignments_exist() {
+        global $wpdb;
+        
+        $count = $wpdb->get_var("
+            SELECT COUNT(*) 
+            FROM {$wpdb->prefix}hope_seating_seat_pricing 
+            WHERE pricing_map_id IN (
+                SELECT id FROM {$wpdb->prefix}hope_seating_pricing_maps 
+                WHERE status = 'active'
+            )
+        ");
+        
+        return $count > 0;
     }
     
     /**
