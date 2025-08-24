@@ -713,6 +713,13 @@ class HOPESeatMap {
             return;
         }
         
+        // Check if this is an accessible (AA) seat and show confirmation
+        const tier = seat.getAttribute('data-tier');
+        if (tier === 'AA') {
+            this.showAccessibleSeatConfirmation(seatId);
+            return;
+        }
+        
         console.log(`Selecting new seat ${seatId}`);
         this.selectSeat(seatId);
     }
@@ -1283,6 +1290,106 @@ class HOPESeatMap {
         setTimeout(() => {
             this.isRestoringSeats = false;
         }, 1000);
+    }
+    
+    showAccessibleSeatConfirmation(seatId) {
+        const seat = document.querySelector(`[data-id="${seatId}"]`);
+        const seatLabel = seat ? seat.getAttribute('data-label') || seatId : seatId;
+        
+        // Create modal backdrop
+        const backdrop = document.createElement('div');
+        backdrop.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        // Create modal dialog
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        `;
+        
+        dialog.innerHTML = `
+            <div style="color: #e67e22; font-size: 48px; margin-bottom: 16px;">♿</div>
+            <h3 style="color: #333; margin: 0 0 16px 0; font-size: 24px;">Accessible Seating Notice</h3>
+            <p style="color: #666; line-height: 1.5; margin: 0 0 20px 0; font-size: 16px;">
+                Seat <strong>${seatLabel}</strong> is specifically reserved for patrons with mobility 
+                challenges, wheelchair users, and their companions.
+            </p>
+            <p style="color: #666; line-height: 1.5; margin: 0 0 24px 0; font-size: 16px;">
+                Are you selecting this seat because you or someone in your party requires accessible seating?
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button id="aa-confirm-yes" style="
+                    background: #28a745;
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 16px;
+                    font-weight: 500;
+                ">Yes, we need accessible seating</button>
+                <button id="aa-confirm-no" style="
+                    background: #6c757d;
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 16px;
+                    font-weight: 500;
+                ">No, select different seats</button>
+            </div>
+        `;
+        
+        backdrop.appendChild(dialog);
+        document.body.appendChild(backdrop);
+        
+        // Handle button clicks
+        document.getElementById('aa-confirm-yes').addEventListener('click', () => {
+            document.body.removeChild(backdrop);
+            console.log(`User confirmed need for accessible seat ${seatId}`);
+            this.selectSeat(seatId);
+        });
+        
+        document.getElementById('aa-confirm-no').addEventListener('click', () => {
+            document.body.removeChild(backdrop);
+            console.log(`User declined accessible seat ${seatId}`);
+            this.showMessage('Please select a different seat. Accessible seats are reserved for those with mobility needs.', 'info');
+        });
+        
+        // Handle backdrop click to close
+        backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) {
+                document.body.removeChild(backdrop);
+                console.log(`User closed accessible seat dialog for ${seatId}`);
+            }
+        });
+        
+        // Handle escape key
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                document.body.removeChild(backdrop);
+                document.removeEventListener('keydown', escapeHandler);
+                console.log(`User pressed escape to close accessible seat dialog for ${seatId}`);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
     }
 }
 
