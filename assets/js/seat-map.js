@@ -715,7 +715,9 @@ class HOPESeatMap {
         
         // Check if this is an accessible (AA) seat and show confirmation
         const tier = seat.getAttribute('data-tier');
+        console.log(`HOPE: Seat ${seatId} has tier: "${tier}"`);
         if (tier === 'AA') {
+            console.log(`HOPE: Showing AA confirmation for seat ${seatId}`);
             this.showAccessibleSeatConfirmation(seatId);
             return;
         }
@@ -1296,6 +1298,23 @@ class HOPESeatMap {
         const seat = document.querySelector(`[data-id="${seatId}"]`);
         const seatLabel = seat ? seat.getAttribute('data-label') || seatId : seatId;
         
+        // Determine specific message based on seat location
+        let accessibilityMessage;
+        
+        if (seatId === 'E9-5' || seatId === 'E9-6') {
+            // Section E, row 9, seats 5 & 6 - wheelchair seats
+            accessibilityMessage = 'These seats are reserved for guests with wheelchairs and their companions.';
+        } else if (seatId === 'D9-6' || seatId === 'D9-7') {
+            // Section D, row 9, seats 6 & 7 - wheelchair seats  
+            accessibilityMessage = 'These seats are reserved for guests with wheelchairs and their companions.';
+        } else if (seatId.startsWith('B') && seatId.includes('10-')) {
+            // Section B, Row 10 - accessibility/stairs accommodation
+            accessibilityMessage = 'These seats are reserved for guests with disabilities and those who are uncomfortable navigating stairs.';
+        } else {
+            // Default message for any other AA seats
+            accessibilityMessage = 'These seats are specifically reserved for patrons with mobility challenges, wheelchair users, and their companions.';
+        }
+        
         // Create modal backdrop
         const backdrop = document.createElement('div');
         backdrop.style.cssText = `
@@ -1304,8 +1323,8 @@ class HOPESeatMap {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 10000;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 999999;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1327,11 +1346,10 @@ class HOPESeatMap {
             <div style="color: #e67e22; font-size: 48px; margin-bottom: 16px;">♿</div>
             <h3 style="color: #333; margin: 0 0 16px 0; font-size: 24px;">Accessible Seating Notice</h3>
             <p style="color: #666; line-height: 1.5; margin: 0 0 20px 0; font-size: 16px;">
-                Seat <strong>${seatLabel}</strong> is specifically reserved for patrons with mobility 
-                challenges, wheelchair users, and their companions.
+                Seat <strong>${seatLabel}</strong>: ${accessibilityMessage}
             </p>
             <p style="color: #666; line-height: 1.5; margin: 0 0 24px 0; font-size: 16px;">
-                Are you selecting this seat because you or someone in your party requires accessible seating?
+                Are you selecting this seat because you or someone in your party requires this accommodation?
             </p>
             <div style="display: flex; gap: 12px; justify-content: center;">
                 <button id="aa-confirm-yes" style="
@@ -1343,7 +1361,7 @@ class HOPESeatMap {
                     cursor: pointer;
                     font-size: 16px;
                     font-weight: 500;
-                ">Yes, we need accessible seating</button>
+                ">Yes, we need this accommodation</button>
                 <button id="aa-confirm-no" style="
                     background: #6c757d;
                     color: white;
@@ -1359,6 +1377,7 @@ class HOPESeatMap {
         
         backdrop.appendChild(dialog);
         document.body.appendChild(backdrop);
+        console.log('HOPE: AA confirmation modal added to DOM with z-index:', backdrop.style.zIndex);
         
         // Handle button clicks
         document.getElementById('aa-confirm-yes').addEventListener('click', () => {
