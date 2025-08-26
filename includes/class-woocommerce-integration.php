@@ -1140,6 +1140,7 @@ class HOPE_WooCommerce_Integration {
             // Get order and product info from ticket
             $order_id = get_post_meta($ticket_id, 'WooCommerceEventsOrderID', true);
             $product_id = get_post_meta($ticket_id, 'WooCommerceEventsProductID', true);
+            $attendee_id = get_post_meta($ticket_id, 'WooCommerceEventsAttendeeID', true);
             
             if (!$order_id || !$product_id) {
                 return $ticket_data;
@@ -1150,34 +1151,70 @@ class HOPE_WooCommerce_Integration {
                 return $ticket_data;
             }
             
+            error_log("HOPE: Processing ticket {$ticket_id} for order {$order_id}, product {$product_id}, attendee {$attendee_id}");
+            
             // Find the matching order item and extract seat data
             foreach ($order->get_items() as $item_id => $item) {
                 if ($item->get_product_id() == $product_id) {
-                    // Get seat summary and tier from both hidden and visible metadata
-                    $seat_summary = $item->get_meta('hope_seat_summary');
-                    $pricing_tier = $item->get_meta('hope_pricing_tier');
                     
-                    if (!empty($seat_summary)) {
-                        $ticket_data['hope_seat_summary'] = $seat_summary;
-                        error_log("HOPE: Added seat_summary to ticket {$ticket_id}: {$seat_summary}");
-                    }
-                    
-                    if (!empty($pricing_tier)) {
-                        $ticket_data['hope_pricing_tier'] = $pricing_tier;
-                        error_log("HOPE: Added pricing_tier to ticket {$ticket_id}: {$pricing_tier}");
-                    }
-                    
-                    // Also try to get FooEvents compatible seat data
+                    // Get the seats array for this order item
                     $selected_seats = $item->get_meta('_hope_theater_seats');
                     if (empty($selected_seats)) {
                         $selected_seats = $item->get_meta('_hope_selected_seats');
                     }
                     
                     if (!empty($selected_seats) && is_array($selected_seats)) {
-                        // Create FooEvents compatible format
-                        $fooevents_seats = implode(',', $selected_seats);
-                        $ticket_data['fooevents_seats'] = $fooevents_seats;
-                        error_log("HOPE: Added fooevents_seats to ticket {$ticket_id}: {$fooevents_seats}");
+                        
+                        // CRITICAL FIX: Determine which ticket this is (1st, 2nd, 3rd, etc.)
+                        // by finding all tickets for this order item
+                        $all_tickets_for_item = get_posts(array(
+                            'post_type' => 'event_magic_tickets',
+                            'posts_per_page' => -1,
+                            'meta_query' => array(
+                                array('key' => 'WooCommerceEventsOrderID', 'value' => $order_id),
+                                array('key' => 'WooCommerceEventsProductID', 'value' => $product_id)
+                            ),
+                            'orderby' => 'ID',
+                            'order' => 'ASC'
+                        ));
+                        
+                        // Find the index of current ticket
+                        $ticket_index = 0;
+                        foreach ($all_tickets_for_item as $index => $ticket_post) {
+                            if ($ticket_post->ID == $ticket_id) {
+                                $ticket_index = $index;
+                                break;
+                            }
+                        }
+                        
+                        error_log("HOPE: Ticket {$ticket_id} is index {$ticket_index} out of " . count($all_tickets_for_item) . " tickets");
+                        
+                        // Get the specific seat for this ticket index
+                        $specific_seat = isset($selected_seats[$ticket_index]) ? $selected_seats[$ticket_index] : $selected_seats[0];
+                        error_log("HOPE: Assigning seat {$specific_seat} to ticket {$ticket_id} (index {$ticket_index})");
+                        
+                        // Parse the seat ID to get readable format
+                        $seat_parts = $this->parse_seat_id($specific_seat);
+                        $section_name = $this->get_section_display_name($seat_parts['section']);
+                        $seat_display = $section_name . ' Row ' . $seat_parts['row'] . ', Seat ' . $seat_parts['seat'];
+                        
+                        // Add individual seat data to ticket
+                        $ticket_data['hope_seat_summary'] = $seat_display;
+                        $ticket_data['hope_seat_id'] = $specific_seat;
+                        $ticket_data['fooevents_seats'] = $specific_seat;
+                        
+                        // Also add FooEvents compatible individual seat fields
+                        $ticket_data['fooevents_seat_row_name_0'] = $section_name . ' Row ' . $seat_parts['row'];
+                        $ticket_data['fooevents_seat_number_0'] = $seat_parts['seat'];
+                        
+                        error_log("HOPE: Added specific seat data to ticket {$ticket_id}: {$seat_display}");
+                    }
+                    
+                    // Also add pricing tier if available
+                    $pricing_tier = $item->get_meta('hope_pricing_tier');
+                    if (!empty($pricing_tier)) {
+                        $ticket_data['hope_pricing_tier'] = $pricing_tier;
+                        error_log("HOPE: Added pricing_tier to ticket {$ticket_id}: {$pricing_tier}");
                     }
                     
                     break;
