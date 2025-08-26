@@ -983,14 +983,14 @@ class HOPE_WooCommerce_Integration {
      */
     private function get_section_display_name($section) {
         $section_names = array(
-            'A' => 'Orchestra',
-            'B' => 'Orchestra',
-            'C' => 'Orchestra',
-            'D' => 'Orchestra',
-            'E' => 'Orchestra',
-            'F' => 'Balcony',
-            'G' => 'Balcony',
-            'H' => 'Balcony'
+            'A' => 'Section A',
+            'B' => 'Section B',
+            'C' => 'Section C',
+            'D' => 'Section D',
+            'E' => 'Section E',
+            'F' => 'Section F',
+            'G' => 'Section G',
+            'H' => 'Section H'
         );
         
         return isset($section_names[$section]) ? $section_names[$section] : 'Section';
@@ -1178,6 +1178,9 @@ class HOPE_WooCommerce_Integration {
                             'order' => 'ASC'
                         ));
                         
+                        error_log("HOPE: Found " . count($all_tickets_for_item) . " tickets for order {$order_id}, product {$product_id}");
+                        error_log("HOPE: Selected seats array: " . print_r($selected_seats, true));
+                        
                         // Find the index of current ticket
                         $ticket_index = 0;
                         foreach ($all_tickets_for_item as $index => $ticket_post) {
@@ -1185,6 +1188,12 @@ class HOPE_WooCommerce_Integration {
                                 $ticket_index = $index;
                                 break;
                             }
+                        }
+                        
+                        // FALLBACK: If ticket lookup failed, try using attendee ID as index
+                        if (count($all_tickets_for_item) === 0 && !empty($attendee_id)) {
+                            $ticket_index = intval($attendee_id) - 1; // Attendee IDs are usually 1-based
+                            error_log("HOPE: Using attendee ID fallback - attendee {$attendee_id} becomes index {$ticket_index}");
                         }
                         
                         error_log("HOPE: Ticket {$ticket_id} is index {$ticket_index} out of " . count($all_tickets_for_item) . " tickets");
@@ -1388,10 +1397,26 @@ class HOPE_WooCommerce_Integration {
                         error_log("HOPE: Item {$item_id} _hope_seat_summary: " . (empty($seat_summary) ? 'EMPTY' : $seat_summary));
                         error_log("HOPE: Item {$item_id} hope_theater_seats: " . (empty($hope_seats) ? 'EMPTY' : print_r($hope_seats, true)));
                         
-                        // Try to associate this item with the current ticket and store seating data
+                        // CRITICAL FIX: Only assign the first unassigned item to this ticket
                         if (!empty($seat_data) && $item_product_id == $ticket_product_id) {
-                            error_log("HOPE: Found matching item {$item_id} for ticket {$ticket_id} - storing seating data");
-                            $this->store_seat_data_on_ticket($ticket_id, $item, $seat_data);
+                            // Check if this item has already been assigned to another ticket
+                            $assigned_items = get_transient('hope_assigned_items_' . $order_id) ?: array();
+                            
+                            if (!in_array($item_id, $assigned_items)) {
+                                error_log("HOPE: Assigning item {$item_id} to ticket {$ticket_id} (first available)");
+                                
+                                // Mark this item as assigned
+                                $assigned_items[] = $item_id;
+                                set_transient('hope_assigned_items_' . $order_id, $assigned_items, 3600); // 1 hour
+                                
+                                // Store seating data on this ticket
+                                $this->store_seat_data_on_ticket($ticket_id, $item, $seat_data);
+                                
+                                // Stop processing other items for this ticket
+                                break;
+                            } else {
+                                error_log("HOPE: Item {$item_id} already assigned, skipping for ticket {$ticket_id}");
+                            }
                         }
                     } else {
                         error_log("HOPE: Item {$item_id} does not have seating enabled");
