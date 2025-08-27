@@ -159,6 +159,133 @@ $pricing_tiers = array(
 2. Frontend loads seats via `get_seats_with_pricing($pricing_map_id)`
 3. This joins physical seats with their pricing assignments
 
+## Seating Data Pipeline
+
+### Overview
+The seating data goes through a multi-stage initialization process that establishes both the physical layout and pricing configurations. Understanding this pipeline is critical for troubleshooting and managing seating data.
+
+### Stage 1: Physical Seats Creation
+**File**: `includes/class-seat-initializer.php`  
+**Method**: `HOPE_Seating_Initializer::initialize_hope_theater($venue_id)`
+
+**Purpose**: Creates the definitive physical seat layout with accurate coordinates and initial pricing tier assignments.
+
+**Key Characteristics**:
+- Based on architectural drawings and Excel spreadsheet data
+- Contains the **authoritative** pricing tier configuration
+- Creates 497 seats total for HOPE Main Theater
+- Includes precise x/y coordinates for visual positioning
+- Defines accessibility designations
+
+**Example Configuration** (Section C):
+```php
+'C' => array(
+    'rows' => array(
+        1 => array('seats' => 10, 'pricing' => array_fill(1, 10, 'P1')),  // Rows 1-3: P1
+        2 => array('seats' => 11, 'pricing' => array_fill(1, 11, 'P1')),
+        3 => array('seats' => 12, 'pricing' => array_fill(1, 12, 'P1')),
+        4 => array('seats' => 13, 'pricing' => array_fill(1, 13, 'P2')),  // Rows 4-9: P2
+        5 => array('seats' => 14, 'pricing' => array_fill(1, 14, 'P2')),
+        // ... continues
+    )
+),
+```
+
+### Stage 2: Pricing Maps Creation
+**File**: `includes/class-pricing-maps.php`  
+**Method**: `create_standard_pricing_map($theater_id)`
+
+**Purpose**: Creates the pricing map records that will be used by products.
+
+**Process**:
+1. Creates pricing map record in `wp_hope_seating_pricing_maps`
+2. Defines pricing tier values (P1=$1, P2=$2, P3=$3, AA=$5)
+3. Links to the physical theater layout
+
+**Current Active Map**:
+- **ID**: 214
+- **Name**: "HOPE Theater - Standard Pricing" 
+- **Theater**: hope_main_theater
+- **Status**: active
+
+### Stage 3: Pricing Assignments Generation
+**File**: `includes/class-pricing-maps.php`  
+**Method**: `regenerate_pricing_assignments($pricing_map_id)`
+
+**Purpose**: Links physical seats to specific pricing tiers within a pricing map.
+
+**Critical Process**:
+1. Deletes existing assignments for the pricing map
+2. Iterates through all physical seats
+3. Applies pricing tier logic to each seat
+4. Creates records in `wp_hope_seating_seat_pricing`
+
+**⚠️ Known Issues**:
+- This stage has historically contained bugs that created incorrect assignments
+- The regeneration logic may not match the authoritative initializer configuration
+- Previous implementations created duplicate seats and wrong pricing tiers
+
+### Stage 4: Product Integration
+**Process**: Products are configured to use specific pricing maps via WooCommerce meta fields.
+
+**Meta Field**: `_hope_pricing_map_id` (stores the pricing map ID, e.g., 214)
+
+### Data Flow Summary
+```
+Architectural Plans & Excel Data
+         ↓
+    Seat Initializer (AUTHORITATIVE)
+         ↓
+    Physical Seats Table (497 seats)
+         ↓
+    Pricing Maps Creation (Map ID 214)
+         ↓
+    Pricing Assignments Generation (POTENTIAL BUGS HERE)
+         ↓
+    Seat Pricing Table (Links seats → tiers)
+         ↓
+    Product Configuration (Uses Map ID)
+         ↓
+    Frontend Display (AJAX loads seat data)
+```
+
+### Troubleshooting Guidelines
+
+#### 1. Visual Display Issues
+**Symptom**: Seat map shows wrong colors/pricing
+**Root Cause**: Usually incorrect pricing assignments in Stage 3
+**Solution**: Compare database assignments with authoritative initializer configuration
+
+#### 2. Missing Seats
+**Symptom**: Fewer seats than expected (497 for HOPE)
+**Root Cause**: Physical seats creation failed or partial deletion occurred
+**Solution**: Check physical seats count, regenerate if necessary
+
+#### 3. Duplicate Seats
+**Symptom**: More seats than expected (e.g., 994, 2485)
+**Root Cause**: Multiple runs of initialization without proper cleanup
+**Solution**: Manual database cleanup, disable problematic regeneration buttons
+
+#### 4. Wrong Pricing Distribution
+**Symptom**: Incorrect tier counts (e.g., P1 too high, P2 too low)
+**Root Cause**: Bug in pricing assignments generation logic
+**Solution**: Direct SQL updates to match authoritative configuration
+
+**Expected Distribution** (Map ID 214):
+- **P1**: 108 seats (front rows, premium locations)
+- **P2**: 292 seats (middle sections, standard pricing)  
+- **P3**: 88 seats (back rows, budget pricing)
+- **AA**: 9 seats (accessible seating)
+- **Total**: 497 seats
+
+### Maintenance Recommendations
+
+1. **Always verify against authoritative source** (`class-seat-initializer.php`)
+2. **Test regeneration on staging before production**
+3. **Monitor seat counts after any regeneration operations**
+4. **Use the admin interface for pricing changes instead of regeneration buttons**
+5. **Keep backups before bulk operations**
+
 ## Integration Points
 
 ### WooCommerce Integration

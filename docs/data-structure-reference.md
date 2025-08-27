@@ -147,6 +147,8 @@ These tables exist from the old system but are no longer actively used:
 
 ## Troubleshooting Guide
 
+> **📋 For comprehensive troubleshooting, see [TROUBLESHOOTING-SEATING-DATA.md](./TROUBLESHOOTING-SEATING-DATA.md)**
+
 ### Common Issues
 
 #### Wrong Seat Counts

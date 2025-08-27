@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.3.8
+ * Version: 2.4.0
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -182,6 +182,16 @@ class HOPE_Theater_Seating {
             if (file_exists($file_path)) {
                 require_once $file_path;
             }
+        }
+        
+        // Load WP-CLI commands if available
+        if (defined('WP_CLI') && WP_CLI) {
+            require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-repair-command.php';
+        }
+        
+        // Load admin repair page
+        if (is_admin()) {
+            require_once HOPE_SEATING_PLUGIN_DIR . 'admin-repair.php';
         }
         
         // Diagnostic functionality is now built into the admin class
