@@ -344,10 +344,11 @@ class HOPE_Ajax_Handler {
             $variation_id = 0;
             $variation_data = [];
             
-            if (isset($variation_map[$tier])) {
-                $variation_id = $variation_map[$tier]['variation_id'];
-                $variation_data = $variation_map[$tier]['attributes'];
-                error_log("HOPE: Found exact variation match for tier {$tier}: variation_id {$variation_id}");
+            $tier_key = strtolower($tier); // Normalize for map lookup
+            if (isset($variation_map[$tier_key])) {
+                $variation_id = $variation_map[$tier_key]['variation_id'];
+                $variation_data = $variation_map[$tier_key]['attributes'];
+                error_log("HOPE: Found exact variation match for tier {$tier} (key: {$tier_key}): variation_id {$variation_id}");
             } else {
                 // Try to find a matching variation by searching all available variations
                 $matching_variation = $this->find_variation_for_tier($available_variations, $tier);
