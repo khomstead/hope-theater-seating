@@ -22,6 +22,10 @@ class HOPE_Refund_Handler {
         add_action('woocommerce_refund_created', array($this, 'handle_partial_refund'), 10, 2);
         add_action('woocommerce_order_status_cancelled', array($this, 'handle_cancelled_order'), 10, 1);
         
+        // More comprehensive hooks for catching refunds
+        add_action('woocommerce_order_refunded', array($this, 'handle_order_refunded'), 10, 2);
+        add_action('woocommerce_create_refund', array($this, 'handle_create_refund'), 10, 2);
+        
         // Backup hook for order status changes
         add_action('woocommerce_order_status_changed', array($this, 'handle_order_status_change'), 10, 4);
         
@@ -78,6 +82,32 @@ class HOPE_Refund_Handler {
                 error_log("HOPE REFUND: No _refunded_item_id meta found, using item ID {$item_id}");
                 $this->release_item_seats($order_id, $item_id, 'partially_refunded');
             }
+        }
+    }
+    
+    /**
+     * Handle any order refund (more reliable hook)
+     * Triggered when any refund is processed
+     * 
+     * @param int $order_id Order ID
+     * @param int $refund_id Refund ID
+     */
+    public function handle_order_refunded($order_id, $refund_id) {
+        error_log("HOPE REFUND: Order {$order_id} refunded (refund ID: {$refund_id})");
+        $this->release_order_seats($order_id, 'refunded');
+    }
+    
+    /**
+     * Handle refund creation (alternative hook)
+     * 
+     * @param int $refund_id Refund ID
+     * @param array $args Refund arguments
+     */
+    public function handle_create_refund($refund_id, $args) {
+        if (isset($args['order_id'])) {
+            $order_id = $args['order_id'];
+            error_log("HOPE REFUND: Refund created for order {$order_id} (refund ID: {$refund_id})");
+            $this->release_order_seats($order_id, 'refunded');
         }
     }
     
