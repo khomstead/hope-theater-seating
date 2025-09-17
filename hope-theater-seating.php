@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.4.4
+ * Version: 2.4.5
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.4.4');
+define('HOPE_SEATING_VERSION', '2.4.5');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -174,7 +174,8 @@ class HOPE_Theater_Seating {
             'includes/class-modal-handler.php',
             'includes/class-ajax-handler.php',
             'includes/class-integration.php',
-            'includes/class-woocommerce-integration.php'
+            'includes/class-woocommerce-integration.php',
+            'includes/class-refund-handler.php'        // NEW: Handle WooCommerce refunds
         );
         
         foreach ($files_to_include as $file) {
@@ -235,6 +236,12 @@ class HOPE_Theater_Seating {
         // NEW: Make mobile detector available globally
         if (class_exists('HOPE_Mobile_Detector')) {
             $GLOBALS['hope_mobile_detector'] = HOPE_Mobile_Detector::get_instance();
+        }
+        
+        // NEW: Initialize refund handler for WooCommerce integration
+        if (class_exists('HOPE_Refund_Handler') && class_exists('WooCommerce')) {
+            new HOPE_Refund_Handler();
+            error_log('HOPE: Refund handler initialized for WooCommerce integration');
         }
         
         // Add cleanup cron action

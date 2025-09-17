@@ -5,7 +5,7 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 - **Main Stage**: 353 orchestra seats + 132 balcony seats
 - **Purpose**: Replace FooEvents' rectangular-only seating with accurate curved theater layout
 - **Integration**: WooCommerce + FooEvents for ticket sales
-- **Current Version**: 2.0.1
+- **Current Version**: 2.4.5
 
 ## 📅 Development Timeline
 - **Early Sessions**: Database structure, basic plugin architecture
@@ -47,6 +47,15 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 - ✅ WordPress cron cleanup
 - ✅ Session manager class created
 
+### WooCommerce Refund Integration (Complete)
+- ✅ class-refund-handler.php created
+- ✅ Automatic seat release on order refunds
+- ✅ Support for full and partial refunds
+- ✅ Order cancellation handling
+- ✅ Audit trail for all refund activities
+- ✅ Optional admin email notifications
+- ✅ Integration with WooCommerce hooks
+
 ### Database Structure (Complete)
 - ✅ Table schemas defined and created
 - ✅ class-database.php functional
@@ -84,14 +93,15 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 
 ```
 hope-theater-seating/
-├── hope-theater-seating.php          ✅ Main plugin file (v2.0.1)
+├── hope-theater-seating.php          ✅ Main plugin file (v2.4.5)
 ├── includes/
 │   ├── class-modal-handler.php       ✅ Modal system
 │   ├── class-ajax-handler.php        ✅ AJAX endpoints
 │   ├── class-database.php            ✅ Database tables
-│   ├── class-seat-manager.php        ✅ Seat population (NEW)
-│   ├── class-session-manager.php     ✅ Hold management (NEW)
-│   ├── class-mobile-detector.php     ✅ Device detection (NEW)
+│   ├── class-seat-manager.php        ✅ Seat population
+│   ├── class-session-manager.php     ✅ Hold management
+│   ├── class-mobile-detector.php     ✅ Device detection
+│   ├── class-refund-handler.php      ✅ WooCommerce refund integration (NEW)
 │   ├── class-venues.php              ⚠️  May exist
 │   ├── class-seat-maps.php           ⚠️  May exist
 │   ├── class-admin.php               ⚠️  May exist
@@ -158,6 +168,12 @@ const seatMap = new HOPESeatMap({
 - `hope_hold_seats` - Create temporary hold
 - `hope_release_seats` - Release holds
 - `hope_add_to_cart` - Add selected seats to WooCommerce cart
+
+### WooCommerce Hooks (Refund Integration)
+- `woocommerce_order_status_refunded` - Full order refunds
+- `woocommerce_refund_created` - Partial refunds (item-level)
+- `woocommerce_order_status_cancelled` - Order cancellations
+- `woocommerce_order_status_changed` - General status changes backup
 
 ### Cron Jobs
 - `hope_seating_cleanup` - Hourly general cleanup
