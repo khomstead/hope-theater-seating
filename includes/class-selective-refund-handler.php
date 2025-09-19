@@ -100,8 +100,15 @@ class HOPE_Selective_Refund_Handler {
             return $refund_calculation;
         }
         
+        // Set flag to prevent general refund handler from interfering
+        update_post_meta($order_id, '_hope_selective_refund_in_progress', time());
+        
         // Create WooCommerce refund
         $wc_refund_result = $this->create_woocommerce_refund($order, $refund_calculation['amount'], $reason);
+        
+        // Clear the flag regardless of success/failure
+        delete_post_meta($order_id, '_hope_selective_refund_in_progress');
+        
         if (!$wc_refund_result['success']) {
             return $wc_refund_result;
         }
@@ -126,6 +133,10 @@ class HOPE_Selective_Refund_Handler {
         // Trigger action for extensibility
         do_action('hope_selective_refund_processed', $order_id, $seat_ids, $refund_calculation['amount']);
         
+        // Enhanced message with refund type information
+        $refund_type_info = isset($wc_refund_result['refund_type']) ? 
+            " ({$wc_refund_result['refund_type']} refund)" : '';
+        
         $result = array(
             'success' => true,
             'refund_id' => $wc_refund_result['refund_id'],
@@ -133,11 +144,13 @@ class HOPE_Selective_Refund_Handler {
             'refunded_seats' => $seat_ids,
             'refund_amount' => $refund_calculation['amount'],
             'remaining_seats' => $this->get_remaining_seats($order_id),
+            'refund_type' => $wc_refund_result['refund_type'] ?? 'unknown',
             'message' => sprintf(
-                'Successfully refunded %d seats (%s) for $%.2f',
+                'Successfully refunded %d seats (%s) for $%.2f%s',
                 count($seat_ids),
                 implode(', ', $seat_ids),
-                $refund_calculation['amount']
+                $refund_calculation['amount'],
+                $refund_type_info
             )
         );
         
@@ -193,12 +206,22 @@ class HOPE_Selective_Refund_Handler {
      */
     private function create_woocommerce_refund($order, $amount, $reason) {
         try {
+            // Check if this is a $0 order or if payment gateway is unavailable
+            $order_total = floatval($order->get_total());
+            $payment_method = $order->get_payment_method();
+            $gateway_available = !empty($payment_method) && $order_total > 0;
+            
+            // For $0 orders or when gateway is unavailable, create manual refund
+            $refund_payment = $gateway_available && $amount > 0;
+            
+            error_log("HOPE Refund: Order total: {$order_total}, Payment method: {$payment_method}, Gateway available: " . ($gateway_available ? 'yes' : 'no') . ", Refund amount: {$amount}, Will process payment: " . ($refund_payment ? 'yes' : 'no'));
+            
             $refund = wc_create_refund(array(
                 'amount' => $amount,
                 'reason' => $reason ?: 'Selective seat refund',
                 'order_id' => $order->get_id(),
                 'line_items' => array(), // TODO: Can be enhanced to specify exact line items
-                'refund_payment' => true // Process actual payment refund
+                'refund_payment' => $refund_payment // Only process payment refund if gateway is available
             ));
             
             if (is_wp_error($refund)) {
@@ -208,10 +231,15 @@ class HOPE_Selective_Refund_Handler {
                 );
             }
             
+            $refund_type = $refund_payment ? 'automatic' : 'manual';
             return array(
                 'success' => true,
                 'refund_id' => $refund->get_id(),
-                'refund_object' => $refund
+                'refund_object' => $refund,
+                'refund_type' => $refund_type,
+                'message' => $refund_payment 
+                    ? 'Refund processed automatically through payment gateway' 
+                    : 'Manual refund created - no payment to process'
             );
             
         } catch (Exception $e) {

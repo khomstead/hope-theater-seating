@@ -149,6 +149,13 @@ class HOPE_Refund_Handler {
     private function release_order_seats($order_id, $reason = 'refunded') {
         global $wpdb;
         
+        // Check if selective refund is in progress - if so, skip this to avoid conflicts
+        $selective_refund_in_progress = get_post_meta($order_id, '_hope_selective_refund_in_progress', true);
+        if ($selective_refund_in_progress) {
+            error_log("HOPE REFUND: Selective refund in progress for order {$order_id}, skipping general refund handler");
+            return;
+        }
+        
         $order = wc_get_order($order_id);
         if (!$order) {
             error_log("HOPE REFUND: Could not get order object for {$order_id}");
