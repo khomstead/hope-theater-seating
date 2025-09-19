@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.4.6
+ * Version: 2.4.8
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.4.6');
+define('HOPE_SEATING_VERSION', '2.4.9');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -48,19 +48,38 @@ function hope_seating_activate() {
     require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-physical-seats.php';
     require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-pricing-maps.php';
     
+    // NEW: Include selective refund database support (safe to load)
+    if (file_exists(HOPE_SEATING_PLUGIN_DIR . 'includes/class-database-selective-refunds.php')) {
+        require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-database-selective-refunds.php';
+    }
+    
     // Create database tables (includes new architecture tables)
     $database = new HOPE_Seating_Database();
     $database->create_tables();
     
-    // NEW ARCHITECTURE: Initialize separated system
+    // NEW: Add selective refund database support (safe, non-disruptive)
+    if (class_exists('HOPE_Database_Selective_Refunds')) {
+        HOPE_Database_Selective_Refunds::add_selective_refund_support();
+        error_log('HOPE: Selective refund database support initialized');
+    }
+    
+    // NEW ARCHITECTURE: Initialize separated system (only if not already exists)
     try {
-        // Initialize physical seats (497 seats)
+        // Initialize physical seats (497 seats) - only if needed
         $physical_manager = new HOPE_Physical_Seats_Manager();
         $physical_seats_created = $physical_manager->populate_physical_seats();
         
-        // Initialize standard pricing map
+        // Initialize standard pricing map - ONLY if none exists to prevent duplicates
         $pricing_manager = new HOPE_Pricing_Maps_Manager();
-        $pricing_map_created = $pricing_manager->create_standard_pricing_map();
+        $existing_maps = $pricing_manager->get_pricing_maps();
+        
+        $pricing_map_created = false;
+        if (empty($existing_maps)) {
+            $pricing_map_created = $pricing_manager->create_standard_pricing_map();
+            error_log("HOPE: Created initial pricing map on activation");
+        } else {
+            error_log("HOPE: Pricing maps already exist (" . count($existing_maps) . " found), skipping creation to prevent duplicates");
+        }
         
         error_log("HOPE Theater Seating v2.3.0 activated. New architecture initialized: {$physical_seats_created} physical seats, pricing map created: " . ($pricing_map_created ? 'yes' : 'no'));
         
@@ -175,7 +194,12 @@ class HOPE_Theater_Seating {
             'includes/class-ajax-handler.php',
             'includes/class-integration.php',
             'includes/class-woocommerce-integration.php',
-            'includes/class-refund-handler.php'        // NEW: Handle WooCommerce refunds
+            'includes/class-refund-handler.php',        // NEW: Handle WooCommerce refunds
+            'includes/class-database-selective-refunds.php',  // NEW: Selective refund database support
+            'includes/class-selective-refund-handler.php',     // NEW: Selective refund functionality
+            'includes/class-admin-selective-refunds.php',      // NEW: Admin interface for selective refunds
+            'includes/class-seat-blocking-handler.php',        // NEW: Seat blocking functionality
+            'includes/class-admin-seat-blocking.php'           // NEW: Admin interface for seat blocking
         );
         
         foreach ($files_to_include as $file) {
@@ -242,6 +266,29 @@ class HOPE_Theater_Seating {
         if (class_exists('HOPE_Refund_Handler') && class_exists('WooCommerce')) {
             new HOPE_Refund_Handler();
             error_log('HOPE: Refund handler initialized for WooCommerce integration');
+        }
+        
+        // NEW: Initialize selective refund capabilities (Phase 1 - Non-disruptive)
+        if (class_exists('HOPE_Selective_Refund_Handler') && class_exists('WooCommerce')) {
+            new HOPE_Selective_Refund_Handler();
+            error_log('HOPE: Selective refund handler initialized (Phase 1)');
+        }
+        
+        // NEW: Initialize admin interface for selective refunds (Phase 2)
+        if (is_admin() && class_exists('HOPE_Admin_Selective_Refunds') && class_exists('WooCommerce')) {
+            new HOPE_Admin_Selective_Refunds();
+        }
+        
+        // NEW: Initialize seat blocking handler
+        if (class_exists('HOPE_Seat_Blocking_Handler') && class_exists('WooCommerce')) {
+            new HOPE_Seat_Blocking_Handler();
+            error_log('HOPE: Seat blocking handler initialized');
+        }
+        
+        // NEW: Initialize seat blocking admin interface
+        if (is_admin() && class_exists('HOPE_Admin_Seat_Blocking') && class_exists('WooCommerce')) {
+            new HOPE_Admin_Seat_Blocking();
+            error_log('HOPE: Seat blocking admin interface initialized');
         }
         
         // Add cleanup cron action

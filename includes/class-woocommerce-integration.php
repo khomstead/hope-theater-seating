@@ -200,6 +200,12 @@ class HOPE_WooCommerce_Integration {
         .hope-seating-enabled .quantity {
             display: none !important;
         }
+        .hope-seating-enabled .single_add_to_cart_button {
+            display: none !important;
+        }
+        .hope-seating-enabled button[type="submit"] {
+            display: none !important;
+        }
         </style>';
         
         // Add class to product form and hide notices

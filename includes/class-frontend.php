@@ -12,6 +12,7 @@ if (!defined('ABSPATH')) {
 class HOPE_Seating_Frontend {
     
     public function __construct() {
+        error_log("HOPE DEBUG: Frontend class constructor called");
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'), 5);
         add_shortcode('hope_seating_chart', array($this, 'seating_chart_shortcode'));
         add_shortcode('hope_seat_button', array($this, 'seat_button_shortcode'));
@@ -25,7 +26,7 @@ class HOPE_Seating_Frontend {
         
         // WooCommerce integration
         add_filter('woocommerce_add_cart_item_data', array($this, 'add_seats_to_cart_item'), 10, 3);
-        // Seating interface now handled by WooCommerce integration class
+        // Seating interface now handled by WooCommerce integration class to avoid conflicts
         // add_action('woocommerce_before_add_to_cart_button', array($this, 'add_seating_interface'));
         // add_action('woocommerce_single_product_summary', array($this, 'add_seating_button'), 25);
         
@@ -383,9 +384,15 @@ public function seat_button_shortcode($atts) {
         
         // DEBUG: Log first few seats to verify pricing tiers
         error_log('HOPE DEBUG: ===== AJAX REQUEST RECEIVED =====');
+        error_log('HOPE DEBUG: Raw venue_id from POST: ' . ($_POST['venue_id'] ?? 'NOT SET'));
         error_log('HOPE DEBUG: Pricing Map ID: ' . $pricing_map_id);
         error_log('HOPE DEBUG: Event ID: ' . $event_id);
         error_log('HOPE DEBUG: Total seats from DB: ' . count($seats_with_pricing));
+        
+        if (empty($seats_with_pricing)) {
+            error_log('HOPE DEBUG: CRITICAL - No seats found for pricing map ' . $pricing_map_id);
+            error_log('HOPE DEBUG: Available pricing maps: ' . print_r($pricing_manager->get_pricing_maps(), true));
+        }
         
         error_log('HOPE DEBUG: First 3 seats from database:');
         for ($i = 0; $i < min(3, count($seats_with_pricing)); $i++) {
@@ -601,13 +608,21 @@ public function seat_button_shortcode($atts) {
     public function add_seating_interface() {
         global $product;
         
+        error_log("HOPE DEBUG: add_seating_interface called");
+        
         if (!$product) {
+            error_log("HOPE DEBUG: No product found");
             return;
         }
         
-        $seating_enabled = get_post_meta($product->get_id(), '_hope_seating_enabled', true);
+        $product_id = $product->get_id();
+        $seating_enabled = get_post_meta($product_id, '_hope_seating_enabled', true);
+        $venue_id = get_post_meta($product_id, '_hope_seating_venue_id', true);
+        
+        error_log("HOPE DEBUG: Product {$product_id} - seating_enabled: '{$seating_enabled}', venue_id: '{$venue_id}'");
         
         if ($seating_enabled === 'yes') {
+            error_log("HOPE DEBUG: Adding seating interface HTML");
             echo '<input type="hidden" id="hope_selected_seats_cart" name="hope_selected_seats" value="" />';
             echo '<div id="hope-selected-seats-display" style="margin: 10px 0; display: none;">';
             echo '<div class="hope-selected-seats-info">';
@@ -616,6 +631,15 @@ public function seat_button_shortcode($atts) {
             echo '<div id="hope-selected-seats-total"></div>';
             echo '</div>';
             echo '</div>';
+            
+            // Also add the seat selection button here since the other hook might not work
+            if ($venue_id) {
+                error_log("HOPE DEBUG: Adding seat button inline with interface");
+                echo '<div class="hope-debug-marker">SEAT BUTTON SHOULD BE HERE (INLINE)</div>';
+                echo '<div style="margin: 10px 0;">';
+                echo do_shortcode('[hope_seat_button venue_id="' . esc_attr($venue_id) . '" event_id="' . esc_attr($product_id) . '" text="' . __('Select Your Seats', 'hope-seating') . '"]');
+                echo '</div>';
+            }
         }
     }
     
@@ -625,14 +649,22 @@ public function seat_button_shortcode($atts) {
     public function add_seating_button() {
         global $product;
         
+        error_log("HOPE DEBUG: add_seating_button called");
+        
         if (!$product) {
+            error_log("HOPE DEBUG: No product found in add_seating_button");
             return;
         }
         
-        $seating_enabled = get_post_meta($product->get_id(), '_hope_seating_enabled', true);
-        $venue_id = get_post_meta($product->get_id(), '_hope_seating_venue_id', true);
+        $product_id = $product->get_id();
+        $seating_enabled = get_post_meta($product_id, '_hope_seating_enabled', true);
+        $venue_id = get_post_meta($product_id, '_hope_seating_venue_id', true);
+        
+        error_log("HOPE DEBUG: add_seating_button - Product {$product_id} - seating_enabled: '{$seating_enabled}', venue_id: '{$venue_id}'");
         
         if ($seating_enabled === 'yes' && $venue_id) {
+            error_log("HOPE DEBUG: Conditions met, outputting seat button");
+            echo '<div class="hope-debug-marker">SEAT BUTTON SHOULD BE HERE</div>';
             echo do_shortcode('[hope_seat_button venue_id="' . esc_attr($venue_id) . '" event_id="' . esc_attr($product->get_id()) . '" text="' . __('Select Your Seats', 'hope-seating') . '"]');
         }
     }

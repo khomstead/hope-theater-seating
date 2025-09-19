@@ -5,7 +5,7 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 - **Main Stage**: 353 orchestra seats + 132 balcony seats
 - **Purpose**: Replace FooEvents' rectangular-only seating with accurate curved theater layout
 - **Integration**: WooCommerce + FooEvents for ticket sales
-- **Current Version**: 2.4.5
+- **Current Version**: 2.4.6
 
 ## 📅 Development Timeline
 - **Early Sessions**: Database structure, basic plugin architecture
@@ -93,7 +93,7 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 
 ```
 hope-theater-seating/
-├── hope-theater-seating.php          ✅ Main plugin file (v2.4.5)
+├── hope-theater-seating.php          ✅ Main plugin file (v2.4.6)
 ├── includes/
 │   ├── class-modal-handler.php       ✅ Modal system
 │   ├── class-ajax-handler.php        ✅ AJAX endpoints
@@ -170,8 +170,10 @@ const seatMap = new HOPESeatMap({
 - `hope_add_to_cart` - Add selected seats to WooCommerce cart
 
 ### WooCommerce Hooks (Refund Integration)
+- `woocommerce_order_refunded` - Primary refund detection hook (most reliable)
+- `woocommerce_create_refund` - Alternative refund creation hook
 - `woocommerce_order_status_refunded` - Full order refunds
-- `woocommerce_refund_created` - Partial refunds (item-level)
+- `woocommerce_refund_created` - Partial refunds (deprecated - unreliable)
 - `woocommerce_order_status_cancelled` - Order cancellations
 - `woocommerce_order_status_changed` - General status changes backup
 
@@ -290,6 +292,72 @@ const seatMap = new HOPESeatMap({
 - Created modal system with full WordPress integration
 - Implemented mobile touch gestures
 - Built complete frontend with orange border animations
+
+---
+
+## 📋 CHANGELOG
+
+### Version 2.4.6 (September 17, 2025) - CRITICAL FIX
+**CRITICAL REFUND FUNCTIONALITY FIX**
+- ✅ **FIXED**: Refund hooks not firing reliably
+- ✅ **REPLACED**: Unreliable `woocommerce_refund_created` hook
+- ✅ **ADDED**: `woocommerce_order_refunded` hook (primary, most reliable)
+- ✅ **ADDED**: `woocommerce_create_refund` hook (backup method)
+- ✅ **ENHANCED**: Debugging and error logging throughout refund process
+- ✅ **CONFIRMED**: Seats are properly released when orders are refunded
+- ✅ **CONFIRMED**: Refunded seats become available immediately for new customers
+- ✅ **CONFIRMED**: Comprehensive refund tracking and audit trail working
+- ✅ **TESTED**: Process refund in WooCommerce admin works correctly
+- ✅ **TESTED**: Refund stats update correctly (showing "refunded":3)
+- ✅ **TESTED**: Seats immediately available for selection after refund
+- ✅ **TESTED**: Audit trail maintained properly
+
+**TECHNICAL IMPROVEMENTS**:
+- Enhanced hook reliability for refund detection
+- Improved error logging and debugging capabilities  
+- Better refund statistics tracking
+- More comprehensive hook coverage for edge cases
+
+**READY FOR PRODUCTION DEPLOYMENT**
+
+### Version 2.4.5 (September 17, 2025) - INITIAL REFUND INTEGRATION
+**NEW FEATURE: WooCommerce Refund Integration**
+- ✅ **ADDED**: Complete refund handler system (`class-refund-handler.php`)
+- ✅ **ADDED**: Automatic seat release on order refunds and cancellations
+- ✅ **ADDED**: Support for full and partial refunds
+- ✅ **ADDED**: Audit trail for all refund activities with order meta storage
+- ✅ **ADDED**: Optional admin email notifications for seat releases
+- ✅ **ADDED**: Refund statistics tracking for admin dashboard
+- ✅ **INTEGRATION**: Multiple WooCommerce hooks for comprehensive coverage
+- ✅ **INTEGRATION**: Database update system for booking status changes
+
+**NOTE**: Version 2.4.5 had initial hook reliability issues, resolved in 2.4.6
+
+### Version 2.4.4 (Prior to refund integration)
+**STABLE BASE VERSION**
+- ✅ **ROLLBACK**: Restored from 2.4.1 stable version with new version number
+- ✅ **FIXED**: Customer cart issues that occurred in 2.4.2 deployment
+- ✅ **MAINTAINED**: All core seating functionality working properly
+- ✅ **CONFIRMED**: Customer-reported add-to-cart issues resolved
+
+**NOTE**: 2.4.4 was created as a stable rollback after 2.4.2 broke key functions
+
+### Version 2.4.3 (Skipped due to deployment issues)
+
+### Version 2.4.2 (BROKEN - DO NOT DEPLOY)
+**DEPLOYMENT FAILURE**
+- ❌ **BROKE**: Several key functions after deployment
+- ❌ **CAUSED**: Customer issues with ticket cart functionality  
+- ❌ **ROLLED BACK**: To 2.4.1 functionality with 2.4.4 version number
+- ❌ **STATUS**: Never use this version - known to break core functions
+
+### Version 2.4.1 (LAST KNOWN STABLE)
+**STABLE BASELINE**
+- ✅ **STABLE**: Last confirmed working version before refund integration
+- ✅ **FUNCTIONAL**: All core seating, cart, and booking functionality working
+- ✅ **BASELINE**: Used as foundation for 2.4.4 rollback version
+
+**NOTE**: Contains unidentified issue causing some customers trouble adding tickets to cart (schema mismatch suspected)
 
 ---
 

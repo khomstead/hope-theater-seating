@@ -98,6 +98,12 @@ class HOPE_Session_Manager {
             return array();
         }
         
+        // NEW: Check for blocked seats first
+        $conflicts = $this->check_blocked_seats($event_id, $seat_ids);
+        if (!empty($conflicts)) {
+            return $conflicts; // Return blocked seats as conflicts
+        }
+        
         $placeholders = array_fill(0, count($seat_ids), '%s');
         $placeholders_str = implode(',', $placeholders);
         
@@ -480,5 +486,35 @@ class HOPE_Session_Manager {
         }
         
         return $_SESSION['hope_seating_session_id'];
+    }
+    
+    /**
+     * Check for blocked seats that conflict with requested seats
+     * NEW: Integration with seat blocking system
+     * @param int $event_id Event/Product ID
+     * @param array $seat_ids Seat IDs to check
+     * @return array Array of blocked seat IDs that conflict
+     */
+    private function check_blocked_seats($event_id, $seat_ids) {
+        if (!class_exists('HOPE_Database_Selective_Refunds') || 
+            !HOPE_Database_Selective_Refunds::is_seat_blocking_ready()) {
+            return array(); // Seat blocking not available, no conflicts
+        }
+        
+        // Get all blocked seat IDs for this event
+        $blocked_seats = HOPE_Database_Selective_Refunds::get_blocked_seat_ids($event_id);
+        
+        if (empty($blocked_seats)) {
+            return array(); // No blocked seats, no conflicts
+        }
+        
+        // Find intersection of requested seats and blocked seats
+        $conflicts = array_intersect($seat_ids, $blocked_seats);
+        
+        if (!empty($conflicts)) {
+            error_log("HOPE SEAT BLOCKING: Blocked seat conflicts detected for event {$event_id} - " . implode(', ', $conflicts));
+        }
+        
+        return array_values($conflicts);
     }
 }
