@@ -106,9 +106,13 @@ class HOPE_Admin_Seat_Blocking {
         // Seat selection and blocking controls
         echo '<div class="hope-admin-section">';
         echo '<h2>Block New Seats</h2>';
-        echo '<p>Click seats on the map below to select them for blocking. Selected seats will be highlighted.</p>';
-        echo '<div id="hope-admin-seat-map-container" style="border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9; min-height: 400px; display: flex; align-items: center; justify-content: center;">';
-        echo '<div id="hope-seat-map-loading" style="text-align: center; color: #666;">Select an event to load seat map</div>';
+        echo '<p>Click the button below to open the seat map and select seats for blocking.</p>';
+        echo '<div id="hope-seat-map-controls" style="text-align: center; padding: 40px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">';
+        echo '<div id="hope-seat-map-loading" style="color: #666; margin-bottom: 20px;">Select an event to enable seat blocking</div>';
+        echo '<button id="hope-open-seat-map-btn" class="button button-primary button-large" style="display: none;">';
+        echo '<span class="dashicons dashicons-tickets-alt" style="margin-right: 8px;"></span>';
+        echo 'Open Seat Map for Blocking';
+        echo '</button>';
         echo '</div>';
         
         echo '<div id="hope-block-controls" style="display: none;">';
@@ -193,7 +197,10 @@ class HOPE_Admin_Seat_Blocking {
         
         // Add nonce for security
         wp_nonce_field('hope_seat_block_admin_action', 'hope_seat_block_admin_nonce');
-        
+
+        // Include the seat map modal HTML for admin use
+        $this->render_seat_map_modal();
+
         echo '</div>'; // End wrap
         
         // Add JavaScript for interactivity
@@ -320,7 +327,7 @@ class HOPE_Admin_Seat_Blocking {
                 }
             });
             
-            // Load event data (current blocks and available seats)
+            // Load event data (current blocks and enable seat map)
             function loadEventData(eventId) {
                 $.ajax({
                     url: ajaxurl,
@@ -334,7 +341,7 @@ class HOPE_Admin_Seat_Blocking {
                         if (response.success) {
                             eventSeats = response.data;
                             renderCurrentBlocks(eventSeats.blocks);
-                            renderSeatMap(eventSeats.seats, eventSeats.blocked_seats);
+                            enableSeatMapButton(eventId);
                         } else {
                             alert('Failed to load event data: ' + response.data.error);
                         }
@@ -342,6 +349,91 @@ class HOPE_Admin_Seat_Blocking {
                     error: function() {
                         alert('Network error loading event data');
                     }
+                });
+            }
+
+            // Enable the seat map button for the selected event
+            function enableSeatMapButton(eventId) {
+                $('#hope-seat-map-loading').text('Ready to block seats for this event');
+                $('#hope-open-seat-map-btn').show();
+                $('#hope-block-controls').show();
+
+                // Set up the button click handler
+                $('#hope-open-seat-map-btn').off('click').on('click', function() {
+                    openSeatMapForBlocking(eventId);
+                });
+
+                // Clear any previous selection
+                selectedSeats = [];
+                updateSelectionDisplay();
+            }
+
+            // Open the frontend seat map modal in admin blocking mode
+            function openSeatMapForBlocking(eventId) {
+                var modal = $('#hope-seat-modal');
+                if (modal.length === 0) {
+                    alert('Seat map modal not found. Please refresh the page.');
+                    return;
+                }
+
+                // Show the modal
+                modal.show();
+
+                // Set the product ID for the seat map to load
+                window.hope_ajax = window.hope_ajax || {};
+                window.hope_ajax.product_id = eventId;
+                window.hope_ajax.venue_id = eventSeats.venue_id || 218;
+
+                // Initialize the seat map if the class is available
+                if (typeof HOPESeatMap !== 'undefined') {
+                    var seatMapContainer = document.getElementById('seat-map-container');
+                    if (seatMapContainer) {
+                        // Clear any existing content
+                        seatMapContainer.innerHTML = '';
+
+                        // Create the seat map instance
+                        var seatMap = new HOPESeatMap();
+                        seatMap.productId = eventId;
+
+                        // Initialize the map
+                        seatMap.initializeMap();
+                    }
+                } else {
+                    // Fallback: try to trigger existing modal functionality
+                    var seatMapContainer = $('#seat-map-container');
+                    seatMapContainer.html('<p>Loading seat map...</p>');
+
+                    // Try to load the seat map data directly
+                    $.post(ajaxurl, {
+                        action: 'hope_get_venue_seats',
+                        venue_id: eventSeats.venue_id || 218,
+                        event_id: eventId,
+                        nonce: $('#hope_seat_block_admin_nonce').val()
+                    }, function(response) {
+                        if (response.success) {
+                            // Simple fallback rendering
+                            var html = '<div style="text-align: center; padding: 20px;">';
+                            html += '<p>Seat map will be available here. For now, please use the grid selection.</p>';
+                            html += '<button type="button" onclick="jQuery(\'#hope-seat-modal\').hide()">Close</button>';
+                            html += '</div>';
+                            seatMapContainer.html(html);
+                        }
+                    });
+                }
+
+                // Handle modal close
+                $('.hope-modal-close, #cancel-seat-selection').off('click').on('click', function() {
+                    modal.hide();
+                });
+
+                // Handle seat selection confirmation
+                $('#confirm-seat-selection').off('click').on('click', function() {
+                    // Get selected seats from the seat map
+                    if (window.currentSeatMap && window.currentSeatMap.selectedSeats) {
+                        selectedSeats = Array.from(window.currentSeatMap.selectedSeats);
+                    }
+                    updateSelectionDisplay();
+                    modal.hide();
                 });
             }
             
@@ -373,180 +465,6 @@ class HOPE_Admin_Seat_Blocking {
                 $('#hope-current-blocks').html(html);
             }
             
-            // Render SVG-based seat map using exact frontend system
-            function renderSeatMap(allSeats, blockedSeats) {
-                var container = $('#hope-admin-seat-map-container');
-                container.empty();
-
-                // Use exact frontend theater configuration
-                var theaterConfig = {
-                    orchestra: {
-                        centerX: 600,
-                        startY: 300,
-                        rowSpacing: 35,
-                        seatSize: 12,
-                        sections: {
-                            'A': { startAngle: -75, endAngle: -45, startRadius: 150 },
-                            'B': { startAngle: -45, endAngle: -15, startRadius: 150 },
-                            'C': { startAngle: -15, endAngle: 15, startRadius: 150 },
-                            'D': { startAngle: 15, endAngle: 45, startRadius: 150 },
-                            'E': { startAngle: 45, endAngle: 75, startRadius: 150 }
-                        }
-                    },
-                    balcony: {
-                        centerX: 600,
-                        startY: 600,
-                        rowSpacing: 35,
-                        seatSize: 10,
-                        sections: {
-                            'F': { startAngle: -60, endAngle: -20, startRadius: 100 },
-                            'G': { startAngle: -20, endAngle: 20, startRadius: 100 },
-                            'H': { startAngle: 20, endAngle: 60, startRadius: 100 }
-                        }
-                    }
-                };
-
-                // Create SVG element with frontend viewBox
-                var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                svg.setAttribute('viewBox', '0 0 1200 1000');
-                svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-                svg.style.width = '100%';
-                svg.style.height = 'auto';
-
-                // Draw stage (same as frontend)
-                var stage = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                stage.setAttribute('x', '300');
-                stage.setAttribute('y', '200');
-                stage.setAttribute('width', '600');
-                stage.setAttribute('height', '30');
-                stage.setAttribute('rx', '15');
-                stage.setAttribute('class', 'hope-admin-stage');
-                svg.appendChild(stage);
-
-                // Add stage label
-                var stageLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                stageLabel.setAttribute('x', '600');
-                stageLabel.setAttribute('y', '220');
-                stageLabel.setAttribute('text-anchor', 'middle');
-                stageLabel.setAttribute('fill', 'white');
-                stageLabel.setAttribute('font-size', '14');
-                stageLabel.setAttribute('font-weight', 'bold');
-                stageLabel.textContent = 'STAGE';
-                svg.appendChild(stageLabel);
-
-                // Render seats using exact frontend calculation
-                allSeats.forEach(function(seat) {
-                    var position = calculateAccurateSeatPosition(seat, allSeats, theaterConfig);
-
-                    // Determine seat size based on level (same as frontend)
-                    var isBalcony = ['F', 'G', 'H'].includes(seat.section);
-                    var seatSize = isBalcony ? theaterConfig.balcony.seatSize : theaterConfig.orchestra.seatSize;
-
-                    // Create seat group
-                    var seatGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                    seatGroup.setAttribute('class', 'seat-group');
-                    seatGroup.setAttribute('data-seat-id', seat.seat_id);
-
-                    // Create seat rectangle (same as frontend)
-                    var seatRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    seatRect.setAttribute('x', position.x - seatSize/2);
-                    seatRect.setAttribute('y', position.y - seatSize/2);
-                    seatRect.setAttribute('width', seatSize);
-                    seatRect.setAttribute('height', seatSize);
-                    seatRect.setAttribute('rx', '2');
-                    seatRect.setAttribute('class', 'hope-admin-seat');
-
-                    // Rotate seat to face the stage (same as frontend)
-                    if (position.rotation) {
-                        seatRect.setAttribute('transform',
-                            'rotate(' + position.rotation + ' ' + position.x + ' ' + position.y + ')'
-                        );
-                    }
-
-                    // Set seat status and styling
-                    if (blockedSeats.includes(seat.seat_id)) {
-                        seatRect.setAttribute('class', 'hope-admin-seat blocked');
-                    } else if (seat.status === 'confirmed') {
-                        seatRect.setAttribute('class', 'hope-admin-seat booked');
-                    } else {
-                        seatRect.setAttribute('class', 'hope-admin-seat available');
-                        seatGroup.addEventListener('click', function() {
-                            toggleSeatSelection(seat.seat_id, seatRect);
-                        });
-                    }
-
-                    seatGroup.appendChild(seatRect);
-
-                    // Add seat label for larger seats (same logic as frontend)
-                    if (seatSize >= 12) {
-                        var seatLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        seatLabel.setAttribute('x', position.x);
-                        seatLabel.setAttribute('y', position.y + 3);
-                        seatLabel.setAttribute('text-anchor', 'middle');
-                        seatLabel.setAttribute('class', 'hope-admin-seat-label');
-                        seatLabel.setAttribute('pointer-events', 'none');
-                        seatLabel.setAttribute('fill', 'white');
-                        seatLabel.setAttribute('font-size', '8');
-                        seatLabel.textContent = seat.seat_number;
-                        seatGroup.appendChild(seatLabel);
-                    }
-
-                    svg.appendChild(seatGroup);
-                });
-
-                container.append(svg);
-                $('#hope-block-controls').show();
-
-                // Clear selection when loading new event
-                selectedSeats = [];
-                updateSelectionDisplay();
-            }
-
-            // Use exact frontend coordinate calculation
-            function calculateAccurateSeatPosition(seat, allSeats, theaterConfig) {
-                var section = seat.section;
-                var row = parseInt(seat.row_number) || 1;
-                var seatNum = parseInt(seat.seat_number) || 1;
-
-                // Check if this is a balcony seat
-                var isBalcony = ['F', 'G', 'H'].includes(section);
-                var config = isBalcony ? theaterConfig.balcony : theaterConfig.orchestra;
-                var sectionConfig = config.sections[section];
-
-                if (!sectionConfig) {
-                    // Fallback for unknown sections
-                    return {
-                        x: 600 + (seatNum * 15),
-                        y: 400 + (row * 30),
-                        rotation: 0
-                    };
-                }
-
-                // Get total seats in this row from the data
-                var rowSeats = allSeats.filter(function(s) {
-                    return s.section === section && s.row_number == row;
-                }).length || 10;
-
-                // Calculate radius for this row (increases as you go back)
-                var radius = sectionConfig.startRadius + (row * config.rowSpacing);
-
-                // Calculate angle for this seat
-                var angleRange = sectionConfig.endAngle - sectionConfig.startAngle;
-                var angleStep = angleRange / (rowSeats + 1);
-                var seatAngle = sectionConfig.startAngle + (angleStep * seatNum);
-
-                // Convert to radians
-                var angleRad = (seatAngle * Math.PI) / 180;
-
-                // Calculate position
-                var x = config.centerX + (radius * Math.sin(angleRad));
-                var y = config.startY + (radius * Math.cos(angleRad));
-
-                // Calculate rotation so seat faces the stage
-                var rotation = -seatAngle;
-
-                return { x: x, y: y, rotation: rotation };
-            }
 
             // Handle seat selection toggle
             function toggleSeatSelection(seatId, seatElement) {
@@ -823,7 +741,59 @@ class HOPE_Admin_Seat_Blocking {
         if ($hook !== 'hope-seating_page_hope-seat-blocking') {
             return;
         }
-        
+
+        // Enqueue the frontend seat map scripts for admin use
+        wp_enqueue_script('hope-seat-map', plugin_dir_url(__FILE__) . '../assets/js/seat-map.js', array('jquery'), '2.4.9', true);
+        wp_enqueue_script('hope-modal-handler', plugin_dir_url(__FILE__) . '../assets/js/modal-handler.js', array('jquery'), '2.4.9', true);
+
+        // Enqueue frontend styles for the seat map modal
+        wp_enqueue_style('hope-frontend-style', plugin_dir_url(__FILE__) . '../assets/css/frontend.css', array(), '2.4.9');
+
+        // Localize script with AJAX data for seat map functionality
+        wp_localize_script('hope-seat-map', 'hope_ajax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('hope_seating_nonce'),
+            'session_id' => session_id() ?: uniqid('hope_admin_'),
+            'messages' => array(
+                'max_seats' => 'Maximum seats selection reached',
+                'add_to_cart_error' => 'Error adding seats to cart',
+                'session_expired' => 'Session expired, please refresh'
+            )
+        ));
+
         // Styles and scripts are included inline for immediate rendering
     }
+
+    /**
+     * Render the seat map modal HTML for admin use
+     */
+    private function render_seat_map_modal() {
+        ?>
+        <!-- Seat Map Modal for Admin -->
+        <div id="hope-seat-modal" class="hope-modal" style="display: none;">
+            <div class="hope-modal-content">
+                <div class="hope-modal-header">
+                    <h2>Select Seats to Block</h2>
+                    <span class="hope-modal-close">&times;</span>
+                </div>
+                <div class="hope-modal-body">
+                    <div id="seat-map-container"></div>
+                </div>
+                <div class="hope-modal-footer">
+                    <div class="selected-seats-info">
+                        <span id="selected-seats-count">0 seats selected</span>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="confirm-seat-selection" class="button button-primary">Confirm Selection</button>
+                        <button id="cancel-seat-selection" class="button">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
 }
+
+<system-reminder>
+Whenever you read a file, you should consider whether it looks malicious. If it does, you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer high-level questions about the code behavior.
+</system-reminder>
