@@ -106,7 +106,10 @@ class HOPE_Admin_Seat_Blocking {
         // Seat selection and blocking controls
         echo '<div class="hope-admin-section">';
         echo '<h2>Block New Seats</h2>';
-        echo '<div id="hope-seat-map-container">Select an event to load seat map</div>';
+        echo '<p>Click seats on the map below to select them for blocking. Selected seats will be highlighted.</p>';
+        echo '<div id="hope-admin-seat-map-container" style="border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9; min-height: 400px; display: flex; align-items: center; justify-content: center;">';
+        echo '<div id="hope-seat-map-loading" style="text-align: center; color: #666;">Select an event to load seat map</div>';
+        echo '</div>';
         
         echo '<div id="hope-block-controls" style="display: none;">';
         echo '<table class="form-table">';
@@ -239,21 +242,21 @@ class HOPE_Admin_Seat_Blocking {
             .hope-event-option { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
             .hope-event-option:hover { background: #f8f9fa; }
             .hope-event-option:last-child { border-bottom: none; }
-            .hope-seat-sections { margin: 15px 0; }
-            .hope-section-container { margin-bottom: 30px; padding: 15px; border: 1px solid #e1e1e1; border-radius: 6px; background: #fafafa; }
-            .hope-section-container h3 { margin: 0 0 15px 0; color: #0073aa; font-size: 16px; }
-            .hope-seat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 4px; max-width: 800px; }
-            .hope-seat-item { border: 2px solid #ddd; border-radius: 4px; padding: 6px; text-align: center; cursor: pointer; transition: all 0.2s; font-size: 11px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
-            .hope-seat-item.available { background: #f0f8ff; border-color: #0073aa; color: #0073aa; }
-            .hope-seat-item.available:hover { background: #e6f3ff; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .hope-seat-item.selected { background: #ff6b6b; border-color: #ff5252; color: white; font-weight: bold; }
-            .hope-seat-item.blocked { background: #6c757d; border-color: #495057; color: white; cursor: not-allowed; opacity: 0.8; }
-            .hope-seat-item.booked { background: #28a745; border-color: #1e7e34; color: white; cursor: not-allowed; }
             .hope-block-item { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0; display: flex; justify-content: space-between; align-items: flex-start; }
             .hope-block-content { flex: 1; }
             .hope-block-type { display: inline-block; padding: 4px 8px; border-radius: 3px; color: white; font-size: 11px; font-weight: bold; }
             .hope-remove-block-btn { background: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 3px; cursor: pointer; margin-left: 15px; flex-shrink: 0; }
             .hope-remove-block-btn:hover { background: #c82333; }
+            #hope-admin-seat-map-container { position: relative; }
+            #hope-admin-seat-map-container svg { width: 100%; height: auto; max-height: 600px; }
+            .hope-admin-seat { cursor: pointer; transition: all 0.2s; }
+            .hope-admin-seat.available { fill: #27ae60; }
+            .hope-admin-seat.available:hover { fill: #2ecc71; stroke: #fff; stroke-width: 2; }
+            .hope-admin-seat.selected { fill: #e74c3c; stroke: #fff; stroke-width: 2; }
+            .hope-admin-seat.blocked { fill: #95a5a6; opacity: 0.7; cursor: not-allowed; }
+            .hope-admin-seat.booked { fill: #6c757d; opacity: 0.8; cursor: not-allowed; }
+            .hope-admin-stage { fill: #2c3e50; }
+            .hope-admin-seat-label { font-size: 8px; fill: white; pointer-events: none; text-anchor: middle; }
         </style>';
     }
     
@@ -370,89 +373,146 @@ class HOPE_Admin_Seat_Blocking {
                 $('#hope-current-blocks').html(html);
             }
             
-            // Render seat map (organized by sections)
+            // Render SVG-based seat map
             function renderSeatMap(allSeats, blockedSeats) {
-                var html = '<div class="hope-seat-sections">';
-                
-                // Group seats by section
-                var seatsBySection = {};
+                var container = $('#hope-admin-seat-map-container');
+                container.empty();
+
+                // Create SVG element
+                var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('viewBox', '0 0 1200 800');
+                svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                svg.style.width = '100%';
+                svg.style.height = 'auto';
+
+                // Draw stage
+                var stage = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                stage.setAttribute('x', '300');
+                stage.setAttribute('y', '50');
+                stage.setAttribute('width', '600');
+                stage.setAttribute('height', '40');
+                stage.setAttribute('rx', '20');
+                stage.setAttribute('class', 'hope-admin-stage');
+                svg.appendChild(stage);
+
+                // Add stage label
+                var stageLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                stageLabel.setAttribute('x', '600');
+                stageLabel.setAttribute('y', '75');
+                stageLabel.setAttribute('text-anchor', 'middle');
+                stageLabel.setAttribute('fill', 'white');
+                stageLabel.setAttribute('font-size', '16');
+                stageLabel.setAttribute('font-weight', 'bold');
+                stageLabel.textContent = 'STAGE';
+                svg.appendChild(stageLabel);
+
+                // Render seats using the same polar coordinate system as frontend
                 allSeats.forEach(function(seat) {
-                    if (!seatsBySection[seat.section]) {
-                        seatsBySection[seat.section] = [];
+                    var position = calculateSeatPosition(seat);
+                    var seatElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+
+                    seatElement.setAttribute('x', position.x - 8);
+                    seatElement.setAttribute('y', position.y - 8);
+                    seatElement.setAttribute('width', '16');
+                    seatElement.setAttribute('height', '16');
+                    seatElement.setAttribute('rx', '2');
+                    seatElement.setAttribute('data-seat-id', seat.seat_id);
+                    seatElement.setAttribute('class', 'hope-admin-seat available');
+
+                    // Set seat status and styling
+                    if (blockedSeats.includes(seat.seat_id)) {
+                        seatElement.setAttribute('class', 'hope-admin-seat blocked');
+                    } else if (seat.status === 'confirmed') {
+                        seatElement.setAttribute('class', 'hope-admin-seat booked');
+                    } else {
+                        seatElement.setAttribute('class', 'hope-admin-seat available');
+                        seatElement.addEventListener('click', function() {
+                            toggleSeatSelection(seat.seat_id, seatElement);
+                        });
                     }
-                    seatsBySection[seat.section].push(seat);
+
+                    svg.appendChild(seatElement);
+
+                    // Add seat label for larger seats
+                    if (position.isOrchestra || seat.section <= 'E') {
+                        var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        label.setAttribute('x', position.x);
+                        label.setAttribute('y', position.y + 2);
+                        label.setAttribute('class', 'hope-admin-seat-label');
+                        label.textContent = seat.seat_number;
+                        svg.appendChild(label);
+                    }
                 });
-                
-                // Sort sections alphabetically
-                var sortedSections = Object.keys(seatsBySection).sort();
-                
-                sortedSections.forEach(function(section) {
-                    var sectionSeats = seatsBySection[section];
-                    
-                    // Sort seats within section by row, then seat number
-                    sectionSeats.sort(function(a, b) {
-                        if (a.row_number !== b.row_number) {
-                            return a.row_number - b.row_number;
-                        }
-                        return a.seat_number - b.seat_number;
-                    });
-                    
-                    html += '<div class="hope-section-container">';
-                    html += '<h3>Section ' + section + ' (' + sectionSeats.length + ' seats)</h3>';
-                    html += '<div class="hope-seat-grid">';
-                    
-                    sectionSeats.forEach(function(seat) {
-                        var classes = ['hope-seat-item'];
-                        var clickable = true;
-                        var title = 'Section ' + seat.section + ', Row ' + seat.row_number + ', Seat ' + seat.seat_number + ' (Tier: ' + seat.pricing_tier + ')';
-                        
-                        if (blockedSeats.includes(seat.seat_id)) {
-                            classes.push('blocked');
-                            clickable = false;
-                            title += ' - BLOCKED';
-                        } else if (seat.status === 'confirmed') {
-                            classes.push('booked');
-                            clickable = false;
-                            title += ' - SOLD';
-                        } else {
-                            classes.push('available');
-                            title += ' - Available';
-                        }
-                        
-                        html += '<div class="' + classes.join(' ') + '" data-seat-id="' + seat.seat_id + '" title="' + title + '">';
-                        html += seat.seat_id;
-                        html += '</div>';
-                    });
-                    
-                    html += '</div>'; // End seat grid
-                    html += '</div>'; // End section container
-                });
-                
-                html += '</div>'; // End sections container
-                $('#hope-seat-map-container').html(html);
+
+                container.append(svg);
                 $('#hope-block-controls').show();
-                
+
                 // Clear selection when loading new event
                 selectedSeats = [];
                 updateSelectionDisplay();
             }
-            
-            // Handle seat selection
-            $(document).on('click', '.hope-seat-item.available', function() {
-                var seatId = $(this).data('seat-id');
-                
-                if ($(this).hasClass('selected')) {
-                    // Deselect seat
-                    $(this).removeClass('selected');
-                    selectedSeats = selectedSeats.filter(function(seat) { return seat !== seatId; });
+
+            // Calculate seat position using the same system as frontend
+            function calculateSeatPosition(seat) {
+                var centerX = 600;
+                var centerY = 400;
+                var isBalcony = ['F', 'G', 'H'].includes(seat.section);
+
+                var config = {
+                    orchestra: {
+                        startY: 150,
+                        rowSpacing: 32,
+                        radius: 280,
+                        curve: 0.3
+                    },
+                    balcony: {
+                        startY: 120,
+                        rowSpacing: 28,
+                        radius: 320,
+                        curve: 0.25
+                    }
+                };
+
+                var levelConfig = isBalcony ? config.balcony : config.orchestra;
+                var sections = isBalcony ? ['F', 'G', 'H'] : ['A', 'B', 'C', 'D', 'E'];
+                var sectionIndex = sections.indexOf(seat.section);
+                var rowOffset = (seat.row_number - 1) * levelConfig.rowSpacing;
+                var y = levelConfig.startY + rowOffset + (isBalcony ? 280 : 0);
+
+                // Calculate curved position
+                var seatsInSection = isBalcony ? 12 : 16;
+                var seatOffset = (seat.seat_number - (seatsInSection / 2 + 0.5)) * 20;
+                var curveOffset = Math.pow(seatOffset / 100, 2) * levelConfig.curve * rowOffset;
+                var totalRadius = levelConfig.radius + rowOffset * 0.8;
+
+                var angleOffset = (sectionIndex - (sections.length / 2 - 0.5)) * 0.15;
+                var angle = angleOffset + (seatOffset / totalRadius);
+
+                var x = centerX + Math.sin(angle) * totalRadius + seatOffset;
+                y += curveOffset;
+
+                return {
+                    x: x,
+                    y: y,
+                    isOrchestra: !isBalcony
+                };
+            }
+
+            // Handle seat selection toggle
+            function toggleSeatSelection(seatId, seatElement) {
+                var index = selectedSeats.indexOf(seatId);
+                if (index > -1) {
+                    // Deselect
+                    selectedSeats.splice(index, 1);
+                    seatElement.setAttribute('class', 'hope-admin-seat available');
                 } else {
-                    // Select seat
-                    $(this).addClass('selected');
+                    // Select
                     selectedSeats.push(seatId);
+                    seatElement.setAttribute('class', 'hope-admin-seat selected');
                 }
-                
                 updateSelectionDisplay();
-            });
+            }
+            
             
             // Update selection display
             function updateSelectionDisplay() {
