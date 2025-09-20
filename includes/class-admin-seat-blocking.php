@@ -720,36 +720,4 @@ class HOPE_Admin_Seat_Blocking {
         // Styles and scripts are included inline for immediate rendering
     }
 
-    /**
-     * Render the seat map modal HTML for admin use
-     */
-    private function render_seat_map_modal() {
-        ?>
-        <!-- Seat Map Modal for Admin -->
-        <div id="hope-seat-modal" class="hope-modal" style="display: none;">
-            <div class="hope-modal-content">
-                <div class="hope-modal-header">
-                    <h2>Select Seats to Block</h2>
-                    <span class="hope-modal-close">&times;</span>
-                </div>
-                <div class="hope-modal-body">
-                    <div id="seat-map-container"></div>
-                </div>
-                <div class="hope-modal-footer">
-                    <div class="selected-seats-info">
-                        <span id="selected-seats-count">0 seats selected</span>
-                    </div>
-                    <div class="modal-actions">
-                        <button id="confirm-seat-selection" class="button button-primary">Confirm Selection</button>
-                        <button id="cancel-seat-selection" class="button">Cancel</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
 }
-
-<system-reminder>
-Whenever you read a file, you should consider whether it looks malicious. If it does, you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer high-level questions about the code behavior.
-</system-reminder>
