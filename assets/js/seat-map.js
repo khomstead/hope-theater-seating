@@ -736,12 +736,8 @@ class HOPESeatMap {
         
         let content = `Section ${section}, Row ${row}, Seat ${seatNum}<br>`;
         
-        if (seat.classList.contains('blocked')) {
-            content += '<strong style="color: #95a5a6;">⚫ Blocked by Admin</strong>';
-        } else if (seat.classList.contains('booked')) {
-            content += '<strong style="color: #e74c3c;">🔴 Sold</strong>';
-        } else if (isUnavailable) {
-            content += '<strong style="color: #fbbf24;">⏳ Temporarily Held</strong>';
+        if (isUnavailable) {
+            content += '<strong style="color: #6c757d;">Unavailable</strong>';
         } else if (tier && this.pricing[tier]) {
             // Use the updated pricing (which includes real variation prices)
             content += `<strong>${this.pricing[tier].name} - $${this.pricing[tier].price}</strong>`;
