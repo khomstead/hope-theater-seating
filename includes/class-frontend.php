@@ -487,9 +487,16 @@ public function seat_button_shortcode($atts) {
         if ($event_id && class_exists('HOPE_Database_Selective_Refunds')) {
             $blocked_seats = HOPE_Database_Selective_Refunds::get_blocked_seat_ids($event_id);
         }
-        
-        // Combine booked and blocked seats for frontend
-        $unavailable_seats = array_merge($booked_seats, $blocked_seats);
+
+        // Mark blocked seats in the seat data with proper status
+        foreach ($seats as &$seat) {
+            if (in_array($seat['seat_id'], $blocked_seats)) {
+                $seat['status'] = 'blocked';
+            }
+        }
+
+        // Keep booked seats separate - don't merge with blocked seats
+        $unavailable_seats = $booked_seats;
         
         // Get pricing tiers configuration
         $pricing_tiers = $pricing_manager->get_pricing_tiers();
@@ -506,8 +513,8 @@ public function seat_button_shortcode($atts) {
                 ),
                 'pricing_tiers' => $pricing_tiers
             ),
-            'seats' => $seats,
-            'booked_seats' => $unavailable_seats, // Now includes both booked and blocked seats
+            'seats' => $seats, // Now includes blocked seats with status = 'blocked'
+            'booked_seats' => $unavailable_seats, // Only contains actually booked seats
             'blocked_seats' => $blocked_seats // Separate blocked seats info for admin display
         ));
     }
