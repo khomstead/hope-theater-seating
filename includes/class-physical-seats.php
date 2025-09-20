@@ -88,14 +88,45 @@ class HOPE_Physical_Seats_Manager {
      */
     public function populate_physical_seats() {
         global $wpdb;
-        
+
+        // SAFETY CHECK: Don't recreate seats if they already exist and have bookings
+        $existing_seats = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$this->table_name} WHERE theater_id = %s",
+            $this->theater_id
+        ));
+
+        if ($existing_seats > 0) {
+            // Check if there are any bookings that reference these seats
+            $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+            $existing_bookings = $wpdb->get_var("SELECT COUNT(*) FROM {$bookings_table}");
+
+            if ($existing_bookings > 0) {
+                error_log("HOPE: Skipping seat recreation - {$existing_seats} seats exist with {$existing_bookings} bookings. Preserving data integrity.");
+                return $existing_seats;
+            }
+
+            // Also check for holds
+            $holds_table = $wpdb->prefix . 'hope_seating_holds';
+            $existing_holds = $wpdb->get_var("SELECT COUNT(*) FROM {$holds_table}");
+
+            if ($existing_holds > 0) {
+                error_log("HOPE: Skipping seat recreation - {$existing_seats} seats exist with {$existing_holds} active holds. Preserving data integrity.");
+                return $existing_seats;
+            }
+
+            error_log("HOPE: {$existing_seats} seats exist but no bookings/holds found. Safe to recreate seats.");
+        }
+
         // Increase memory limit and execution time for this operation
         ini_set('memory_limit', '512M');
         set_time_limit(300);
-        
-        // Clear existing seats for this theater
-        $wpdb->delete($this->table_name, array('theater_id' => $this->theater_id));
-        
+
+        // Clear existing seats for this theater (only if safe to do so)
+        if ($existing_seats > 0) {
+            error_log("HOPE: Clearing {$existing_seats} existing seats for recreation");
+            $wpdb->delete($this->table_name, array('theater_id' => $this->theater_id));
+        }
+
         $total_seats = 0;
         
         // Process orchestra sections

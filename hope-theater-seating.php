@@ -63,9 +63,13 @@ function hope_seating_activate() {
         error_log('HOPE: Selective refund database support initialized');
     }
     
+    // Check if this is a fresh installation or an upgrade
+    $installed_version = get_option('hope_seating_version', '0.0.0');
+    $current_version = '2.4.7';
+
     // NEW ARCHITECTURE: Initialize separated system (only if not already exists)
     try {
-        // Initialize physical seats (497 seats) - only if needed
+        // Initialize physical seats (497 seats) - only if needed and safe
         $physical_manager = new HOPE_Physical_Seats_Manager();
         $physical_seats_created = $physical_manager->populate_physical_seats();
         
@@ -81,8 +85,11 @@ function hope_seating_activate() {
             error_log("HOPE: Pricing maps already exist (" . count($existing_maps) . " found), skipping creation to prevent duplicates");
         }
         
-        error_log("HOPE Theater Seating v2.3.0 activated. New architecture initialized: {$physical_seats_created} physical seats, pricing map created: " . ($pricing_map_created ? 'yes' : 'no'));
-        
+        // Update version option
+        update_option('hope_seating_version', $current_version);
+
+        error_log("HOPE Theater Seating v{$current_version} activated. Upgraded from v{$installed_version}. Physical seats: {$physical_seats_created}, pricing map created: " . ($pricing_map_created ? 'yes' : 'no'));
+
     } catch (Exception $e) {
         error_log('HOPE Theater Seating activation error: ' . $e->getMessage());
     }
