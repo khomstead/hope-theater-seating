@@ -373,75 +373,125 @@ class HOPE_Admin_Seat_Blocking {
                 $('#hope-current-blocks').html(html);
             }
             
-            // Render SVG-based seat map
+            // Render SVG-based seat map using exact frontend system
             function renderSeatMap(allSeats, blockedSeats) {
                 var container = $('#hope-admin-seat-map-container');
                 container.empty();
 
-                // Create SVG element
+                // Use exact frontend theater configuration
+                var theaterConfig = {
+                    orchestra: {
+                        centerX: 600,
+                        startY: 300,
+                        rowSpacing: 35,
+                        seatSize: 12,
+                        sections: {
+                            'A': { startAngle: -75, endAngle: -45, startRadius: 150 },
+                            'B': { startAngle: -45, endAngle: -15, startRadius: 150 },
+                            'C': { startAngle: -15, endAngle: 15, startRadius: 150 },
+                            'D': { startAngle: 15, endAngle: 45, startRadius: 150 },
+                            'E': { startAngle: 45, endAngle: 75, startRadius: 150 }
+                        }
+                    },
+                    balcony: {
+                        centerX: 600,
+                        startY: 600,
+                        rowSpacing: 35,
+                        seatSize: 10,
+                        sections: {
+                            'F': { startAngle: -60, endAngle: -20, startRadius: 100 },
+                            'G': { startAngle: -20, endAngle: 20, startRadius: 100 },
+                            'H': { startAngle: 20, endAngle: 60, startRadius: 100 }
+                        }
+                    }
+                };
+
+                // Create SVG element with frontend viewBox
                 var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                svg.setAttribute('viewBox', '0 0 1200 800');
+                svg.setAttribute('viewBox', '0 0 1200 1000');
                 svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
                 svg.style.width = '100%';
                 svg.style.height = 'auto';
 
-                // Draw stage
+                // Draw stage (same as frontend)
                 var stage = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                 stage.setAttribute('x', '300');
-                stage.setAttribute('y', '50');
+                stage.setAttribute('y', '200');
                 stage.setAttribute('width', '600');
-                stage.setAttribute('height', '40');
-                stage.setAttribute('rx', '20');
+                stage.setAttribute('height', '30');
+                stage.setAttribute('rx', '15');
                 stage.setAttribute('class', 'hope-admin-stage');
                 svg.appendChild(stage);
 
                 // Add stage label
                 var stageLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 stageLabel.setAttribute('x', '600');
-                stageLabel.setAttribute('y', '75');
+                stageLabel.setAttribute('y', '220');
                 stageLabel.setAttribute('text-anchor', 'middle');
                 stageLabel.setAttribute('fill', 'white');
-                stageLabel.setAttribute('font-size', '16');
+                stageLabel.setAttribute('font-size', '14');
                 stageLabel.setAttribute('font-weight', 'bold');
                 stageLabel.textContent = 'STAGE';
                 svg.appendChild(stageLabel);
 
-                // Render seats using the same polar coordinate system as frontend
+                // Render seats using exact frontend calculation
                 allSeats.forEach(function(seat) {
-                    var position = calculateSeatPosition(seat);
-                    var seatElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    var position = calculateAccurateSeatPosition(seat, allSeats, theaterConfig);
 
-                    seatElement.setAttribute('x', position.x - 8);
-                    seatElement.setAttribute('y', position.y - 8);
-                    seatElement.setAttribute('width', '16');
-                    seatElement.setAttribute('height', '16');
-                    seatElement.setAttribute('rx', '2');
-                    seatElement.setAttribute('data-seat-id', seat.seat_id);
-                    seatElement.setAttribute('class', 'hope-admin-seat available');
+                    // Determine seat size based on level (same as frontend)
+                    var isBalcony = ['F', 'G', 'H'].includes(seat.section);
+                    var seatSize = isBalcony ? theaterConfig.balcony.seatSize : theaterConfig.orchestra.seatSize;
+
+                    // Create seat group
+                    var seatGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    seatGroup.setAttribute('class', 'seat-group');
+                    seatGroup.setAttribute('data-seat-id', seat.seat_id);
+
+                    // Create seat rectangle (same as frontend)
+                    var seatRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    seatRect.setAttribute('x', position.x - seatSize/2);
+                    seatRect.setAttribute('y', position.y - seatSize/2);
+                    seatRect.setAttribute('width', seatSize);
+                    seatRect.setAttribute('height', seatSize);
+                    seatRect.setAttribute('rx', '2');
+                    seatRect.setAttribute('class', 'hope-admin-seat');
+
+                    // Rotate seat to face the stage (same as frontend)
+                    if (position.rotation) {
+                        seatRect.setAttribute('transform',
+                            'rotate(' + position.rotation + ' ' + position.x + ' ' + position.y + ')'
+                        );
+                    }
 
                     // Set seat status and styling
                     if (blockedSeats.includes(seat.seat_id)) {
-                        seatElement.setAttribute('class', 'hope-admin-seat blocked');
+                        seatRect.setAttribute('class', 'hope-admin-seat blocked');
                     } else if (seat.status === 'confirmed') {
-                        seatElement.setAttribute('class', 'hope-admin-seat booked');
+                        seatRect.setAttribute('class', 'hope-admin-seat booked');
                     } else {
-                        seatElement.setAttribute('class', 'hope-admin-seat available');
-                        seatElement.addEventListener('click', function() {
-                            toggleSeatSelection(seat.seat_id, seatElement);
+                        seatRect.setAttribute('class', 'hope-admin-seat available');
+                        seatGroup.addEventListener('click', function() {
+                            toggleSeatSelection(seat.seat_id, seatRect);
                         });
                     }
 
-                    svg.appendChild(seatElement);
+                    seatGroup.appendChild(seatRect);
 
-                    // Add seat label for larger seats
-                    if (position.isOrchestra || seat.section <= 'E') {
-                        var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        label.setAttribute('x', position.x);
-                        label.setAttribute('y', position.y + 2);
-                        label.setAttribute('class', 'hope-admin-seat-label');
-                        label.textContent = seat.seat_number;
-                        svg.appendChild(label);
+                    // Add seat label for larger seats (same logic as frontend)
+                    if (seatSize >= 12) {
+                        var seatLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        seatLabel.setAttribute('x', position.x);
+                        seatLabel.setAttribute('y', position.y + 3);
+                        seatLabel.setAttribute('text-anchor', 'middle');
+                        seatLabel.setAttribute('class', 'hope-admin-seat-label');
+                        seatLabel.setAttribute('pointer-events', 'none');
+                        seatLabel.setAttribute('fill', 'white');
+                        seatLabel.setAttribute('font-size', '8');
+                        seatLabel.textContent = seat.seat_number;
+                        seatGroup.appendChild(seatLabel);
                     }
+
+                    svg.appendChild(seatGroup);
                 });
 
                 container.append(svg);
@@ -452,50 +502,50 @@ class HOPE_Admin_Seat_Blocking {
                 updateSelectionDisplay();
             }
 
-            // Calculate seat position using the same system as frontend
-            function calculateSeatPosition(seat) {
-                var centerX = 600;
-                var centerY = 400;
-                var isBalcony = ['F', 'G', 'H'].includes(seat.section);
+            // Use exact frontend coordinate calculation
+            function calculateAccurateSeatPosition(seat, allSeats, theaterConfig) {
+                var section = seat.section;
+                var row = parseInt(seat.row_number) || 1;
+                var seatNum = parseInt(seat.seat_number) || 1;
 
-                var config = {
-                    orchestra: {
-                        startY: 150,
-                        rowSpacing: 32,
-                        radius: 280,
-                        curve: 0.3
-                    },
-                    balcony: {
-                        startY: 120,
-                        rowSpacing: 28,
-                        radius: 320,
-                        curve: 0.25
-                    }
-                };
+                // Check if this is a balcony seat
+                var isBalcony = ['F', 'G', 'H'].includes(section);
+                var config = isBalcony ? theaterConfig.balcony : theaterConfig.orchestra;
+                var sectionConfig = config.sections[section];
 
-                var levelConfig = isBalcony ? config.balcony : config.orchestra;
-                var sections = isBalcony ? ['F', 'G', 'H'] : ['A', 'B', 'C', 'D', 'E'];
-                var sectionIndex = sections.indexOf(seat.section);
-                var rowOffset = (seat.row_number - 1) * levelConfig.rowSpacing;
-                var y = levelConfig.startY + rowOffset + (isBalcony ? 280 : 0);
+                if (!sectionConfig) {
+                    // Fallback for unknown sections
+                    return {
+                        x: 600 + (seatNum * 15),
+                        y: 400 + (row * 30),
+                        rotation: 0
+                    };
+                }
 
-                // Calculate curved position
-                var seatsInSection = isBalcony ? 12 : 16;
-                var seatOffset = (seat.seat_number - (seatsInSection / 2 + 0.5)) * 20;
-                var curveOffset = Math.pow(seatOffset / 100, 2) * levelConfig.curve * rowOffset;
-                var totalRadius = levelConfig.radius + rowOffset * 0.8;
+                // Get total seats in this row from the data
+                var rowSeats = allSeats.filter(function(s) {
+                    return s.section === section && s.row_number == row;
+                }).length || 10;
 
-                var angleOffset = (sectionIndex - (sections.length / 2 - 0.5)) * 0.15;
-                var angle = angleOffset + (seatOffset / totalRadius);
+                // Calculate radius for this row (increases as you go back)
+                var radius = sectionConfig.startRadius + (row * config.rowSpacing);
 
-                var x = centerX + Math.sin(angle) * totalRadius + seatOffset;
-                y += curveOffset;
+                // Calculate angle for this seat
+                var angleRange = sectionConfig.endAngle - sectionConfig.startAngle;
+                var angleStep = angleRange / (rowSeats + 1);
+                var seatAngle = sectionConfig.startAngle + (angleStep * seatNum);
 
-                return {
-                    x: x,
-                    y: y,
-                    isOrchestra: !isBalcony
-                };
+                // Convert to radians
+                var angleRad = (seatAngle * Math.PI) / 180;
+
+                // Calculate position
+                var x = config.centerX + (radius * Math.sin(angleRad));
+                var y = config.startY + (radius * Math.cos(angleRad));
+
+                // Calculate rotation so seat faces the stage
+                var rotation = -seatAngle;
+
+                return { x: x, y: y, rotation: rotation };
             }
 
             // Handle seat selection toggle
