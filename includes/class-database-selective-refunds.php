@@ -328,7 +328,7 @@ class HOPE_Database_Selective_Refunds {
     public static function get_active_seat_blocks($event_id) {
         global $wpdb;
         
-        if (!self::is_selective_refund_ready()) {
+        if (!self::is_seat_blocking_ready()) {
             return array();
         }
         
@@ -376,7 +376,7 @@ class HOPE_Database_Selective_Refunds {
     public static function remove_seat_block($block_id) {
         global $wpdb;
         
-        if (!self::is_selective_refund_ready()) {
+        if (!self::is_seat_blocking_ready()) {
             return false;
         }
         
@@ -412,6 +412,6 @@ class HOPE_Database_Selective_Refunds {
         $table_name = $wpdb->prefix . 'hope_seating_seat_blocks';
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
         
-        return $table_exists && self::is_selective_refund_ready();
+        return $table_exists;
     }
 }

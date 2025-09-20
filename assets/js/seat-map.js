@@ -40,31 +40,39 @@ class HOPESeatMap {
         
         // Load actual pricing from WooCommerce variations first
         this.loadVariationPricing().then(() => {
-            console.log('HOPE: ✅ Variation pricing loaded');
             this.dataLoadingStatus.variationPricing = true;
-            
+
+            // Try to initialize if modal is ready
+            if (document.getElementById('hope-seat-modal') &&
+                document.getElementById('hope-seat-modal').style.display !== 'none') {
+                this.initializeMap();
+            }
+
             // Load real seat data from database
             this.loadRealSeatData().then(() => {
-                console.log('HOPE: ✅ Real seat data loaded');
                 this.dataLoadingStatus.realSeatData = true;
-                
-                // Only proceed when both are loaded
-                this.waitForModal();
+
+                // Try to initialize if modal is ready
+                if (document.getElementById('hope-seat-modal') &&
+                    document.getElementById('hope-seat-modal').style.display !== 'none') {
+                    this.initializeMap();
+                } else {
+                    this.waitForModal();
+                }
             }).catch(() => {
-                console.log('HOPE: ❌ Failed to load real seat data, will use fallback');
-                this.dataLoadingStatus.realSeatData = false; // Explicitly mark as failed
+                console.error('HOPE: Failed to load real seat data');
+                this.dataLoadingStatus.realSeatData = false;
                 this.waitForModal();
             });
         }).catch(() => {
-            console.log('HOPE: ❌ Failed to load variation pricing');
+            console.error('HOPE: Failed to load variation pricing');
             this.dataLoadingStatus.variationPricing = false;
             // Still try to load seat data
             this.loadRealSeatData().then(() => {
-                console.log('HOPE: ✅ Real seat data loaded (without variation pricing)');
                 this.dataLoadingStatus.realSeatData = true;
                 this.waitForModal();
             }).catch(() => {
-                console.log('HOPE: ❌ Failed to load both pricing and seat data');
+                console.error('HOPE: Failed to load both pricing and seat data');
                 this.dataLoadingStatus.realSeatData = false;
                 this.waitForModal();
             });
@@ -77,11 +85,30 @@ class HOPESeatMap {
             const modal = document.getElementById('hope-seat-modal');
             if (modal && modal.style.display !== 'none') {
                 clearInterval(checkModal);
-                console.log('HOPE: ✅ Modal is visible, initializing map');
-                console.log('HOPE: Data loading status:', this.dataLoadingStatus);
                 this.initializeMap();
             }
         }, 100);
+    }
+
+    showLoadingState() {
+        const svg = document.getElementById('seat-map');
+        if (svg) {
+            svg.innerHTML = `
+                <text x="600" y="400" text-anchor="middle" class="loading-text"
+                      style="font-size: 24px; fill: #666; font-family: Arial, sans-serif;">
+                    Loading seat map...
+                </text>
+                <circle cx="600" cy="450" r="20" fill="none" stroke="#666" stroke-width="3"
+                        stroke-dasharray="31.4" stroke-dashoffset="31.4" class="loading-spinner">
+                    <animate attributeName="stroke-dashoffset" dur="2s"
+                             values="31.4;0" repeatCount="indefinite"/>
+                </circle>
+            `;
+        }
+    }
+
+    hideLoadingState() {
+        // Loading will be cleared when generateTheater runs
     }
     
     /**
@@ -105,22 +132,9 @@ class HOPESeatMap {
         .then(data => {
             if (data.success && data.data.seats) {
                 this.realSeatData = data.data.seats;
-                console.log('HOPE: ✅ Loaded real seat data:', this.realSeatData.length, 'seats');
+                // Real seat data loaded
                 
-                // DEBUG: Count pricing tiers in received data
-                const tierCounts = {};
-                this.realSeatData.forEach(seat => {
-                    const tier = seat.pricing_tier;
-                    tierCounts[tier] = (tierCounts[tier] || 0) + 1;
-                });
-                console.log('HOPE: DEBUG - JavaScript received tier counts:', tierCounts);
-                
-                // DEBUG: Show first few seats
-                console.log('HOPE: DEBUG - First 3 seats received:');
-                for (let i = 0; i < Math.min(3, this.realSeatData.length); i++) {
-                    const seat = this.realSeatData[i];
-                    console.log(`HOPE: DEBUG - Seat ${seat.id}: Section ${seat.section}, Row ${seat.row_number}, Tier ${seat.pricing_tier}`);
-                }
+                // Process the loaded data
                 
                 // Group seats by section and level for rendering
                 this.processRealSeatData();
@@ -150,18 +164,13 @@ class HOPESeatMap {
         
         // Group seats by level and section
         this.realSeatData.forEach((seat, index) => {
-            // Debug first few seats
-            if (index < 3) {
-                console.log('HOPE: Raw seat data:', seat);
-            }
-            
             const level = seat.level === 'balcony' ? 'balcony' : 'orchestra';
             const section = seat.section;
-            
+
             if (!this.processedSeatData[level][section]) {
                 this.processedSeatData[level][section] = [];
             }
-            
+
             const processedSeat = {
                 id: seat.id,
                 section: seat.section,
@@ -174,39 +183,12 @@ class HOPESeatMap {
                 accessible: seat.is_accessible,
                 blocked: seat.is_blocked
             };
-            
-            // Debug first few processed seats
-            if (index < 3) {
-                console.log('HOPE: Processed seat data:', processedSeat);
-            }
-            
+
             this.processedSeatData[level][section].push(processedSeat);
         });
         
-        console.log('HOPE: ✅ Processed seat data:', this.processedSeatData);
-        
-        // DEBUG: Specifically check what's in each level
-        Object.keys(this.processedSeatData).forEach(level => {
-            const sections = Object.keys(this.processedSeatData[level]);
-            console.log(`HOPE: DEBUG - Level ${level} has sections: [${sections.join(', ')}]`);
-            sections.forEach(section => {
-                const sectionSeats = this.processedSeatData[level][section];
-                const tierCounts = {};
-                sectionSeats.forEach(seat => {
-                    tierCounts[seat.tier] = (tierCounts[seat.tier] || 0) + 1;
-                });
-                console.log(`HOPE: DEBUG - Section ${section}: ${sectionSeats.length} seats, tiers: ${JSON.stringify(tierCounts)}`);
-                
-                // Show first few seats of Section C
-                if (section === 'C') {
-                    console.log('HOPE: DEBUG - First 5 Section C seats:');
-                    for (let i = 0; i < Math.min(5, sectionSeats.length); i++) {
-                        const seat = sectionSeats[i];
-                        console.log(`HOPE: DEBUG - C${seat.row}-${seat.seat}: Tier ${seat.tier}`);
-                    }
-                }
-            });
-        });
+
+        // Data processing complete
     }
 
     /**
@@ -228,7 +210,6 @@ class HOPESeatMap {
         .then(data => {
             if (data.success && data.data.pricing) {
                 this.variationPricing = data.data.pricing;
-                console.log('HOPE: Loaded variation pricing:', this.variationPricing);
                 // Update the pricing object with real prices
                 this.updatePricingWithVariations();
             }
@@ -253,39 +234,35 @@ class HOPESeatMap {
     }
     
     initializeMap() {
-        // Generate initial theater
+        // Wait for both data types to load before rendering anything
+        if (!this.dataLoadingStatus.variationPricing || !this.dataLoadingStatus.realSeatData) {
+            this.showLoadingState();
+            return;
+        }
+
+        this.hideLoadingState();
+
+        // Generate theater once with all data ready
         this.generateTheater(this.currentFloor);
-        
+
         // Set initial zoom
         document.querySelector('.zoom-label').textContent = '150%';
         this.updateTransform();
-        
+
         // Setup event handlers
         this.setupEventHandlers();
-        
-        // Delay availability loading to allow seats to render first
+
+        // Load availability immediately since seats are now rendered
+        this.loadSeatAvailability();
+
+        // Start periodic availability refresh
         setTimeout(() => {
-            console.log('HOPE: Loading seat availability after seat creation');
-            this.loadSeatAvailability();
-        }, 500);
-        
-        // Start periodic availability refresh (every 15 seconds) - delayed
-        setTimeout(() => {
-            console.log('HOPE: Starting availability refresh');
             this.startAvailabilityRefresh();
         }, 1000);
-        
+
         // Start hold timer if seats are already selected
         if (this.selectedSeats.size > 0) {
             this.startHoldTimer();
-        }
-        
-        // Log what data we're using for debugging
-        if (this.realSeatData) {
-            console.log('HOPE: Using REAL seat data - total seats:', this.realSeatData.length);
-            console.log('HOPE: Real seat data sample:', this.realSeatData.slice(0, 3));
-        } else {
-            console.log('HOPE: Using HARDCODED seat data - fallback mode');
         }
     }
     
@@ -465,30 +442,15 @@ class HOPESeatMap {
         this.createStage(svg);
         
         // Use real seat data if available, otherwise fall back to hardcoded
-        console.log('HOPE: DEBUG - processedSeatData exists?', !!this.processedSeatData);
-        console.log('HOPE: DEBUG - processedSeatData[floor] exists?', !!(this.processedSeatData && this.processedSeatData[floor]));
-        console.log('HOPE: DEBUG - realSeatData exists?', !!this.realSeatData);
-        console.log('HOPE: DEBUG - realSeatData length:', this.realSeatData ? this.realSeatData.length : 'N/A');
-        console.log('HOPE: DEBUG - dataLoadingStatus:', this.dataLoadingStatus);
         
         // More robust condition: check if we have processed data AND it has sections for this floor
-        const hasRealData = this.processedSeatData && 
-                           this.processedSeatData[floor] && 
+        const hasRealData = this.processedSeatData &&
+                           this.processedSeatData[floor] &&
                            Object.keys(this.processedSeatData[floor]).length > 0;
-        
-        console.log('HOPE: DEBUG - hasRealData?', hasRealData);
+
         if (hasRealData) {
-            console.log('HOPE: DEBUG - Sections available for', floor, ':', Object.keys(this.processedSeatData[floor]));
-        }
-                           
-        if (hasRealData) {
-            console.log('HOPE: ✅ Rendering REAL seat data for floor:', floor);
             this.createRealSeats(svg, floor);
         } else {
-            console.log('HOPE: ❌ Falling back to HARDCODED seat data for floor:', floor);
-            console.log('HOPE: ❌ Reason: processedSeatData?', !!this.processedSeatData, 
-                       'floor exists?', !!(this.processedSeatData && this.processedSeatData[floor]),
-                       'sections count?', this.processedSeatData && this.processedSeatData[floor] ? Object.keys(this.processedSeatData[floor]).length : 'N/A');
             const floorData = this.theaterData[floor];
             Object.entries(floorData).forEach(([sectionName, sectionData]) => {
                 this.createSection(svg, sectionName, sectionData);
@@ -511,52 +473,35 @@ class HOPESeatMap {
      */
     createRealSeats(svg, floor) {
         const floorData = this.processedSeatData[floor];
-        console.log(`HOPE: Creating real seats for floor ${floor}:`, floorData);
         
         let totalSeatsRendered = 0;
         
         Object.entries(floorData).forEach(([sectionName, seats]) => {
-            console.log(`HOPE: Processing section ${sectionName} with ${seats.length} seats`);
-            console.log(`HOPE: First seat in section ${sectionName}:`, seats[0]);
             
             const sectionGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             sectionGroup.setAttribute('id', `section-${sectionName}`);
             
             let sectionSeatsRendered = 0;
             seats.forEach((seat, index) => {
-                if (index < 2) { // Debug first 2 seats per section
-                    console.log(`HOPE: Checking seat ${seat.id}: blocked=${seat.blocked}, is_blocked=${seat.is_blocked}, x=${seat.x}, y=${seat.y}`);
-                }
-                
                 // Render seat if it's not blocked (blocked=0 or false means available)
                 const isBlocked = seat.blocked === 1 || seat.blocked === true || seat.is_blocked === 1 || seat.is_blocked === true;
-                
-                if (!isBlocked) { 
-                    if (index < 2) {
-                        console.log(`HOPE: Rendering seat ${seat.id} (blocked=${seat.blocked}, is_blocked=${seat.is_blocked})`);
-                    }
+
+                if (!isBlocked) {
                     this.createRealSeat(sectionGroup, seat);
                     sectionSeatsRendered++;
                     totalSeatsRendered++;
-                } else {
-                    if (index < 2) {
-                        console.log(`HOPE: Skipping blocked seat ${seat.id} (blocked=${seat.blocked}, is_blocked=${seat.is_blocked})`);
-                    }
                 }
             });
             
-            console.log(`HOPE: Section ${sectionName} rendered ${sectionSeatsRendered} seats`);
             svg.appendChild(sectionGroup);
         });
         
-        console.log(`HOPE: Total seats rendered on ${floor}: ${totalSeatsRendered}`);
     }
     
     /**
      * Create a single seat from real database data
      */
     createRealSeat(parentGroup, seatData) {
-        console.log(`HOPE: Creating seat element for:`, seatData);
         
         const seat = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         const seatId = seatData.id;
@@ -570,7 +515,6 @@ class HOPESeatMap {
         const x = seatData.x - 11;
         const y = seatData.y - 11;
         
-        console.log(`HOPE: Setting seat ${seatId} position: x=${x}, y=${y} (original: ${seatData.x}, ${seatData.y})`);
         
         seat.setAttribute('x', x);
         seat.setAttribute('y', y);
@@ -588,7 +532,6 @@ class HOPESeatMap {
         // Use real pricing tier color
         const tierConfig = this.pricing[seatData.tier];
         const color = tierConfig ? tierConfig.color : '#3498db';
-        console.log(`HOPE: Setting seat ${seatId} color: ${color} for tier ${seatData.tier}`);
         
         seat.setAttribute('fill', color);
         seat.setAttribute('stroke', 'white');
@@ -607,7 +550,6 @@ class HOPESeatMap {
         seat.addEventListener('mouseleave', (e) => this.handleSeatLeave(e));
         
         parentGroup.appendChild(seat);
-        console.log(`HOPE: Seat ${seatId} added to section group`);
     }
     
     createSection(svg, sectionName, sectionData) {
@@ -715,14 +657,12 @@ class HOPESeatMap {
         
         // Check if this is an accessible (AA) seat and show confirmation
         const tier = seat.getAttribute('data-tier');
-        console.log(`HOPE: Seat ${seatId} has tier: "${tier}"`);
         if (tier === 'AA') {
-            console.log(`HOPE: Showing AA confirmation for seat ${seatId}`);
             this.showAccessibleSeatConfirmation(seatId);
             return;
         }
         
-        console.log(`Selecting new seat ${seatId}`);
+        // Selecting new seat
         this.selectSeat(seatId);
     }
     
@@ -954,11 +894,9 @@ class HOPESeatMap {
         // Floor switching
         document.querySelectorAll('.floor-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                console.log('HOPE: Floor button clicked, switching to:', btn.dataset.floor);
                 document.querySelectorAll('.floor-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.currentFloor = btn.dataset.floor;
-                console.log('HOPE: Regenerating theater for floor:', this.currentFloor);
                 this.generateTheater(this.currentFloor);
                 
                 // Delay availability loading after floor switch
@@ -1057,15 +995,12 @@ class HOPESeatMap {
             if (data.success && data.data.unavailable_seats) {
                 // Don't interfere with seat restoration
                 if (this.isRestoringSeats) {
-                    console.log('HOPE: Skipping availability update during seat restoration');
                     return;
                 }
                 
-                console.log('HOPE: Processing availability data for', data.data.unavailable_seats.length, 'unavailable seats');
                 
                 // Count total seats before availability processing
                 const totalSeatsBeforeAvailability = document.querySelectorAll('.seat').length;
-                console.log('HOPE: Total seats in DOM before availability processing:', totalSeatsBeforeAvailability);
                 
                 // First, clear all existing unavailable markings
                 document.querySelectorAll('.seat.unavailable').forEach(seat => {
@@ -1096,14 +1031,12 @@ class HOPESeatMap {
                 
                 // Only log if there are changes
                 if (hasChanges) {
-                    console.log(`HOPE: Seat availability changed - ${data.data.unavailable_seats.length} seats now unavailable`);
                     this.lastUnavailableSeats = currentUnavailable;
                 }
             }
         })
         .catch(error => {
             console.error('HOPE: Error loading seat availability:', error);
-            console.log('HOPE: Continuing with default availability (all seats available)');
             // Don't clear seats on error - just continue with current state
         });
     }
@@ -1377,12 +1310,11 @@ class HOPESeatMap {
         
         backdrop.appendChild(dialog);
         document.body.appendChild(backdrop);
-        console.log('HOPE: AA confirmation modal added to DOM with z-index:', backdrop.style.zIndex);
         
         // Handle button clicks
         document.getElementById('aa-confirm-yes').addEventListener('click', () => {
             document.body.removeChild(backdrop);
-            console.log(`User confirmed need for accessible seat ${seatId}`);
+            // User confirmed accessible seat selection
             this.selectSeat(seatId);
         });
         
@@ -1422,6 +1354,5 @@ document.addEventListener('DOMContentLoaded', () => {
         hope_ajax.venue_id !== '0') {
         window.hopeSeatMap = new HOPESeatMap();
     } else {
-        console.log('HOPE: Seat map not initialized - missing required product/venue data or not on product page');
     }
 });

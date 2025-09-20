@@ -845,14 +845,16 @@ class HOPE_Theater_Seating {
         
         // Removed force reinitialization - system is now working
         
-        // Clean up any duplicate pricing maps (run once)
-        $this->cleanup_duplicate_pricing_maps();
+        // Clean up any duplicate pricing maps (run once) - DISABLED to prevent fatal errors
+        // $this->cleanup_duplicate_pricing_maps();
         
         // Regenerate pricing with corrected logic (DISABLED - using manual assignment instead)
         // delete_option('hope_seating_pricing_corrected'); // Force it to run again
         // $this->regenerate_pricing_with_corrections();
         
-        if (!$initialized && is_admin()) {
+        // DISABLED: This was causing duplicate pricing maps on every page load
+        // This logic should only run during plugin activation, not on plugins_loaded
+        if (false && !$initialized && is_admin()) {
             // Only initialize if we have the new classes available
             if (class_exists('HOPE_Physical_Seats_Manager') && class_exists('HOPE_Pricing_Maps_Manager')) {
                 

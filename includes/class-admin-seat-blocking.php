@@ -50,10 +50,10 @@ class HOPE_Admin_Seat_Blocking {
      */
     public function add_admin_menu() {
         add_submenu_page(
-            'woocommerce',
+            'hope-seating',
             'Theater Seat Blocking',
             'Seat Blocking',
-            'manage_woocommerce',
+            'manage_options',
             'hope-seat-blocking',
             array($this, 'render_admin_page')
         );
@@ -229,12 +229,15 @@ class HOPE_Admin_Seat_Blocking {
         echo '<style>
             .hope-admin-section { background: white; margin: 20px 0; padding: 20px; border: 1px solid #ccd0d4; box-shadow: 0 1px 1px rgba(0,0,0,.04); }
             .hope-admin-section h2 { margin-top: 0; }
-            .hope-seat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 6px; margin: 15px 0; max-width: 800px; }
-            .hope-seat-item { border: 2px solid #ddd; border-radius: 4px; padding: 6px; text-align: center; cursor: pointer; transition: all 0.2s; font-size: 12px; }
-            .hope-seat-item.available { background: #f0f8ff; border-color: #0073aa; }
-            .hope-seat-item.available:hover { background: #e6f3ff; transform: translateY(-1px); }
-            .hope-seat-item.selected { background: #ff6b6b; border-color: #ff5252; color: white; }
-            .hope-seat-item.blocked { background: #6c757d; border-color: #495057; color: white; cursor: not-allowed; }
+            .hope-seat-sections { margin: 15px 0; }
+            .hope-section-container { margin-bottom: 30px; padding: 15px; border: 1px solid #e1e1e1; border-radius: 6px; background: #fafafa; }
+            .hope-section-container h3 { margin: 0 0 15px 0; color: #0073aa; font-size: 16px; }
+            .hope-seat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 4px; max-width: 800px; }
+            .hope-seat-item { border: 2px solid #ddd; border-radius: 4px; padding: 6px; text-align: center; cursor: pointer; transition: all 0.2s; font-size: 11px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
+            .hope-seat-item.available { background: #f0f8ff; border-color: #0073aa; color: #0073aa; }
+            .hope-seat-item.available:hover { background: #e6f3ff; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .hope-seat-item.selected { background: #ff6b6b; border-color: #ff5252; color: white; font-weight: bold; }
+            .hope-seat-item.blocked { background: #6c757d; border-color: #495057; color: white; cursor: not-allowed; opacity: 0.8; }
             .hope-seat-item.booked { background: #28a745; border-color: #1e7e34; color: white; cursor: not-allowed; }
             .hope-block-item { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0; }
             .hope-block-type { display: inline-block; padding: 4px 8px; border-radius: 3px; color: white; font-size: 11px; font-weight: bold; }
@@ -327,31 +330,65 @@ class HOPE_Admin_Seat_Blocking {
                 $('#hope-current-blocks').html(html);
             }
             
-            // Render seat map (simplified grid view)
+            // Render seat map (organized by sections)
             function renderSeatMap(allSeats, blockedSeats) {
-                var html = '<div class="hope-seat-grid">';
+                var html = '<div class="hope-seat-sections">';
                 
-                // For now, create a simple grid of seats (you can enhance this with actual venue layout)
+                // Group seats by section
+                var seatsBySection = {};
                 allSeats.forEach(function(seat) {
-                    var classes = ['hope-seat-item'];
-                    var clickable = true;
-                    
-                    if (blockedSeats.includes(seat.seat_id)) {
-                        classes.push('blocked');
-                        clickable = false;
-                    } else if (seat.status === 'confirmed') {
-                        classes.push('booked');
-                        clickable = false;
-                    } else {
-                        classes.push('available');
+                    if (!seatsBySection[seat.section]) {
+                        seatsBySection[seat.section] = [];
                     }
-                    
-                    html += '<div class="' + classes.join(' ') + '" data-seat-id="' + seat.seat_id + '">';
-                    html += seat.seat_id;
-                    html += '</div>';
+                    seatsBySection[seat.section].push(seat);
                 });
                 
-                html += '</div>';
+                // Sort sections alphabetically
+                var sortedSections = Object.keys(seatsBySection).sort();
+                
+                sortedSections.forEach(function(section) {
+                    var sectionSeats = seatsBySection[section];
+                    
+                    // Sort seats within section by row, then seat number
+                    sectionSeats.sort(function(a, b) {
+                        if (a.row_number !== b.row_number) {
+                            return a.row_number - b.row_number;
+                        }
+                        return a.seat_number - b.seat_number;
+                    });
+                    
+                    html += '<div class="hope-section-container">';
+                    html += '<h3>Section ' + section + ' (' + sectionSeats.length + ' seats)</h3>';
+                    html += '<div class="hope-seat-grid">';
+                    
+                    sectionSeats.forEach(function(seat) {
+                        var classes = ['hope-seat-item'];
+                        var clickable = true;
+                        var title = 'Section ' + seat.section + ', Row ' + seat.row_number + ', Seat ' + seat.seat_number + ' (Tier: ' + seat.pricing_tier + ')';
+                        
+                        if (blockedSeats.includes(seat.seat_id)) {
+                            classes.push('blocked');
+                            clickable = false;
+                            title += ' - BLOCKED';
+                        } else if (seat.status === 'confirmed') {
+                            classes.push('booked');
+                            clickable = false;
+                            title += ' - SOLD';
+                        } else {
+                            classes.push('available');
+                            title += ' - Available';
+                        }
+                        
+                        html += '<div class="' + classes.join(' ') + '" data-seat-id="' + seat.seat_id + '" title="' + title + '">';
+                        html += seat.seat_id;
+                        html += '</div>';
+                    });
+                    
+                    html += '</div>'; // End seat grid
+                    html += '</div>'; // End section container
+                });
+                
+                html += '</div>'; // End sections container
                 $('#hope-seat-map-container').html(html);
                 $('#hope-block-controls').show();
                 
@@ -578,30 +615,36 @@ class HOPE_Admin_Seat_Blocking {
     private function get_event_seats($event_id) {
         global $wpdb;
         
-        // Try to get seats from various sources
-        // First, try the seat maps table
-        $seat_maps_table = $wpdb->prefix . 'hope_seating_seat_maps';
-        $seats = $wpdb->get_results($wpdb->prepare(
-            "SELECT seat_id, section, row_number, seat_number, pricing_tier, x_position, y_position
-            FROM {$seat_maps_table}
-            WHERE venue_id = 1
-            ORDER BY seat_id",
-            $event_id
-        ), ARRAY_A);
+        // Get the pricing map ID for this event/product
+        $pricing_map_id = get_post_meta($event_id, '_hope_seating_venue_id', true);
+        if (!$pricing_map_id) {
+            return array(); // No seating configured for this event
+        }
         
-        // If no seats found, create a simple list of seats for demo
-        if (empty($seats)) {
-            $seats = array();
-            for ($i = 1; $i <= 50; $i++) {
-                $seats[] = array(
-                    'seat_id' => 'A-' . $i,
-                    'section' => 'A',
-                    'row_number' => ceil($i / 10),
-                    'seat_number' => $i,
-                    'pricing_tier' => 'P1',
-                    'status' => 'available'
-                );
+        // Use the same system as the frontend to get seats with pricing
+        if (class_exists('HOPE_Pricing_Maps_Manager')) {
+            $pricing_manager = new HOPE_Pricing_Maps_Manager();
+            $seats_with_pricing = $pricing_manager->get_seats_with_pricing($pricing_map_id);
+            
+            if (!empty($seats_with_pricing)) {
+                // Convert to the format expected by the blocking interface
+                $seats = array();
+                foreach ($seats_with_pricing as $seat) {
+                    // $seat is an object with properties seat_id, section, row_number, seat_number, pricing_tier
+                    $seats[] = array(
+                        'seat_id' => $seat->seat_id,
+                        'section' => $seat->section,
+                        'row_number' => $seat->row_number,
+                        'seat_number' => $seat->seat_number,
+                        'pricing_tier' => $seat->pricing_tier,
+                        'status' => 'available' // Will be updated below
+                    );
+                }
+            } else {
+                return array(); // No seats found
             }
+        } else {
+            return array(); // Pricing manager not available
         }
         
         // Add booking status to each seat
@@ -626,8 +669,8 @@ class HOPE_Admin_Seat_Blocking {
      * @param string $hook Current admin page hook
      */
     public function enqueue_admin_assets($hook) {
-        // Only load on our admin page
-        if ($hook !== 'woocommerce_page_hope-seat-blocking') {
+        // Only load on our admin page - now under Hope Seating menu
+        if ($hook !== 'hope-seating_page_hope-seat-blocking') {
             return;
         }
         

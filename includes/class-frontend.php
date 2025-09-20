@@ -449,21 +449,47 @@ public function seat_button_shortcode($atts) {
             return intval($a['seat_number']) - intval($b['seat_number']);
         });
         
-        // Get booked seats (still using event seats table)
+        // Get booked seats from both booking systems
         global $wpdb;
         $booked_seats = array();
         if ($event_id) {
-            $bookings_table = $wpdb->prefix . 'hope_seating_event_seats';
-            $booked = $wpdb->get_results($wpdb->prepare(
-                "SELECT seat_id FROM $bookings_table 
+            // Check old event seats table
+            $event_seats_table = $wpdb->prefix . 'hope_seating_event_seats';
+            $old_booked = $wpdb->get_results($wpdb->prepare(
+                "SELECT seat_id FROM $event_seats_table 
                 WHERE event_id = %d AND status IN ('booked', 'reserved')",
                 $event_id
             ));
             
-            foreach ($booked as $booking) {
+            foreach ($old_booked as $booking) {
                 $booked_seats[] = $booking->seat_id;
             }
+            
+            // Check new WooCommerce bookings table
+            $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+            $new_booked = $wpdb->get_results($wpdb->prepare(
+                "SELECT seat_id FROM $bookings_table 
+                WHERE product_id = %d AND status IN ('confirmed', 'pending')
+                AND refund_id IS NULL",
+                $event_id
+            ));
+            
+            foreach ($new_booked as $booking) {
+                $booked_seats[] = $booking->seat_id;
+            }
+            
+            // Remove duplicates
+            $booked_seats = array_unique($booked_seats);
         }
+        
+        // Get blocked seats (admin seat blocking)
+        $blocked_seats = array();
+        if ($event_id && class_exists('HOPE_Database_Selective_Refunds')) {
+            $blocked_seats = HOPE_Database_Selective_Refunds::get_blocked_seat_ids($event_id);
+        }
+        
+        // Combine booked and blocked seats for frontend
+        $unavailable_seats = array_merge($booked_seats, $blocked_seats);
         
         // Get pricing tiers configuration
         $pricing_tiers = $pricing_manager->get_pricing_tiers();
@@ -481,7 +507,8 @@ public function seat_button_shortcode($atts) {
                 'pricing_tiers' => $pricing_tiers
             ),
             'seats' => $seats,
-            'booked_seats' => $booked_seats
+            'booked_seats' => $unavailable_seats, // Now includes both booked and blocked seats
+            'blocked_seats' => $blocked_seats // Separate blocked seats info for admin display
         ));
     }
     
