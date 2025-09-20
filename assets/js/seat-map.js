@@ -736,8 +736,12 @@ class HOPESeatMap {
         
         let content = `Section ${section}, Row ${row}, Seat ${seatNum}<br>`;
         
-        if (isUnavailable) {
-            content += '<strong style="color: #fbbf24;">Unavailable</strong>';
+        if (seat.classList.contains('blocked')) {
+            content += '<strong style="color: #95a5a6;">⚫ Blocked by Admin</strong>';
+        } else if (seat.classList.contains('booked')) {
+            content += '<strong style="color: #e74c3c;">🔴 Sold</strong>';
+        } else if (isUnavailable) {
+            content += '<strong style="color: #fbbf24;">⏳ Temporarily Held</strong>';
         } else if (tier && this.pricing[tier]) {
             // Use the updated pricing (which includes real variation prices)
             content += `<strong>${this.pricing[tier].name} - $${this.pricing[tier].price}</strong>`;
@@ -1003,8 +1007,8 @@ class HOPESeatMap {
                 const totalSeatsBeforeAvailability = document.querySelectorAll('.seat').length;
                 
                 // First, clear all existing unavailable markings
-                document.querySelectorAll('.seat.unavailable').forEach(seat => {
-                    seat.classList.remove('unavailable');
+                document.querySelectorAll('.seat.unavailable, .seat.blocked, .seat.booked').forEach(seat => {
+                    seat.classList.remove('unavailable', 'blocked', 'booked');
                     // Only restore original color if seat is not selected
                     if (!seat.classList.contains('selected')) {
                         const tier = seat.getAttribute('data-tier');
@@ -1013,19 +1017,42 @@ class HOPESeatMap {
                         }
                     }
                 });
-                
+
                 // Check if unavailable seats have changed
                 const currentUnavailable = new Set(data.data.unavailable_seats);
                 const hasChanges = this.lastUnavailableSeats.size !== currentUnavailable.size ||
                     [...this.lastUnavailableSeats].some(seat => !currentUnavailable.has(seat)) ||
                     [...currentUnavailable].some(seat => !this.lastUnavailableSeats.has(seat));
-                
-                // Then mark the currently unavailable seats
+
+                // Mark blocked seats with gray color
+                if (data.data.blocked_seats) {
+                    data.data.blocked_seats.forEach(seatId => {
+                        const seat = document.querySelector(`[data-id="${seatId}"]`);
+                        if (seat && !this.selectedSeats.has(seatId)) {
+                            seat.classList.add('unavailable', 'blocked');
+                            seat.setAttribute('fill', '#95a5a6'); // Gray for blocked seats
+                        }
+                    });
+                }
+
+                // Mark booked seats with red color
+                if (data.data.booked_seats) {
+                    data.data.booked_seats.forEach(seatId => {
+                        const seat = document.querySelector(`[data-id="${seatId}"]`);
+                        if (seat && !this.selectedSeats.has(seatId)) {
+                            seat.classList.add('unavailable', 'booked');
+                            seat.setAttribute('fill', '#e74c3c'); // Red for booked seats
+                        }
+                    });
+                }
+
+                // Mark any remaining unavailable seats (held seats) with default gray
                 data.data.unavailable_seats.forEach(seatId => {
                     const seat = document.querySelector(`[data-id="${seatId}"]`);
-                    if (seat && !this.selectedSeats.has(seatId)) {
+                    if (seat && !this.selectedSeats.has(seatId) &&
+                        !seat.classList.contains('blocked') && !seat.classList.contains('booked')) {
                         seat.classList.add('unavailable');
-                        seat.setAttribute('fill', '#6c757d');
+                        seat.setAttribute('fill', '#6c757d'); // Default gray for held seats
                     }
                 });
                 

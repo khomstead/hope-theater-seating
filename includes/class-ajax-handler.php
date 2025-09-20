@@ -66,18 +66,29 @@ class HOPE_Ajax_Handler {
             
             // Get all held seats (by other sessions)
             $held_seats = $wpdb->get_results($wpdb->prepare(
-                "SELECT DISTINCT seat_id FROM $table_holds 
+                "SELECT DISTINCT seat_id FROM $table_holds
                 WHERE product_id = %d AND session_id != %s AND expires_at > NOW()",
                 $product_id, $session_id
             ), ARRAY_A);
-            
+
             foreach ($held_seats as $row) {
                 $all_unavailable_seats[] = $row['seat_id'];
             }
-            
+
+            // Get blocked seats (admin seat blocking)
+            $blocked_seats = array();
+            if (class_exists('HOPE_Database_Selective_Refunds')) {
+                $blocked_seats = HOPE_Database_Selective_Refunds::get_blocked_seat_ids($product_id);
+            }
+
+            // Combine all unavailable seats but separate blocked seats for different styling
+            $all_unavailable_seats = array_merge($all_unavailable_seats, $blocked_seats);
+
             wp_send_json_success([
                 'available' => true,
-                'unavailable_seats' => array_unique($all_unavailable_seats)
+                'unavailable_seats' => array_unique($all_unavailable_seats),
+                'blocked_seats' => $blocked_seats, // Separate blocked seats for styling
+                'booked_seats' => array_column($booked_seats, 'seat_id') // Separate booked seats for styling
             ]);
         }
         
