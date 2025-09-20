@@ -198,8 +198,8 @@ class HOPE_Admin_Seat_Blocking {
         // Add nonce for security
         wp_nonce_field('hope_seat_block_admin_action', 'hope_seat_block_admin_nonce');
 
-        // Include the seat map modal HTML for admin use
-        $this->render_seat_map_modal();
+        // Modal integration temporarily disabled to prevent conflicts
+        // TODO: Re-enable once frontend integration is stable
 
         echo '</div>'; // End wrap
         
@@ -368,73 +368,18 @@ class HOPE_Admin_Seat_Blocking {
                 updateSelectionDisplay();
             }
 
-            // Open the frontend seat map modal in admin blocking mode
+            // Open seat map for blocking - simplified version
             function openSeatMapForBlocking(eventId) {
-                var modal = $('#hope-seat-modal');
-                if (modal.length === 0) {
-                    alert('Seat map modal not found. Please refresh the page.');
-                    return;
-                }
+                alert('Seat map integration coming soon! For now, please enter seat IDs manually in the selection box below.');
 
-                // Show the modal
-                modal.show();
-
-                // Set the product ID for the seat map to load
-                window.hope_ajax = window.hope_ajax || {};
-                window.hope_ajax.product_id = eventId;
-                window.hope_ajax.venue_id = eventSeats.venue_id || 218;
-
-                // Initialize the seat map if the class is available
-                if (typeof HOPESeatMap !== 'undefined') {
-                    var seatMapContainer = document.getElementById('seat-map-container');
-                    if (seatMapContainer) {
-                        // Clear any existing content
-                        seatMapContainer.innerHTML = '';
-
-                        // Create the seat map instance
-                        var seatMap = new HOPESeatMap();
-                        seatMap.productId = eventId;
-
-                        // Initialize the map
-                        seatMap.initializeMap();
-                    }
-                } else {
-                    // Fallback: try to trigger existing modal functionality
-                    var seatMapContainer = $('#seat-map-container');
-                    seatMapContainer.html('<p>Loading seat map...</p>');
-
-                    // Try to load the seat map data directly
-                    $.post(ajaxurl, {
-                        action: 'hope_get_venue_seats',
-                        venue_id: eventSeats.venue_id || 218,
-                        event_id: eventId,
-                        nonce: $('#hope_seat_block_admin_nonce').val()
-                    }, function(response) {
-                        if (response.success) {
-                            // Simple fallback rendering
-                            var html = '<div style="text-align: center; padding: 20px;">';
-                            html += '<p>Seat map will be available here. For now, please use the grid selection.</p>';
-                            html += '<button type="button" onclick="jQuery(\'#hope-seat-modal\').hide()">Close</button>';
-                            html += '</div>';
-                            seatMapContainer.html(html);
-                        }
+                // For now, show a simple prompt for manual seat entry
+                var seats = prompt('Enter seat IDs separated by commas (e.g., A1-1, A1-2, A2-1):');
+                if (seats) {
+                    selectedSeats = seats.split(',').map(function(seat) {
+                        return seat.trim();
                     });
-                }
-
-                // Handle modal close
-                $('.hope-modal-close, #cancel-seat-selection').off('click').on('click', function() {
-                    modal.hide();
-                });
-
-                // Handle seat selection confirmation
-                $('#confirm-seat-selection').off('click').on('click', function() {
-                    // Get selected seats from the seat map
-                    if (window.currentSeatMap && window.currentSeatMap.selectedSeats) {
-                        selectedSeats = Array.from(window.currentSeatMap.selectedSeats);
-                    }
                     updateSelectionDisplay();
-                    modal.hide();
-                });
+                }
             }
             
             // Render current blocks
@@ -742,24 +687,35 @@ class HOPE_Admin_Seat_Blocking {
             return;
         }
 
-        // Enqueue the frontend seat map scripts for admin use
-        wp_enqueue_script('hope-seat-map', plugin_dir_url(__FILE__) . '../assets/js/seat-map.js', array('jquery'), '2.4.9', true);
-        wp_enqueue_script('hope-modal-handler', plugin_dir_url(__FILE__) . '../assets/js/modal-handler.js', array('jquery'), '2.4.9', true);
+        // Try to enqueue frontend scripts - with error handling
+        $plugin_url = plugin_dir_url(dirname(__FILE__));
 
-        // Enqueue frontend styles for the seat map modal
-        wp_enqueue_style('hope-frontend-style', plugin_dir_url(__FILE__) . '../assets/css/frontend.css', array(), '2.4.9');
+        if (file_exists(dirname(__FILE__) . '/../assets/js/seat-map.js')) {
+            wp_enqueue_script('hope-seat-map', $plugin_url . 'assets/js/seat-map.js', array('jquery'), '2.4.9', true);
+        }
 
-        // Localize script with AJAX data for seat map functionality
-        wp_localize_script('hope-seat-map', 'hope_ajax', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('hope_seating_nonce'),
-            'session_id' => session_id() ?: uniqid('hope_admin_'),
-            'messages' => array(
-                'max_seats' => 'Maximum seats selection reached',
-                'add_to_cart_error' => 'Error adding seats to cart',
-                'session_expired' => 'Session expired, please refresh'
-            )
-        ));
+        if (file_exists(dirname(__FILE__) . '/../assets/js/modal-handler.js')) {
+            wp_enqueue_script('hope-modal-handler', $plugin_url . 'assets/js/modal-handler.js', array('jquery'), '2.4.9', true);
+        }
+
+        // Only enqueue styles if file exists
+        if (file_exists(dirname(__FILE__) . '/../assets/css/frontend.css')) {
+            wp_enqueue_style('hope-frontend-style', $plugin_url . 'assets/css/frontend.css', array(), '2.4.9');
+        }
+
+        // Localize script with AJAX data for seat map functionality - only if script was enqueued
+        if (wp_script_is('hope-seat-map', 'enqueued')) {
+            wp_localize_script('hope-seat-map', 'hope_ajax', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('hope_seating_nonce'),
+                'session_id' => session_id() ?: uniqid('hope_admin_'),
+                'messages' => array(
+                    'max_seats' => 'Maximum seats selection reached',
+                    'add_to_cart_error' => 'Error adding seats to cart',
+                    'session_expired' => 'Session expired, please refresh'
+                )
+            ));
+        }
 
         // Styles and scripts are included inline for immediate rendering
     }
