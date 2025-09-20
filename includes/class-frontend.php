@@ -336,7 +336,11 @@ public function seat_button_shortcode($atts) {
         
         $pricing_map_id = isset($_POST['venue_id']) ? intval($_POST['venue_id']) : 0; // Actually pricing map ID now
         $event_id = isset($_POST['event_id']) ? intval($_POST['event_id']) : 0;
-        
+
+        // Debug: Log what we received
+        error_log("HOPE: ajax_get_venue_seats received venue_id: " . ($_POST['venue_id'] ?? 'not set') . " (converted to: " . $pricing_map_id . ")");
+        error_log("HOPE: ajax_get_venue_seats received event_id: " . ($_POST['event_id'] ?? 'not set') . " (converted to: " . $event_id . ")");
+
         if (!$pricing_map_id) {
             wp_send_json_error('Invalid pricing map ID');
             return;

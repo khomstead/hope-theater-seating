@@ -1015,7 +1015,11 @@ class HOPESeatMap {
                 });
 
                 // Check if unavailable seats have changed
-                const currentUnavailable = new Set(data.data.unavailable_seats);
+                // Handle both array and object formats for unavailable_seats
+                const unavailableArray = Array.isArray(data.data.unavailable_seats)
+                    ? data.data.unavailable_seats
+                    : Object.values(data.data.unavailable_seats || {});
+                const currentUnavailable = new Set(unavailableArray);
                 const hasChanges = this.lastUnavailableSeats.size !== currentUnavailable.size ||
                     [...this.lastUnavailableSeats].some(seat => !currentUnavailable.has(seat)) ||
                     [...currentUnavailable].some(seat => !this.lastUnavailableSeats.has(seat));
@@ -1043,7 +1047,7 @@ class HOPESeatMap {
                 }
 
                 // Mark any remaining unavailable seats (held seats) with default gray
-                data.data.unavailable_seats.forEach(seatId => {
+                unavailableArray.forEach(seatId => {
                     const seat = document.querySelector(`[data-id="${seatId}"]`);
                     if (seat && !this.selectedSeats.has(seatId) &&
                         !seat.classList.contains('blocked') && !seat.classList.contains('booked')) {

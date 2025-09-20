@@ -5,14 +5,15 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 - **Main Stage**: 353 orchestra seats + 132 balcony seats
 - **Purpose**: Replace FooEvents' rectangular-only seating with accurate curved theater layout
 - **Integration**: WooCommerce + FooEvents for ticket sales
-- **Current Version**: 2.4.6
+- **Current Version**: 2.4.7
 
 ## 📅 Development Timeline
 - **Early Sessions**: Database structure, basic plugin architecture
 - **Middle Sessions**: HTML mockup with pan/zoom functionality
 - **August 13, 2025**: Completed mockup with all visual fixes
 - **Latest Session**: Full plugin with modal system and mobile optimization
-- **Current Session**: Added seat manager, session manager, and mobile detector classes
+- **Previous Session**: Added seat manager, session manager, and mobile detector classes
+- **Current Session**: Implemented admin seat blocking interface with visual seat map
 
 ## ✅ COMPLETED COMPONENTS
 
@@ -56,6 +57,17 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 - ✅ Optional admin email notifications
 - ✅ Integration with WooCommerce hooks
 
+### Admin Seat Blocking Interface (Complete)
+- ✅ Visual seat map in admin interface matching frontend layout
+- ✅ Real-time seat availability display (booked/blocked/available)
+- ✅ Selective seat blocking with visual point-and-click interface
+- ✅ Seat status indicators (red=booked, gray=blocked, tier colors=available)
+- ✅ Zoom, drag, and floor toggle functionality in admin
+- ✅ Admin blocking with reason, duration, and user attribution
+- ✅ Integration with existing seat blocking database tables
+- ✅ Hover effects and proper event handling for available seats
+- ✅ Consistent visual language between admin and frontend interfaces
+
 ### Database Structure (Complete)
 - ✅ Table schemas defined and created
 - ✅ class-database.php functional
@@ -81,8 +93,8 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 ### Admin Interface Needed:
 1. **class-admin-menu.php** - WordPress admin menus
 2. **class-product-meta.php** - Venue assignment to products
-3. **Visual seat editor** - Drag-drop seat positioning
-4. **Reporting dashboard** - Sales and availability reports
+3. **Reporting dashboard** - Sales and availability reports
+4. ~~**Visual seat editor** - Drag-drop seat positioning~~ ✅ **COMPLETED** - Admin seat blocking interface
 
 ### Integration Enhancements:
 1. **FooEvents deep integration** - Pass seat data to tickets
@@ -93,7 +105,7 @@ WordPress plugin for HOPE Theater's 485-seat venue with irregular half-round sea
 
 ```
 hope-theater-seating/
-├── hope-theater-seating.php          ✅ Main plugin file (v2.4.6)
+├── hope-theater-seating.php          ✅ Main plugin file (v2.4.7)
 ├── includes/
 │   ├── class-modal-handler.php       ✅ Modal system
 │   ├── class-ajax-handler.php        ✅ AJAX endpoints
@@ -101,7 +113,9 @@ hope-theater-seating/
 │   ├── class-seat-manager.php        ✅ Seat population
 │   ├── class-session-manager.php     ✅ Hold management
 │   ├── class-mobile-detector.php     ✅ Device detection
-│   ├── class-refund-handler.php      ✅ WooCommerce refund integration (NEW)
+│   ├── class-refund-handler.php      ✅ WooCommerce refund integration
+│   ├── class-admin-seat-blocking.php ✅ Admin seat blocking interface (NEW)
+│   ├── class-database-selective-refunds.php ✅ Enhanced database support (NEW)
 │   ├── class-venues.php              ⚠️  May exist
 │   ├── class-seat-maps.php           ⚠️  May exist
 │   ├── class-admin.php               ⚠️  May exist
@@ -296,6 +310,35 @@ const seatMap = new HOPESeatMap({
 ---
 
 ## 📋 CHANGELOG
+
+### Version 2.4.7 (September 20, 2025) - ADMIN SEAT BLOCKING INTERFACE
+**NEW FEATURE: Visual Admin Seat Blocking Interface**
+- ✅ **ADDED**: Complete admin seat blocking interface (`class-admin-seat-blocking.php`)
+- ✅ **ADDED**: Visual seat map in admin matching frontend SVG theater layout
+- ✅ **ADDED**: Real-time seat availability display (booked=red, blocked=gray, available=tier colors)
+- ✅ **ADDED**: Point-and-click seat selection for blocking operations
+- ✅ **ADDED**: Zoom, drag, and floor toggle functionality in admin interface
+- ✅ **ADDED**: Enhanced database support for seat blocking (`class-database-selective-refunds.php`)
+- ✅ **ADDED**: Seat blocking with reason, duration, and user attribution
+- ✅ **ADDED**: Integration with existing blocking database tables
+
+**TECHNICAL IMPROVEMENTS**:
+- ✅ **FIXED**: Seat availability display using correct `data-id` attribute
+- ✅ **FIXED**: Frontend JavaScript compatibility with both array and object formats
+- ✅ **ENHANCED**: Hover effects for available seats with brightness filter
+- ✅ **ENHANCED**: Consistent visual language between admin and frontend
+- ✅ **ENHANCED**: Admin-specific event handling to prevent SVG errors
+- ✅ **MAINTAINED**: Original tier color scheme for available seats
+
+**ADMIN INTERFACE FEATURES**:
+- Event search and selection with dropdown interface
+- Current seat blocks display with user attribution
+- Block type selection (manual, equipment, VIP, maintenance)
+- Custom block duration (indefinite or time-based)
+- Real-time seat status updates
+- Professional modal interface matching frontend design
+
+**READY FOR PRODUCTION DEPLOYMENT**
 
 ### Version 2.4.6 (September 17, 2025) - CRITICAL FIX
 **CRITICAL REFUND FUNCTIONALITY FIX**
