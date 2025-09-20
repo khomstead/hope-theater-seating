@@ -95,7 +95,16 @@
                 this.seatData = data.seats || [];
                 this.venueData = data.venue || {};
                 this.bookedSeats = new Set(data.booked_seats || []);
-                
+
+                // Debug logging to check data
+                console.log('HOPE Debug - Total seats:', this.seatData.length);
+                console.log('HOPE Debug - Booked seats:', data.booked_seats);
+                console.log('HOPE Debug - Blocked seats in data:', data.blocked_seats);
+                const blockedSeats = this.seatData.filter(seat => seat.status === 'blocked');
+                const bookedSeats = this.seatData.filter(seat => seat.status === 'booked');
+                console.log('HOPE Debug - Seats with blocked status:', blockedSeats.length, blockedSeats.map(s => s.id));
+                console.log('HOPE Debug - Seats with booked status:', bookedSeats.length, bookedSeats.map(s => s.id));
+
                 this.render();
                 this.bindEvents();
                 
@@ -377,17 +386,18 @@
             }
             
             // Set seat color based on status and pricing tier
-            const isBooked = this.bookedSeats.has(seat.id) || 
+            const isBooked = seat.status === 'booked' ||
+                            this.bookedSeats.has(seat.id) ||
                             this.bookedSeats.has(seat.seat_number) ||
                             this.bookedSeats.has(`${seat.section}${seat.row_number}-${seat.seat_number}`);
             const pricingTier = seat.pricing_tier || 'P3';
-            
-            if (isBooked) {
-                seatRect.setAttribute('fill', this.colors.unavailable);
-                seatRect.setAttribute('class', 'seat unavailable');
-            } else if (seat.status === 'blocked') {
+
+            if (seat.status === 'blocked') {
                 seatRect.setAttribute('fill', this.colors.blocked);
                 seatRect.setAttribute('class', 'seat blocked');
+            } else if (isBooked) {
+                seatRect.setAttribute('fill', this.colors.unavailable);
+                seatRect.setAttribute('class', 'seat unavailable');
             } else {
                 seatRect.setAttribute('fill', this.colors[pricingTier] || this.colors.P3);
                 seatRect.setAttribute('class', 'seat available');

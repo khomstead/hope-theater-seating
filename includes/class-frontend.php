@@ -490,8 +490,12 @@ public function seat_button_shortcode($atts) {
 
         // Mark blocked seats in the seat data with proper status
         foreach ($seats as &$seat) {
-            if (in_array($seat['seat_id'], $blocked_seats)) {
+            if (in_array($seat['id'], $blocked_seats)) {
                 $seat['status'] = 'blocked';
+            }
+            // Also mark booked seats with status for frontend consistency
+            if (in_array($seat['id'], $booked_seats)) {
+                $seat['status'] = 'booked';
             }
         }
 
