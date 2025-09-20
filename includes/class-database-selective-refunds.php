@@ -335,12 +335,14 @@ class HOPE_Database_Selective_Refunds {
         $table_name = $wpdb->prefix . 'hope_seating_seat_blocks';
         
         $blocks = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$table_name} 
-            WHERE event_id = %d 
-            AND is_active = 1
-            AND (valid_from IS NULL OR valid_from <= NOW())
-            AND (valid_until IS NULL OR valid_until >= NOW())
-            ORDER BY created_at DESC",
+            "SELECT sb.*, u.display_name as blocked_by_username
+            FROM {$table_name} sb
+            LEFT JOIN {$wpdb->users} u ON sb.blocked_by = u.ID
+            WHERE sb.event_id = %d
+            AND sb.is_active = 1
+            AND (sb.valid_from IS NULL OR sb.valid_from <= NOW())
+            AND (sb.valid_until IS NULL OR sb.valid_until >= NOW())
+            ORDER BY sb.created_at DESC",
             $event_id
         ), ARRAY_A);
         

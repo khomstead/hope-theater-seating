@@ -78,15 +78,20 @@ class HOPE_Admin_Seat_Blocking {
             return;
         }
         
-        // Event selection
+        // Event selection with search/combo box
         echo '<div class="hope-admin-section">';
         echo '<h2>Select Event to Manage</h2>';
-        echo '<select id="hope-event-selector" style="width: 100%; max-width: 400px; padding: 8px;">';
-        echo '<option value="">-- Select an Event --</option>';
+        echo '<div class="hope-event-search-container">';
+        echo '<input type="text" id="hope-event-search" placeholder="Search for an event..." style="width: 100%; max-width: 400px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">';
+        echo '<div id="hope-event-dropdown" class="hope-event-dropdown" style="display: none;">';
         foreach ($theater_products as $product) {
-            echo '<option value="' . $product->get_id() . '">' . esc_html($product->get_name()) . ' (ID: ' . $product->get_id() . ')</option>';
+            echo '<div class="hope-event-option" data-event-id="' . $product->get_id() . '">';
+            echo '<strong>' . esc_html($product->get_name()) . '</strong>';
+            echo '<small style="color: #666; display: block;">ID: ' . $product->get_id() . '</small>';
+            echo '</div>';
         }
-        echo '</select>';
+        echo '</div>';
+        echo '</div>';
         echo '</div>';
         
         // Seat blocking interface (initially hidden)
@@ -229,6 +234,11 @@ class HOPE_Admin_Seat_Blocking {
         echo '<style>
             .hope-admin-section { background: white; margin: 20px 0; padding: 20px; border: 1px solid #ccd0d4; box-shadow: 0 1px 1px rgba(0,0,0,.04); }
             .hope-admin-section h2 { margin-top: 0; }
+            .hope-event-search-container { position: relative; }
+            .hope-event-dropdown { position: absolute; top: 100%; left: 0; right: 0; max-width: 400px; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; max-height: 300px; overflow-y: auto; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .hope-event-option { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
+            .hope-event-option:hover { background: #f8f9fa; }
+            .hope-event-option:last-child { border-bottom: none; }
             .hope-seat-sections { margin: 15px 0; }
             .hope-section-container { margin-bottom: 30px; padding: 15px; border: 1px solid #e1e1e1; border-radius: 6px; background: #fafafa; }
             .hope-section-container h3 { margin: 0 0 15px 0; color: #0073aa; font-size: 16px; }
@@ -239,9 +249,10 @@ class HOPE_Admin_Seat_Blocking {
             .hope-seat-item.selected { background: #ff6b6b; border-color: #ff5252; color: white; font-weight: bold; }
             .hope-seat-item.blocked { background: #6c757d; border-color: #495057; color: white; cursor: not-allowed; opacity: 0.8; }
             .hope-seat-item.booked { background: #28a745; border-color: #1e7e34; color: white; cursor: not-allowed; }
-            .hope-block-item { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0; }
+            .hope-block-item { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; margin: 10px 0; display: flex; justify-content: space-between; align-items: flex-start; }
+            .hope-block-content { flex: 1; }
             .hope-block-type { display: inline-block; padding: 4px 8px; border-radius: 3px; color: white; font-size: 11px; font-weight: bold; }
-            .hope-remove-block-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+            .hope-remove-block-btn { background: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 3px; cursor: pointer; margin-left: 15px; flex-shrink: 0; }
             .hope-remove-block-btn:hover { background: #c82333; }
         </style>';
     }
@@ -257,15 +268,44 @@ class HOPE_Admin_Seat_Blocking {
             var currentEventId = null;
             var eventSeats = {};
             
-            // Handle event selection
-            $('#hope-event-selector').on('change', function() {
-                currentEventId = $(this).val();
-                if (currentEventId) {
-                    loadEventData(currentEventId);
-                    $('#hope-blocking-interface').show();
+            // Handle event search and selection
+            $('#hope-event-search').on('input', function() {
+                const searchTerm = $(this).val().toLowerCase();
+                const dropdown = $('#hope-event-dropdown');
+
+                if (searchTerm.length > 0) {
+                    $('.hope-event-option').each(function() {
+                        const eventName = $(this).text().toLowerCase();
+                        if (eventName.includes(searchTerm)) {
+                            $(this).show();
+                        } else {
+                            $(this).hide();
+                        }
+                    });
+                    dropdown.show();
                 } else {
-                    $('#hope-blocking-interface').hide();
+                    dropdown.hide();
                 }
+            });
+
+            // Handle clicking outside to close dropdown
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('.hope-event-search-container').length) {
+                    $('#hope-event-dropdown').hide();
+                }
+            });
+
+            // Handle event option selection
+            $('.hope-event-option').on('click', function() {
+                const eventId = $(this).data('event-id');
+                const eventName = $(this).find('strong').text();
+
+                $('#hope-event-search').val(eventName);
+                $('#hope-event-dropdown').hide();
+
+                currentEventId = eventId;
+                loadEventData(eventId);
+                $('#hope-blocking-interface').show();
             });
             
             // Handle block duration selection
@@ -313,17 +353,17 @@ class HOPE_Admin_Seat_Blocking {
                         var typeInfo = blockTypes[block.block_type] || {label: block.block_type, color: '#6c757d'};
                         
                         html += '<div class="hope-block-item">';
-                        html += '<div style="display: flex; justify-content: between; align-items: center;">';
-                        html += '<div>';
+                        html += '<div class="hope-block-content">';
                         html += '<span class="hope-block-type" style="background: ' + typeInfo.color + '">' + typeInfo.label + '</span>';
                         html += '<strong style="margin-left: 10px;">' + block.seat_ids.length + ' seats:</strong> ' + block.seat_ids.join(', ');
+                        if (block.block_reason) {
+                            html += '<p style="margin: 10px 0 5px 0;"><strong>Reason:</strong> ' + block.block_reason + '</p>';
+                        }
+                        // Get username for display
+                        var createdBy = block.blocked_by_username || 'User ID ' + block.blocked_by;
+                        html += '<p style="margin: 5px 0 0 0;"><small>Created: ' + block.created_at + ' by ' + createdBy + '</small></p>';
                         html += '</div>';
                         html += '<button class="hope-remove-block-btn" data-block-id="' + block.id + '">Remove Block</button>';
-                        html += '</div>';
-                        if (block.block_reason) {
-                            html += '<p><strong>Reason:</strong> ' + block.block_reason + '</p>';
-                        }
-                        html += '<p><small>Created: ' + block.created_at + ' by User ID ' + block.blocked_by + '</small></p>';
                         html += '</div>';
                     });
                 }
