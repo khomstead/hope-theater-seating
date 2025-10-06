@@ -9,13 +9,16 @@ if (!defined('ABSPATH')) {
 }
 
 class HOPE_Session_Manager {
-    
+
     private $holds_table;
-    private $hold_duration = 600; // 10 minutes in seconds
-    
+    private $hold_duration;
+
     public function __construct() {
         global $wpdb;
         $this->holds_table = $wpdb->prefix . 'hope_seating_holds';
+
+        // Get hold duration from admin settings
+        $this->hold_duration = $this->get_hold_duration();
         
         // Add custom cron schedule FIRST
         add_filter('cron_schedules', array($this, 'add_cron_schedules'));
@@ -416,6 +419,18 @@ class HOPE_Session_Manager {
         } else {
             error_log('HOPE Cleanup: No abandoned pending bookings found');
         }
+    }
+
+    /**
+     * Get hold duration from admin settings (in seconds)
+     * @return int Hold duration in seconds
+     */
+    private function get_hold_duration() {
+        if (class_exists('HOPE_Theater_Seating')) {
+            return HOPE_Theater_Seating::get_hold_duration();
+        }
+        // Fallback to 15 minutes if main class not available
+        return 900;
     }
 
     /**

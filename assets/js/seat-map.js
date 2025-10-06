@@ -987,7 +987,8 @@ class HOPESeatMap {
                 product_id: this.productId,
                 venue_id: hope_ajax.venue_id,
                 seats: JSON.stringify([]),
-                session_id: this.sessionId
+                session_id: this.sessionId,
+                cache_buster: Date.now() // Prevent Safari caching
             })
         })
         .then(response => response.json())
@@ -1188,11 +1189,11 @@ class HOPESeatMap {
     startAvailabilityRefresh() {
         // Stop any existing refresh to prevent duplicates
         this.stopAvailabilityRefresh();
-        
-        // Refresh availability every 10 seconds (more frequent for better UX)
+
+        // Refresh availability every 5 seconds for better cross-browser seat hold detection
         this.availabilityRefreshInterval = setInterval(() => {
             this.loadSeatAvailability();
-        }, 10000);
+        }, 5000);
     }
     
     stopAvailabilityRefresh() {
@@ -1215,7 +1216,8 @@ class HOPESeatMap {
                 product_id: this.productId,
                 venue_id: hope_ajax.venue_id,
                 seats: JSON.stringify([seatId]),
-                session_id: this.sessionId
+                session_id: this.sessionId,
+                cache_buster: Date.now() // Prevent Safari caching
             })
         })
         .then(response => response.json())

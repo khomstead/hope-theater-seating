@@ -502,7 +502,11 @@ class HOPE_Seating_Admin {
                     <tr>
                         <th scope="row"><?php _e('Reservation Time', 'hope-seating'); ?></th>
                         <td>
-                            <input type="number" name="hope_seating_options[reservation_time]" value="15" min="5" max="60" />
+                            <?php
+                            $options = get_option('hope_seating_options', array());
+                            $reservation_time = isset($options['reservation_time']) ? $options['reservation_time'] : 15;
+                            ?>
+                            <input type="number" name="hope_seating_options[reservation_time]" value="<?php echo esc_attr($reservation_time); ?>" min="5" max="60" />
                             <p class="description"><?php _e('Minutes to hold seats in cart before releasing', 'hope-seating'); ?></p>
                         </td>
                     </tr>

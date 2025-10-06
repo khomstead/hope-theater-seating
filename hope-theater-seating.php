@@ -428,7 +428,7 @@ class HOPE_Theater_Seating {
                 'session_id' => $session_id,
                 'product_id' => $product_id,
                 'venue_id' => $venue_id,
-                'hold_duration' => 600, // 10 minutes
+                'hold_duration' => self::get_hold_duration(), // Get from admin settings
                 'device_type' => isset($mobile_detector) ? $mobile_detector->get_device_type() : 'desktop',
                 'is_mobile' => isset($mobile_detector) ? $mobile_detector->is_mobile() : false,
                 'viewport_config' => $viewport_config,
@@ -998,6 +998,16 @@ class HOPE_Theater_Seating {
         echo '<div class="notice notice-success is-dismissible">';
         echo '<p><strong>HOPE Theater Seating:</strong> Pricing assignments have been corrected to match your spreadsheet exactly!</p>';
         echo '</div>';
+    }
+
+    /**
+     * Get hold duration from admin settings (in seconds)
+     * @return int Hold duration in seconds
+     */
+    public static function get_hold_duration() {
+        $options = get_option('hope_seating_options', array());
+        $minutes = isset($options['reservation_time']) ? intval($options['reservation_time']) : 15;
+        return $minutes * 60; // Convert minutes to seconds
     }
 }
 

@@ -172,7 +172,8 @@ class HOPE_Ajax_Handler {
         
         $success = true;
         $held_seats = [];
-        $hold_duration = 600; // 10 minutes
+        // Get hold duration from admin settings
+        $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
         $expires_at = date('Y-m-d H:i:s', time() + $hold_duration);
         
         $unavailable_seats = [];
