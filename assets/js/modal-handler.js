@@ -10,8 +10,25 @@ class HOPEModalHandler {
         this.seatMap = null;
         this.lastClickTime = 0;
         this.lastFooterHeight = null; // Track previous footer height for change detection
-        
+
+        // Capture URL coupon parameter on page load (Advanced Coupons removes it from URL after applying)
+        this.captureCouponParameter();
+
         this.init();
+    }
+
+    /**
+     * Capture and store coupon parameter from URL before Advanced Coupons removes it
+     */
+    captureCouponParameter() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const couponParam = urlParams.get('coupon');
+
+        if (couponParam) {
+            // Store in sessionStorage so we can retrieve it later when confirming seats
+            sessionStorage.setItem('hope_url_coupon', couponParam);
+            console.log('HOPE: Captured URL coupon parameter:', couponParam);
+        }
     }
     
     init() {
@@ -419,9 +436,8 @@ class HOPEModalHandler {
         
         const seats = Array.from(this.seatMap.selectedSeats);
 
-        // Capture URL coupon parameter for Advanced Coupons compatibility
-        const urlParams = new URLSearchParams(window.location.search);
-        const couponParam = urlParams.get('coupon');
+        // Retrieve coupon parameter from sessionStorage (Advanced Coupons removes it from URL)
+        const couponParam = sessionStorage.getItem('hope_url_coupon');
 
         // Build request parameters
         const requestParams = {
