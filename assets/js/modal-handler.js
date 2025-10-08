@@ -418,20 +418,33 @@ class HOPEModalHandler {
         }
         
         const seats = Array.from(this.seatMap.selectedSeats);
-        
+
+        // Capture URL coupon parameter for Advanced Coupons compatibility
+        const urlParams = new URLSearchParams(window.location.search);
+        const couponParam = urlParams.get('coupon');
+
+        // Build request parameters
+        const requestParams = {
+            action: 'hope_add_to_cart',
+            nonce: hope_ajax.nonce,
+            product_id: hope_ajax.product_id,
+            seats: JSON.stringify(seats),
+            session_id: hope_ajax.session_id
+        };
+
+        // Include coupon parameter if present (Advanced Coupons URL coupons)
+        if (couponParam) {
+            requestParams.coupon = couponParam;
+            console.log('Including URL coupon parameter:', couponParam);
+        }
+
         // Add seats to cart via AJAX to ensure persistence
         fetch(hope_ajax.ajax_url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({
-                action: 'hope_add_to_cart',
-                nonce: hope_ajax.nonce,
-                product_id: hope_ajax.product_id,
-                seats: JSON.stringify(seats),
-                session_id: hope_ajax.session_id
-            })
+            body: new URLSearchParams(requestParams)
         })
         .then(response => response.json())
         .then(data => {

@@ -462,14 +462,25 @@ class HOPE_Ajax_Handler {
     
     /**
      * Remove existing cart items for this product to prevent duplicates
+     * Preserves applied coupons (including URL-based coupons from Advanced Coupons)
      */
     private function remove_existing_seats_from_cart($product_id) {
         if (!function_exists('WC') || !WC()->cart) {
             return;
         }
-        
+
+        // Save current applied coupons before removing items
+        $applied_coupons = WC()->cart->get_applied_coupons();
+
+        // Check for URL coupon parameter (Advanced Coupons compatibility)
+        $url_coupon = isset($_REQUEST['coupon']) ? sanitize_text_field($_REQUEST['coupon']) : '';
+        if ($url_coupon && !in_array($url_coupon, $applied_coupons, true)) {
+            $applied_coupons[] = $url_coupon;
+            error_log("HOPE: Detected URL coupon parameter: {$url_coupon}");
+        }
+
         $removed_count = 0;
-        
+
         // Loop through cart items and remove any for this product
         foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
             if ($cart_item['product_id'] == $product_id) {
@@ -481,7 +492,17 @@ class HOPE_Ajax_Handler {
                 }
             }
         }
-        
+
+        // Reapply coupons that were previously applied (fixes Advanced Coupons URL coupon issue)
+        if (!empty($applied_coupons)) {
+            foreach ($applied_coupons as $coupon_code) {
+                if (!WC()->cart->has_discount($coupon_code)) {
+                    WC()->cart->apply_coupon($coupon_code);
+                    error_log("HOPE: Reapplied coupon after cart modification: {$coupon_code}");
+                }
+            }
+        }
+
         if ($removed_count > 0) {
             error_log("HOPE: Removed {$removed_count} existing cart items for product {$product_id}");
         }

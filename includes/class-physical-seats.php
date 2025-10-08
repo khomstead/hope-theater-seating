@@ -211,9 +211,10 @@ class HOPE_Physical_Seats_Manager {
             $descending_angles = $config['angle_start'] > $config['angle_end'];
             
             // Determine seat numbering direction based on section (from audience perspective)
-            // Left-to-Right: A, D (left side sections) + balcony F, H
-            // Right-to-Left: B, C, E (center/right sections) + balcony G
-            $reverse_numbering = in_array($section, array('B', 'C', 'E', 'G'));
+            // Left-to-Right: A, D (left side sections) + balcony F, G, H
+            // Right-to-Left: B, C, E (center/right sections)
+            // Note: Section G changed from right-to-left to left-to-right as of this fix
+            $reverse_numbering = in_array($section, array('B', 'C', 'E'));
             
             for ($seat_num = 1; $seat_num <= $seats_in_row; $seat_num++) {
                 // Determine position index for seat placement
