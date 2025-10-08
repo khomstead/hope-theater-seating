@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.5.1
+ * Version: 2.5.2
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.5.1');
+define('HOPE_SEATING_VERSION', '2.5.2');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -129,6 +129,25 @@ class HOPE_Theater_Seating {
     private function __construct() {
         add_action('plugins_loaded', array($this, 'init'));
         add_action('before_woocommerce_init', array($this, 'declare_wc_compatibility'));
+
+        // Capture URL coupon parameter early (before Advanced Coupons redirects)
+        add_action('init', array($this, 'capture_url_coupon'), 1);
+    }
+
+    /**
+     * Capture URL coupon parameter and store in WooCommerce session
+     * Runs early before Advanced Coupons removes it from URL
+     */
+    public function capture_url_coupon() {
+        if (isset($_GET['coupon']) && !empty($_GET['coupon'])) {
+            $coupon_code = sanitize_text_field($_GET['coupon']);
+
+            // Store in WooCommerce session if available
+            if (function_exists('WC') && WC()->session) {
+                WC()->session->set('hope_url_coupon', $coupon_code);
+                error_log("HOPE: Captured URL coupon in session: {$coupon_code}");
+            }
+        }
     }
     
     public function init() {

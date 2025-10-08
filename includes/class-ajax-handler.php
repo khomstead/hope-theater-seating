@@ -473,7 +473,16 @@ class HOPE_Ajax_Handler {
         $applied_coupons = WC()->cart->get_applied_coupons();
 
         // Check for URL coupon parameter (Advanced Coupons compatibility)
+        // Try POST/GET first (from JavaScript), then WooCommerce session (from PHP capture)
         $url_coupon = isset($_REQUEST['coupon']) ? sanitize_text_field($_REQUEST['coupon']) : '';
+
+        if (!$url_coupon && WC()->session) {
+            $url_coupon = WC()->session->get('hope_url_coupon', '');
+            if ($url_coupon) {
+                error_log("HOPE: Retrieved URL coupon from WC session: {$url_coupon}");
+            }
+        }
+
         if ($url_coupon && !in_array($url_coupon, $applied_coupons, true)) {
             $applied_coupons[] = $url_coupon;
             error_log("HOPE: Detected URL coupon parameter: {$url_coupon}");
