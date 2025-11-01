@@ -174,7 +174,8 @@ class HOPE_Ajax_Handler {
         $held_seats = [];
         // Get hold duration from admin settings
         $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
-        $expires_at = date('Y-m-d H:i:s', time() + $hold_duration);
+        // Use gmdate() to match MySQL NOW() which uses UTC
+        $expires_at = gmdate('Y-m-d H:i:s', time() + $hold_duration);
         
         $unavailable_seats = [];
         
@@ -190,7 +191,7 @@ class HOPE_Ajax_Handler {
                     'seat_id' => $seat_id,
                     'session_id' => $session_id,
                     'expires_at' => $expires_at,
-                    'created_at' => current_time('mysql')
+                    'created_at' => gmdate('Y-m-d H:i:s')
                 ]);
                 
                 if ($result) {

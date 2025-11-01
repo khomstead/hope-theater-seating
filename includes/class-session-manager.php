@@ -61,7 +61,8 @@ class HOPE_Session_Manager {
         }
         
         // Create new holds
-        $expires_at = date('Y-m-d H:i:s', time() + $this->hold_duration);
+        // Use gmdate() to match MySQL UTC_TIMESTAMP()
+        $expires_at = gmdate('Y-m-d H:i:s', time() + $this->hold_duration);
         $held_seats = array();
         
         foreach ($seat_ids as $seat_id) {
@@ -73,7 +74,7 @@ class HOPE_Session_Manager {
                     'event_id' => $event_id,
                     'user_email' => $user_email,
                     'expires_at' => $expires_at,
-                    'created_at' => current_time('mysql')
+                    'created_at' => gmdate('Y-m-d H:i:s')
                 ),
                 array('%s', '%s', '%d', '%s', '%s', '%s')
             );
