@@ -91,7 +91,8 @@ class HOPESeatMap {
     }
 
     showLoadingState() {
-        const svg = document.getElementById('seat-map');
+        const svgId = this.containerId || 'seat-map';
+        const svg = document.getElementById(svgId);
         if (svg) {
             svg.innerHTML = `
                 <text x="600" y="400" text-anchor="middle" class="loading-text"
@@ -115,16 +116,19 @@ class HOPESeatMap {
      * Load real seat data from database
      */
     loadRealSeatData() {
-        return fetch(hope_ajax.ajax_url, {
+        // Use this.ajax if set, otherwise fall back to global hope_ajax
+        const ajaxConfig = this.ajax || hope_ajax;
+
+        return fetch(ajaxConfig.ajax_url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
             body: new URLSearchParams({
                 action: 'hope_get_venue_seats',
-                nonce: hope_ajax.nonce,
-                venue_id: hope_ajax.venue_id,
-                event_id: hope_ajax.product_id,
+                nonce: ajaxConfig.nonce,
+                venue_id: ajaxConfig.venue_id,
+                event_id: ajaxConfig.event_id || ajaxConfig.product_id,
                 cache_buster: Date.now() // Force fresh data from server
             })
         })
@@ -434,9 +438,10 @@ class HOPESeatMap {
     }
     
     generateTheater(floor) {
-        const svg = document.getElementById('seat-map');
+        const svgId = this.containerId || 'seat-map';
+        const svg = document.getElementById(svgId);
         if (!svg) return;
-        
+
         svg.innerHTML = '';
         
         this.createStage(svg);
@@ -650,8 +655,9 @@ class HOPESeatMap {
         }
         
         // Select new seat
-        if (this.selectedSeats.size >= 10) {
-            this.showMessage(hope_ajax.messages.max_seats, 'warning');
+        const maxSeats = this.maxSeats || 10;
+        if (this.selectedSeats.size >= maxSeats) {
+            this.showMessage(hope_ajax.messages?.max_seats || 'Maximum seats reached', 'warning');
             return;
         }
         
@@ -696,13 +702,14 @@ class HOPESeatMap {
     
     handleSeatHover(e) {
         const seat = e.currentTarget;
-        
+
         // Move to top layer
         seat._originalParent = seat.parentNode;
         seat._originalNextSibling = seat.nextSibling;
-        const svg = document.getElementById('seat-map');
+        const svgId = this.containerId || 'seat-map';
+        const svg = document.getElementById(svgId);
         svg.appendChild(seat);
-        
+
         // Show tooltip
         this.showTooltip(seat);
     }
