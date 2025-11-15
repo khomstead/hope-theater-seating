@@ -88,18 +88,36 @@ class HOPE_Refund_Handler {
     /**
      * Handle any order refund (more reliable hook)
      * Triggered when any refund is processed
-     * 
+     *
      * @param int $order_id Order ID
      * @param int $refund_id Refund ID
      */
     public function handle_order_refunded($order_id, $refund_id) {
         error_log("HOPE REFUND: Order {$order_id} refunded (refund ID: {$refund_id})");
-        $this->release_order_seats($order_id, 'refunded');
+
+        // CRITICAL FIX: Only release seats if the ENTIRE order is refunded
+        // Partial refunds (like parking only) should NOT release theater seats
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return;
+        }
+
+        // Check if this is a full refund by comparing refund total to order total
+        $order_total = floatval($order->get_total());
+        $refunded_total = floatval($order->get_total_refunded());
+
+        // Only release seats if 100% of order is refunded
+        if ($refunded_total >= $order_total) {
+            error_log("HOPE REFUND: Full refund detected ({$refunded_total} >= {$order_total}), releasing seats");
+            $this->release_order_seats($order_id, 'refunded');
+        } else {
+            error_log("HOPE REFUND: Partial refund detected ({$refunded_total} < {$order_total}), NOT releasing seats");
+        }
     }
     
     /**
      * Handle refund creation (alternative hook)
-     * 
+     *
      * @param int $refund_id Refund ID
      * @param array $args Refund arguments
      */
@@ -107,7 +125,25 @@ class HOPE_Refund_Handler {
         if (isset($args['order_id'])) {
             $order_id = $args['order_id'];
             error_log("HOPE REFUND: Refund created for order {$order_id} (refund ID: {$refund_id})");
-            $this->release_order_seats($order_id, 'refunded');
+
+            // CRITICAL FIX: Only release seats if the ENTIRE order is refunded
+            // Partial refunds (like parking only) should NOT release theater seats
+            $order = wc_get_order($order_id);
+            if (!$order) {
+                return;
+            }
+
+            // Check if this is a full refund by comparing refund total to order total
+            $order_total = floatval($order->get_total());
+            $refunded_total = floatval($order->get_total_refunded());
+
+            // Only release seats if 100% of order is refunded
+            if ($refunded_total >= $order_total) {
+                error_log("HOPE REFUND: Full refund detected ({$refunded_total} >= {$order_total}), releasing seats");
+                $this->release_order_seats($order_id, 'refunded');
+            } else {
+                error_log("HOPE REFUND: Partial refund detected ({$refunded_total} < {$order_total}), NOT releasing seats");
+            }
         }
     }
     
@@ -172,8 +208,11 @@ class HOPE_Refund_Handler {
         }
         
         // Get all confirmed bookings for this order
+        // Exclude 'guest_list' status - those are kept held intentionally
         $bookings = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$bookings_table} WHERE order_id = %d AND status = 'confirmed'",
+            "SELECT * FROM {$bookings_table}
+            WHERE order_id = %d
+            AND status = 'confirmed'",
             $order_id
         ));
         

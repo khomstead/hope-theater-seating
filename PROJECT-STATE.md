@@ -271,10 +271,18 @@ Changing these would require updating:
 
 **Bookings** (`wp_hope_seating_bookings`)
 - `seat_id` - Which seat (links to physical_seats)
-- `order_id` - Which WooCommerce order
+- `order_id` - Which WooCommerce order (references HPOS `wp_wc_orders.id`, NOT `wp_posts.ID`)
 - `product_id` - Which event/product
 - `status` - active, confirmed, pending, refunded
 - `refund_id` - If refunded (added in v2.4.7)
+
+**⚠️ CRITICAL - HPOS (High-Performance Order Storage)**
+- Site uses WooCommerce HPOS (enabled)
+- Order data is in `wp_wc_orders` table, NOT `wp_posts`
+- `wp_posts` only contains placeholder/draft records for HPOS orders
+- **Always join bookings to `wp_wc_orders`** to get real order status
+- Order statuses: `wc-processing`, `wc-completed`, `wc-on-hold`, `wc-refunded`, etc.
+- **Never use** `wp_posts.post_status` for order status checks - it will always show 'draft'
 
 ### Meta Keys (WooCommerce Products)
 
