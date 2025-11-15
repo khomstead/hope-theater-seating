@@ -48,14 +48,15 @@ class HOPE_Selective_Refund_Handler {
     /**
      * Process selective refund for specific seats
      * CORE FUNCTIONALITY: New selective refund capability
-     * 
+     *
      * @param int $order_id WooCommerce order ID
      * @param array $seat_ids Array of seat IDs to refund
      * @param string $reason Reason for refund
      * @param bool $notify_customer Whether to send customer notification
+     * @param bool $keep_seats_held Whether to keep seats reserved (guest list/comp)
      * @return array Result with success status and details
      */
-    public function process_selective_refund($order_id, $seat_ids, $reason = '', $notify_customer = true) {
+    public function process_selective_refund($order_id, $seat_ids, $reason = '', $notify_customer = true, $keep_seats_held = false) {
         // Validation
         if (empty($order_id) || empty($seat_ids) || !is_array($seat_ids)) {
             return array(
@@ -114,7 +115,7 @@ class HOPE_Selective_Refund_Handler {
         }
         
         // Update individual seat records
-        $seat_update_result = $this->update_seat_refund_records($order_id, $seat_ids, $wc_refund_result['refund_id'], $refund_calculation, $reason);
+        $seat_update_result = $this->update_seat_refund_records($order_id, $seat_ids, $wc_refund_result['refund_id'], $refund_calculation, $reason, $keep_seats_held);
         if (!$seat_update_result['success']) {
             // TODO: Consider rolling back WooCommerce refund if seat updates fail
             error_log("HOPE: Seat record updates failed after WC refund created. Manual intervention may be needed.");
@@ -134,9 +135,12 @@ class HOPE_Selective_Refund_Handler {
         do_action('hope_selective_refund_processed', $order_id, $seat_ids, $refund_calculation['amount']);
         
         // Enhanced message with refund type information
-        $refund_type_info = isset($wc_refund_result['refund_type']) ? 
+        $refund_type_info = isset($wc_refund_result['refund_type']) ?
             " ({$wc_refund_result['refund_type']} refund)" : '';
-        
+
+        // Add guest list info to message
+        $guest_list_info = $keep_seats_held ? ' - Seats kept held (Guest List)' : '';
+
         $result = array(
             'success' => true,
             'refund_id' => $wc_refund_result['refund_id'],
@@ -145,12 +149,14 @@ class HOPE_Selective_Refund_Handler {
             'refund_amount' => $refund_calculation['amount'],
             'remaining_seats' => $this->get_remaining_seats($order_id),
             'refund_type' => $wc_refund_result['refund_type'] ?? 'unknown',
+            'keep_seats_held' => $keep_seats_held,
             'message' => sprintf(
-                'Successfully refunded %d seats (%s) for $%.2f%s',
+                'Successfully refunded %d seats (%s) for $%.2f%s%s',
                 count($seat_ids),
                 implode(', ', $seat_ids),
                 $refund_calculation['amount'],
-                $refund_type_info
+                $refund_type_info,
+                $guest_list_info
             )
         );
         
@@ -257,20 +263,24 @@ class HOPE_Selective_Refund_Handler {
      * @param int $refund_id WooCommerce refund ID
      * @param array $refund_calculation Refund calculation details
      * @param string $reason Refund reason
+     * @param bool $keep_seats_held Whether to keep seats held (guest list/comp)
      * @return array Update result
      */
-    private function update_seat_refund_records($order_id, $seat_ids, $refund_id, $refund_calculation, $reason) {
+    private function update_seat_refund_records($order_id, $seat_ids, $refund_id, $refund_calculation, $reason, $keep_seats_held = false) {
         global $wpdb;
-        
+
         $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
         $per_seat_amount = $refund_calculation['per_seat_amount'];
         $updated_count = 0;
-        
+
+        // Determine the status based on whether seats should be kept held
+        $new_status = $keep_seats_held ? 'guest_list' : 'partially_refunded';
+
         foreach ($seat_ids as $seat_id) {
             $result = $wpdb->update(
                 $bookings_table,
                 array(
-                    'status' => 'partially_refunded',
+                    'status' => $new_status,
                     'refund_id' => $refund_id,
                     'refunded_amount' => $per_seat_amount,
                     'refund_reason' => $reason,

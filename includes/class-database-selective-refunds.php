@@ -216,21 +216,31 @@ class HOPE_Database_Selective_Refunds {
      */
     public static function get_refundable_seats($order_id) {
         global $wpdb;
-        
+
         $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
-        
-        // Get all confirmed seats that haven't been refunded yet
+
+        // First check what's in the table for this order
+        $all_bookings = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, seat_id, status, refund_id FROM {$bookings_table} WHERE order_id = %d",
+            $order_id
+        ), ARRAY_A);
+        error_log("HOPE DEBUG: All bookings for order {$order_id}: " . print_r($all_bookings, true));
+
+        // Get all active/confirmed seats that haven't been fully refunded
+        // Includes 'guest_list' status (seats that were refunded but kept held)
         $seats = $wpdb->get_results($wpdb->prepare(
             "SELECT id, seat_id, product_id, order_item_id, status, created_at,
                     refund_id, refunded_amount, refund_reason, refund_date
             FROM {$bookings_table}
-            WHERE order_id = %d 
-            AND status IN ('confirmed', 'partially_refunded')
+            WHERE order_id = %d
+            AND status IN ('active', 'confirmed', 'partially_refunded', 'guest_list')
             AND (refund_id IS NULL OR status != 'refunded')
             ORDER BY seat_id",
             $order_id
         ), ARRAY_A);
-        
+
+        error_log("HOPE DEBUG: Refundable seats for order {$order_id}: " . print_r($seats, true));
+
         return $seats ?: array();
     }
     

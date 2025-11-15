@@ -379,6 +379,12 @@ class HOPE_Admin_Selective_Refunds {
         echo '<label for="hope-refund-reason"><strong>Refund Reason:</strong></label><br>';
         echo '<textarea id="hope-refund-reason" rows="3" style="width: 100%; margin: 5px 0;" placeholder="Enter reason for refund (optional)"></textarea>';
         echo '<br>';
+        echo '<label style="display: block; margin: 10px 0; padding: 8px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">';
+        echo '<input type="checkbox" id="hope-keep-seats-held" style="margin-right: 8px;">';
+        echo '<strong>Keep seats held (Guest List / Comp)</strong><br>';
+        echo '<small style="color: #666;">Check this to refund the customer but keep the seats reserved (for comps, guest list, etc.). Seats will not become available to the public.</small>';
+        echo '</label>';
+        echo '<br>';
         echo '<button id="hope-process-refund-btn" class="hope-refund-btn" disabled>Process Selective Refund</button>';
         echo '<span id="hope-refund-status" style="margin-left: 15px;"></span>';
         echo '</div>';
@@ -674,6 +680,7 @@ class HOPE_Admin_Selective_Refunds {
                         order_id: orderId,
                         seat_ids: selectedSeats,
                         reason: $('#hope-refund-reason').val(),
+                        keep_seats_held: $('#hope-keep-seats-held').is(':checked'),
                         nonce: $('#hope_selective_refund_nonce').val()
                     },
                     success: function(response) {
@@ -937,18 +944,19 @@ class HOPE_Admin_Selective_Refunds {
         $order_id = intval($_POST['order_id']);
         $seat_ids = array_map('sanitize_text_field', $_POST['seat_ids']);
         $reason = sanitize_textarea_field($_POST['reason']);
-        
+        $keep_seats_held = isset($_POST['keep_seats_held']) && $_POST['keep_seats_held'] === 'true';
+
         if (!$order_id || empty($seat_ids)) {
             wp_send_json_error(array('error' => 'Invalid parameters'));
         }
-        
+
         // Process selective refund
         if (!class_exists('HOPE_Selective_Refund_Handler')) {
             wp_send_json_error(array('error' => 'Selective refund functionality not available'));
         }
-        
+
         $handler = new HOPE_Selective_Refund_Handler();
-        $result = $handler->process_selective_refund($order_id, $seat_ids, $reason, true);
+        $result = $handler->process_selective_refund($order_id, $seat_ids, $reason, true, $keep_seats_held);
         
         if ($result['success']) {
             wp_send_json_success($result);

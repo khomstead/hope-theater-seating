@@ -470,11 +470,15 @@ public function seat_button_shortcode($atts) {
             }
             
             // Check new WooCommerce bookings table
+            // Include 'guest_list' status (refunded but kept held for comps/guest list)
             $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
             $new_booked = $wpdb->get_results($wpdb->prepare(
-                "SELECT seat_id FROM $bookings_table 
-                WHERE product_id = %d AND status IN ('confirmed', 'pending')
-                AND refund_id IS NULL",
+                "SELECT seat_id FROM $bookings_table
+                WHERE product_id = %d
+                AND (
+                    (status IN ('confirmed', 'pending') AND refund_id IS NULL)
+                    OR status = 'guest_list'
+                )",
                 $event_id
             ));
             
