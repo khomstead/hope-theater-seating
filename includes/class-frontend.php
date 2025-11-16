@@ -387,11 +387,44 @@ public function seat_button_shortcode($atts) {
         }
 
         if (!$overflow_enabled) {
-            // Remove overflow seats from the list
-            $seats_with_pricing = array_filter($seats_with_pricing, function($seat) {
-                return !isset($seat->is_overflow) || $seat->is_overflow == 0;
+            // Get list of sold/held overflow seats for this event
+            global $wpdb;
+            $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+            $holds_table = $wpdb->prefix . 'hope_seating_holds';
+
+            // Get sold seats (from bookings)
+            $sold_overflow_seats = $wpdb->get_col($wpdb->prepare(
+                "SELECT DISTINCT seat_id
+                FROM {$bookings_table}
+                WHERE product_id = %d
+                AND status IN ('confirmed', 'held')",
+                $event_id
+            ));
+
+            // Get held seats (from holds)
+            $held_overflow_seats = $wpdb->get_col($wpdb->prepare(
+                "SELECT DISTINCT seat_id
+                FROM {$holds_table}
+                WHERE product_id = %d
+                AND expires_at > NOW()",
+                $event_id
+            ));
+
+            // Merge sold and held seats
+            $occupied_overflow_seats = array_merge($sold_overflow_seats, $held_overflow_seats);
+
+            // Remove overflow seats UNLESS they are already sold/held
+            $seats_with_pricing = array_filter($seats_with_pricing, function($seat) use ($occupied_overflow_seats) {
+                // Always show non-overflow seats
+                if (!isset($seat->is_overflow) || $seat->is_overflow == 0) {
+                    return true;
+                }
+                // Show overflow seats if they're already occupied
+                return in_array($seat->seat_id, $occupied_overflow_seats);
             });
-            error_log('HOPE: Overflow seating disabled for event ' . $event_id . ' - filtered ' . (count($seats_with_pricing)) . ' non-overflow seats');
+
+            $overflow_count = count($occupied_overflow_seats);
+            error_log('HOPE: Overflow seating disabled for event ' . $event_id . ' - showing ' . $overflow_count . ' occupied overflow seats, hiding empty ones');
         } else {
             error_log('HOPE: Overflow seating ENABLED for event ' . $event_id . ' - showing all ' . count($seats_with_pricing) . ' seats');
         }
