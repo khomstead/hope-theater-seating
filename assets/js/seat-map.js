@@ -502,6 +502,8 @@ class HOPESeatMap {
         leftLine.setAttribute('stroke-width', '2');
         leftLine.setAttribute('stroke-dasharray', '5,5');
         leftLine.setAttribute('opacity', '0.5');
+        leftLine.setAttribute('class', 'vomitorium-divider');
+        leftLine.setAttribute('data-tooltip', 'Not an aisle');
 
         // Right divider (between D and E at 50 degrees)
         const rightAngleRad = (50 * Math.PI) / 180;
@@ -514,6 +516,19 @@ class HOPESeatMap {
         rightLine.setAttribute('stroke-width', '2');
         rightLine.setAttribute('stroke-dasharray', '5,5');
         rightLine.setAttribute('opacity', '0.5');
+        rightLine.setAttribute('class', 'vomitorium-divider');
+        rightLine.setAttribute('data-tooltip', 'Not an aisle');
+
+        // Add hover event listeners for tooltips
+        [leftLine, rightLine].forEach(line => {
+            line.addEventListener('mouseenter', (e) => {
+                this.showTooltip(e, 'Not an aisle');
+            });
+            line.addEventListener('mouseleave', () => {
+                this.hideTooltip();
+            });
+            line.style.cursor = 'help';
+        });
 
         svg.appendChild(leftLine);
         svg.appendChild(rightLine);
