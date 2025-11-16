@@ -379,7 +379,23 @@ public function seat_button_shortcode($atts) {
         
         // Get seats with pricing from new architecture
         $seats_with_pricing = $pricing_manager->get_seats_with_pricing($pricing_map_id);
-        
+
+        // Filter out overflow seats unless enabled for this event
+        $overflow_enabled = false;
+        if ($event_id) {
+            $overflow_enabled = get_post_meta($event_id, '_hope_overflow_enabled', true) === 'yes';
+        }
+
+        if (!$overflow_enabled) {
+            // Remove overflow seats from the list
+            $seats_with_pricing = array_filter($seats_with_pricing, function($seat) {
+                return !isset($seat->is_overflow) || $seat->is_overflow == 0;
+            });
+            error_log('HOPE: Overflow seating disabled for event ' . $event_id . ' - filtered ' . (count($seats_with_pricing)) . ' non-overflow seats');
+        } else {
+            error_log('HOPE: Overflow seating ENABLED for event ' . $event_id . ' - showing all ' . count($seats_with_pricing) . ' seats');
+        }
+
         if (empty($seats_with_pricing)) {
             wp_send_json_error('No seats found for this pricing map');
             return;

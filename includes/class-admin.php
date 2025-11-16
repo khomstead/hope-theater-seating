@@ -1337,11 +1337,19 @@ class HOPE_Seating_Admin {
                     <?php endif; ?>
                     
                     <?php
-                    // Future event-specific settings can go here if needed
+                    // Overflow seating toggle
+                    $overflow_enabled = get_post_meta($post->ID, '_hope_overflow_enabled', true);
+                    woocommerce_wp_checkbox(array(
+                        'id' => '_hope_overflow_enabled',
+                        'label' => __('Enable Overflow Seating', 'hope-seating'),
+                        'description' => __('Show removable seats in row 9 (19 additional seats: A9 1-6, B9 1-4, D9 1-5, E9 1-4)', 'hope-seating'),
+                        'value' => $overflow_enabled ? $overflow_enabled : 'no',
+                        'desc_tip' => true
+                    ));
                     ?>
                 </div>
             </div>
-            
+
             <div class="options_group">
                 <p class="form-field" style="padding-left: 10px;">
                     <em>💡 Tip: Make sure to set the product as "Virtual" if this is an event ticket.</em>
@@ -1456,11 +1464,15 @@ class HOPE_Seating_Admin {
         // Save enable seating checkbox
         $enable_seating = isset($_POST['_hope_seating_enabled']) ? 'yes' : 'no';
         update_post_meta($post_id, '_hope_seating_enabled', $enable_seating);
-        
+
         // Save venue selection
         if (isset($_POST['_hope_seating_venue_id'])) {
             update_post_meta($post_id, '_hope_seating_venue_id', sanitize_text_field($_POST['_hope_seating_venue_id']));
         }
+
+        // Save overflow seating toggle
+        $overflow_enabled = isset($_POST['_hope_overflow_enabled']) ? 'yes' : 'no';
+        update_post_meta($post_id, '_hope_overflow_enabled', $overflow_enabled);
     }
     
     // Add venue column to products list

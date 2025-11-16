@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.7.9
+ * Version: 2.8.0
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.7.9');
+define('HOPE_SEATING_VERSION', '2.8.0');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -132,6 +132,30 @@ class HOPE_Theater_Seating {
 
         // Capture URL coupon parameter early (before Advanced Coupons redirects)
         add_action('init', array($this, 'capture_url_coupon'), 1);
+
+        // Run one-time database migrations on admin pages only
+        add_action('admin_init', array($this, 'run_database_migrations'));
+    }
+
+    /**
+     * Run one-time database migrations without requiring plugin reactivation
+     */
+    public function run_database_migrations() {
+        // Check if overflow migration has already run
+        $overflow_migration_done = get_option('hope_seating_overflow_migration_done', false);
+
+        if (!$overflow_migration_done) {
+            // Include database class if not already loaded
+            if (!class_exists('HOPE_Seating_Database')) {
+                require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-database.php';
+            }
+
+            // Run the migration
+            HOPE_Seating_Database::migrate_add_overflow_column();
+
+            // Mark as completed
+            update_option('hope_seating_overflow_migration_done', true);
+        }
     }
 
     /**

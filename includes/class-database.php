@@ -82,6 +82,7 @@ class HOPE_Seating_Database {
             seat_type varchar(20) NOT NULL DEFAULT 'standard',
             is_accessible boolean NOT NULL DEFAULT false,
             is_blocked boolean NOT NULL DEFAULT false,
+            is_overflow boolean NOT NULL DEFAULT false,
             notes text,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -273,19 +274,60 @@ class HOPE_Seating_Database {
      */
     public static function update_database_schema() {
         global $wpdb;
-        
+
         // Drop existing holds and bookings tables to recreate with new schema
         $holds_table = $wpdb->prefix . 'hope_seating_holds';
         $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
-        
+
         $wpdb->query("DROP TABLE IF EXISTS $holds_table");
         $wpdb->query("DROP TABLE IF EXISTS $bookings_table");
-        
+
         // Recreate tables with new schema
         self::create_tables();
-        
+
         error_log('HOPE Seating: Database schema updated - recreated holds and bookings tables');
-        
+
+        return true;
+    }
+
+    /**
+     * Migrate database to add overflow column to physical_seats table
+     * Safe to run multiple times - checks if column exists first
+     */
+    public static function migrate_add_overflow_column() {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'hope_seating_physical_seats';
+
+        // Check if overflow column already exists
+        $column_exists = $wpdb->get_results("SHOW COLUMNS FROM `{$table}` LIKE 'is_overflow'");
+
+        if (empty($column_exists)) {
+            // Add the overflow column after is_blocked
+            $wpdb->query("ALTER TABLE `{$table}` ADD COLUMN `is_overflow` boolean NOT NULL DEFAULT false AFTER `is_blocked`");
+            error_log('HOPE Seating: Added is_overflow column to physical_seats table');
+
+            // Mark the 19 removable seats as overflow
+            // Using seat naming pattern (section + row + seat) to work across different databases
+            $overflow_seats = array(
+                'A9-1', 'A9-2', 'A9-3', 'A9-4', 'A9-5', 'A9-6',
+                'B9-1', 'B9-2', 'B9-3', 'B9-4',
+                'D9-1', 'D9-2', 'D9-3', 'D9-4', 'D9-5',
+                'E9-1', 'E9-2', 'E9-3', 'E9-4'
+            );
+
+            $placeholders = implode(',', array_fill(0, count($overflow_seats), '%s'));
+            $wpdb->query($wpdb->prepare(
+                "UPDATE `{$table}` SET `is_overflow` = 1 WHERE `seat_id` IN ($placeholders)",
+                $overflow_seats
+            ));
+
+            $updated = $wpdb->rows_affected;
+            error_log("HOPE Seating: Marked {$updated} seats as overflow (removable seating)");
+        } else {
+            error_log('HOPE Seating: is_overflow column already exists, skipping migration');
+        }
+
         return true;
     }
 }
