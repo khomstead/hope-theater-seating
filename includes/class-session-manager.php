@@ -44,14 +44,14 @@ class HOPE_Session_Manager {
     /**
      * Create a seat hold
      */
-    public function create_hold($event_id, $seat_ids, $session_id, $user_email = null) {
+    public function create_hold($product_id, $seat_ids, $session_id, $user_email = null) {
         global $wpdb;
-        
+
         // First, release any existing holds for this session
         $this->release_session_holds($session_id);
-        
+
         // Check if any seats are already held by others
-        $conflicts = $this->check_hold_conflicts($event_id, $seat_ids, $session_id);
+        $conflicts = $this->check_hold_conflicts($product_id, $seat_ids, $session_id);
         if (!empty($conflicts)) {
             return array(
                 'success' => false,
@@ -59,19 +59,19 @@ class HOPE_Session_Manager {
                 'conflicts' => $conflicts
             );
         }
-        
+
         // Create new holds
         // Use gmdate() to match MySQL UTC_TIMESTAMP()
         $expires_at = gmdate('Y-m-d H:i:s', time() + $this->hold_duration);
         $held_seats = array();
-        
+
         foreach ($seat_ids as $seat_id) {
             $result = $wpdb->insert(
                 $this->holds_table,
                 array(
                     'session_id' => $session_id,
                     'seat_id' => $seat_id,
-                    'event_id' => $event_id,
+                    'product_id' => $product_id,
                     'user_email' => $user_email,
                     'expires_at' => $expires_at,
                     'created_at' => gmdate('Y-m-d H:i:s')
@@ -95,44 +95,44 @@ class HOPE_Session_Manager {
     /**
      * Check for hold conflicts
      */
-    private function check_hold_conflicts($event_id, $seat_ids, $session_id) {
+    private function check_hold_conflicts($product_id, $seat_ids, $session_id) {
         global $wpdb;
-        
+
         if (empty($seat_ids)) {
             return array();
         }
-        
+
         // NEW: Check for blocked seats first
-        $conflicts = $this->check_blocked_seats($event_id, $seat_ids);
+        $conflicts = $this->check_blocked_seats($product_id, $seat_ids);
         if (!empty($conflicts)) {
             return $conflicts; // Return blocked seats as conflicts
         }
-        
+
         $placeholders = array_fill(0, count($seat_ids), '%s');
         $placeholders_str = implode(',', $placeholders);
-        
+
         $query = $wpdb->prepare(
             "SELECT seat_id FROM {$this->holds_table}
-            WHERE event_id = %d 
+            WHERE product_id = %d
             AND seat_id IN ($placeholders_str)
             AND session_id != %s
             AND expires_at > NOW()",
-            array_merge(array($event_id), $seat_ids, array($session_id))
+            array_merge(array($product_id), $seat_ids, array($session_id))
         );
-        
+
         $conflicts = $wpdb->get_col($query);
-        
+
         // Also check for booked seats
         $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
         $booked_query = $wpdb->prepare(
             "SELECT seat_id FROM {$bookings_table}
-            WHERE event_id = %d 
+            WHERE product_id = %d
             AND seat_id IN ($placeholders_str)",
-            array_merge(array($event_id), $seat_ids)
+            array_merge(array($product_id), $seat_ids)
         );
-        
+
         $booked = $wpdb->get_col($booked_query);
-        
+
         return array_merge($conflicts, $booked);
     }
     
@@ -152,32 +152,32 @@ class HOPE_Session_Manager {
     /**
      * Release specific seat holds
      */
-    public function release_seat_holds($event_id, $seat_ids, $session_id) {
+    public function release_seat_holds($product_id, $seat_ids, $session_id) {
         global $wpdb;
-        
+
         if (empty($seat_ids)) {
             return false;
         }
-        
+
         $placeholders = array_fill(0, count($seat_ids), '%s');
         $placeholders_str = implode(',', $placeholders);
-        
+
         $query = $wpdb->prepare(
             "DELETE FROM {$this->holds_table}
-            WHERE event_id = %d 
+            WHERE product_id = %d
             AND seat_id IN ($placeholders_str)
             AND session_id = %s",
-            array_merge(array($event_id), $seat_ids, array($session_id))
+            array_merge(array($product_id), $seat_ids, array($session_id))
         );
-        
+
         return $wpdb->query($query);
     }
-    
+
     /**
      * Release hold for a single seat
      */
-    public function release_seat_hold($event_id, $seat_id, $session_id) {
-        return $this->release_seat_holds($event_id, array($seat_id), $session_id);
+    public function release_seat_hold($product_id, $seat_id, $session_id) {
+        return $this->release_seat_holds($product_id, array($seat_id), $session_id);
     }
     
     /**
@@ -217,18 +217,23 @@ class HOPE_Session_Manager {
     }
     
     /**
-     * Get all active holds for an event
+     * Get all active holds for a product/event
      */
-    public function get_event_holds($event_id) {
+    public function get_product_holds($product_id) {
         global $wpdb;
-        
+
         return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$this->holds_table}
-            WHERE event_id = %d 
+            WHERE product_id = %d
             AND expires_at > NOW()
             ORDER BY seat_id",
-            $event_id
+            $product_id
         ));
+    }
+
+    // Backwards compatibility alias
+    public function get_event_holds($event_id) {
+        return $this->get_product_holds($event_id);
     }
     
     /**
@@ -254,22 +259,22 @@ class HOPE_Session_Manager {
             // Check if seat is still available
             $existing = $wpdb->get_var($wpdb->prepare(
                 "SELECT id FROM {$bookings_table}
-                WHERE event_id = %d AND seat_id = %s",
-                $hold->event_id,
+                WHERE product_id = %d AND seat_id = %s",
+                $hold->product_id,
                 $hold->seat_id
             ));
-            
+
             if ($existing) {
                 continue; // Skip if already booked
             }
-            
+
             // Create booking
             $result = $wpdb->insert(
                 $bookings_table,
                 array(
                     'order_id' => $order_id,
                     'seat_id' => $hold->seat_id,
-                    'event_id' => $hold->event_id,
+                    'product_id' => $hold->product_id,
                     'customer_email' => $customer_email,
                     'booking_date' => current_time('mysql'),
                     'status' => 'confirmed'
@@ -437,25 +442,25 @@ class HOPE_Session_Manager {
     /**
      * Get hold statistics
      */
-    public function get_hold_stats($event_id = null) {
+    public function get_hold_stats($product_id = null) {
         global $wpdb;
-        
-        $where = $event_id ? $wpdb->prepare(" WHERE event_id = %d", $event_id) : "";
-        
+
+        $where = $product_id ? $wpdb->prepare(" WHERE product_id = %d", $product_id) : "";
+
         $stats = array(
             'total_holds' => $wpdb->get_var(
                 "SELECT COUNT(*) FROM {$this->holds_table}{$where}"
             ),
             'active_holds' => $wpdb->get_var(
-                "SELECT COUNT(*) FROM {$this->holds_table}{$where} 
+                "SELECT COUNT(*) FROM {$this->holds_table}{$where}
                 " . ($where ? " AND" : " WHERE") . " expires_at > NOW()"
             ),
             'expired_holds' => $wpdb->get_var(
-                "SELECT COUNT(*) FROM {$this->holds_table}{$where} 
+                "SELECT COUNT(*) FROM {$this->holds_table}{$where}
                 " . ($where ? " AND" : " WHERE") . " expires_at <= NOW()"
             )
         );
-        
+
         return $stats;
     }
     
@@ -507,30 +512,30 @@ class HOPE_Session_Manager {
     /**
      * Check for blocked seats that conflict with requested seats
      * NEW: Integration with seat blocking system
-     * @param int $event_id Event/Product ID
+     * @param int $product_id Event/Product ID
      * @param array $seat_ids Seat IDs to check
      * @return array Array of blocked seat IDs that conflict
      */
-    private function check_blocked_seats($event_id, $seat_ids) {
-        if (!class_exists('HOPE_Database_Selective_Refunds') || 
+    private function check_blocked_seats($product_id, $seat_ids) {
+        if (!class_exists('HOPE_Database_Selective_Refunds') ||
             !HOPE_Database_Selective_Refunds::is_seat_blocking_ready()) {
             return array(); // Seat blocking not available, no conflicts
         }
-        
-        // Get all blocked seat IDs for this event
-        $blocked_seats = HOPE_Database_Selective_Refunds::get_blocked_seat_ids($event_id);
-        
+
+        // Get all blocked seat IDs for this product
+        $blocked_seats = HOPE_Database_Selective_Refunds::get_blocked_seat_ids($product_id);
+
         if (empty($blocked_seats)) {
             return array(); // No blocked seats, no conflicts
         }
-        
+
         // Find intersection of requested seats and blocked seats
         $conflicts = array_intersect($seat_ids, $blocked_seats);
-        
+
         if (!empty($conflicts)) {
-            error_log("HOPE SEAT BLOCKING: Blocked seat conflicts detected for event {$event_id} - " . implode(', ', $conflicts));
+            error_log("HOPE SEAT BLOCKING: Blocked seat conflicts detected for product {$product_id} - " . implode(', ', $conflicts));
         }
-        
+
         return array_values($conflicts);
     }
 }
