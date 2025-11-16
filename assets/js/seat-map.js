@@ -280,7 +280,7 @@ class HOPESeatMap {
             orchestra: {
                 A: {
                     startAngle: -75,
-                    endAngle: -54,
+                    endAngle: -50,  // Reduced gap with B (was -54)
                     reverseNumbering: false,
                     rows: [
                         { radius: 180, seats: 5, tier: 'p1' },
@@ -296,7 +296,7 @@ class HOPESeatMap {
                     ]
                 },
                 B: {
-                    startAngle: -54,
+                    startAngle: -50,  // Reduced gap with A (was -54)
                     endAngle: -30,
                     reverseNumbering: true,
                     rows: [
@@ -330,7 +330,7 @@ class HOPESeatMap {
                 },
                 D: {
                     startAngle: 30,
-                    endAngle: 54,
+                    endAngle: 50,  // Reduced gap with E (was 54)
                     reverseNumbering: false,
                     rows: [
                         { radius: 180, seats: 2, tier: 'p1' },
@@ -346,7 +346,7 @@ class HOPESeatMap {
                     ]
                 },
                 E: {
-                    startAngle: 54,
+                    startAngle: 50,  // Reduced gap with D (was 54)
                     endAngle: 75,
                     reverseNumbering: false,
                     rows: [
@@ -466,6 +466,11 @@ class HOPESeatMap {
                 this.createSection(svg, sectionName, sectionData);
             });
         }
+
+        // Add vomitorium dividers for orchestra level only
+        if (floor === 'orchestra') {
+            this.createVomitoriumDividers(svg);
+        }
     }
     
     createStage(svg) {
@@ -476,6 +481,42 @@ class HOPESeatMap {
         stageText.setAttribute('class', 'stage-text');
         stageText.textContent = 'STAGE';
         svg.appendChild(stageText);
+    }
+
+    /**
+     * Create vomitorium ramp dividers between sections A-B and D-E
+     * These lines indicate physical ramps (not aisles)
+     */
+    createVomitoriumDividers(svg) {
+        const centerX = 600;
+        const centerY = 600;
+
+        // Left divider (between A and B at -50 degrees)
+        const leftAngleRad = (-50 * Math.PI) / 180;
+        const leftLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        leftLine.setAttribute('x1', centerX + Math.cos(leftAngleRad) * 160);  // Inner point
+        leftLine.setAttribute('y1', centerY + Math.sin(leftAngleRad) * 160);
+        leftLine.setAttribute('x2', centerX + Math.cos(leftAngleRad) * 520);  // Outer point
+        leftLine.setAttribute('y2', centerY + Math.sin(leftAngleRad) * 520);
+        leftLine.setAttribute('stroke', '#999');
+        leftLine.setAttribute('stroke-width', '2');
+        leftLine.setAttribute('stroke-dasharray', '5,5');
+        leftLine.setAttribute('opacity', '0.5');
+
+        // Right divider (between D and E at 50 degrees)
+        const rightAngleRad = (50 * Math.PI) / 180;
+        const rightLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        rightLine.setAttribute('x1', centerX + Math.cos(rightAngleRad) * 160);  // Inner point
+        rightLine.setAttribute('y1', centerY + Math.sin(rightAngleRad) * 160);
+        rightLine.setAttribute('x2', centerX + Math.cos(rightAngleRad) * 520);  // Outer point
+        rightLine.setAttribute('y2', centerY + Math.sin(rightAngleRad) * 520);
+        rightLine.setAttribute('stroke', '#999');
+        rightLine.setAttribute('stroke-width', '2');
+        rightLine.setAttribute('stroke-dasharray', '5,5');
+        rightLine.setAttribute('opacity', '0.5');
+
+        svg.appendChild(leftLine);
+        svg.appendChild(rightLine);
     }
     
     /**
