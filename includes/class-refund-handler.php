@@ -262,6 +262,17 @@ class HOPE_Refund_Handler {
         // Log the action and send notifications
         $this->log_seat_release($order_id, $bookings, $reason);
 
+        // Add comprehensive order note for full refund
+        $seat_list = implode(', ', array_map(function($b) { return $b->seat_id; }, $bookings));
+        $order->add_order_note(
+            sprintf(
+                __('Full Order Refund - Seat Release: %d seat(s) released and available for purchase - %s | Reason: %s', 'hope-theater-seating'),
+                count($bookings),
+                $seat_list,
+                ucfirst($reason)
+            )
+        );
+
         // CRITICAL: Trash FooEvents tickets for refunded orders
         // Published tickets can still check in, even after refund
         $this->trash_fooevents_tickets($order_id, $reason);

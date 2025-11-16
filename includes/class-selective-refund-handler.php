@@ -133,7 +133,39 @@ class HOPE_Selective_Refund_Handler {
         
         // Trigger action for extensibility
         do_action('hope_selective_refund_processed', $order_id, $seat_ids, $refund_calculation['amount']);
-        
+
+        // Add comprehensive order note for audit trail
+        $refund_type_label = ($wc_refund_result['refund_type'] ?? 'unknown') === 'automatic' ? 'Automatic' : 'Manual';
+        $seat_list = implode(', ', $seat_ids);
+        $admin_name = wp_get_current_user()->display_name;
+
+        if ($keep_seats_held) {
+            $order->add_order_note(
+                sprintf(
+                    __('Selective Refund (Guest List): %d seat(s) refunded but kept held - %s | Amount: $%.2f (%s refund) | Reason: %s | Processed by: %s', 'hope-theater-seating'),
+                    count($seat_ids),
+                    $seat_list,
+                    $refund_calculation['amount'],
+                    $refund_type_label,
+                    $reason ?: 'None provided',
+                    $admin_name
+                )
+            );
+        } else {
+            $order->add_order_note(
+                sprintf(
+                    __('Selective Refund: %d seat(s) refunded and released - %s | Amount: $%.2f (%s refund) | Remaining seats: %d | Reason: %s | Processed by: %s', 'hope-theater-seating'),
+                    count($seat_ids),
+                    $seat_list,
+                    $refund_calculation['amount'],
+                    $refund_type_label,
+                    count($this->get_remaining_seats($order_id)),
+                    $reason ?: 'None provided',
+                    $admin_name
+                )
+            );
+        }
+
         // Enhanced message with refund type information
         $refund_type_info = isset($wc_refund_result['refund_type']) ?
             " ({$wc_refund_result['refund_type']} refund)" : '';

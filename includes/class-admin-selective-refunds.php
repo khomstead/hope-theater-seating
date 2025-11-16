@@ -1285,6 +1285,20 @@ class HOPE_Admin_Selective_Refunds {
                         error_log('HOPE: - Seat number: ' . $new_seat_number);
                         error_log('HOPE: - Row name: ' . $new_row_name);
 
+                        // Add detailed order note about ticket update
+                        $order = wc_get_order($order_id);
+                        if ($order) {
+                            $order->add_order_note(
+                                sprintf(
+                                    __('FooEvents ticket #%d updated: Seat %s → Row "%s", Seat #%s (Ticket metadata synchronized)', 'hope-theater-seating'),
+                                    $ticket->ID,
+                                    $new_seat_id,
+                                    $new_row_name,
+                                    $new_seat_number
+                                )
+                            );
+                        }
+
                         break; // Found and updated the right ticket
                     } else {
                         error_log('HOPE: Could not parse new seat ID: ' . $new_seat_id);

@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.7.0
+ * Version: 2.7.1
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
