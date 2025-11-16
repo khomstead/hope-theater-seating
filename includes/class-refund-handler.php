@@ -80,6 +80,13 @@ class HOPE_Refund_Handler {
         $order_total = floatval($order->get_total());
         $refunded_total = floatval($order->get_total_refunded());
 
+        // CRITICAL: For $0 orders, never release seats on refund
+        // $0 orders are typically comps/guest list and should be managed manually
+        if ($order_total == 0) {
+            error_log("HOPE REFUND: $0 order detected - NOT releasing seats (comps/guest list)");
+            return;
+        }
+
         // Only process seat releases if 100% of order is refunded
         if ($refunded_total >= $order_total) {
             error_log("HOPE REFUND: Full refund detected in partial handler ({$refunded_total} >= {$order_total})");
@@ -122,6 +129,13 @@ class HOPE_Refund_Handler {
         $order_total = floatval($order->get_total());
         $refunded_total = floatval($order->get_total_refunded());
 
+        // CRITICAL: For $0 orders, never release seats on refund
+        // $0 orders are typically comps/guest list and should be managed manually
+        if ($order_total == 0) {
+            error_log("HOPE REFUND: $0 order detected - NOT releasing seats (comps/guest list)");
+            return;
+        }
+
         // Only release seats if 100% of order is refunded
         if ($refunded_total >= $order_total) {
             error_log("HOPE REFUND: Full refund detected ({$refunded_total} >= {$order_total}), releasing seats");
@@ -152,6 +166,13 @@ class HOPE_Refund_Handler {
             // Check if this is a full refund by comparing refund total to order total
             $order_total = floatval($order->get_total());
             $refunded_total = floatval($order->get_total_refunded());
+
+            // CRITICAL: For $0 orders, never release seats on refund
+            // $0 orders are typically comps/guest list and should be managed manually
+            if ($order_total == 0) {
+                error_log("HOPE REFUND: $0 order detected - NOT releasing seats (comps/guest list)");
+                return;
+            }
 
             // Only release seats if 100% of order is refunded
             if ($refunded_total >= $order_total) {
@@ -436,39 +457,42 @@ class HOPE_Refund_Handler {
      * @param string $reason Refund reason (refunded, cancelled, failed)
      */
     private function trash_fooevents_tickets($order_id, $reason = 'refunded') {
-        // Find all FooEvents tickets for this order
-        $tickets = get_posts(array(
-            'post_type' => 'event_magic_tickets',
-            'post_status' => 'publish', // Only trash published tickets
-            'meta_query' => array(
-                array(
-                    'key' => 'WooCommerceEventsOrderID',
-                    'value' => $order_id
-                )
-            ),
-            'posts_per_page' => -1
-        ));
+        global $wpdb;
 
-        if (empty($tickets)) {
+        // CRITICAL FIX: Use direct SQL query instead of get_posts() with meta_query
+        // get_posts() meta_query was not filtering properly and returned ALL tickets
+        $ticket_ids = $wpdb->get_col($wpdb->prepare("
+            SELECT p.ID
+            FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+            WHERE p.post_type = 'event_magic_tickets'
+            AND p.post_status = 'publish'
+            AND pm.meta_key = 'WooCommerceEventsOrderID'
+            AND pm.meta_value = %d
+        ", $order_id));
+
+        if (empty($ticket_ids)) {
             error_log("HOPE REFUND: No published tickets found for order {$order_id}");
             return;
         }
 
+        error_log("HOPE REFUND: Found " . count($ticket_ids) . " tickets to trash for order {$order_id}: " . implode(', ', $ticket_ids));
+
         $trashed_count = 0;
-        foreach ($tickets as $ticket) {
+        foreach ($ticket_ids as $ticket_id) {
             // Move to trash (allows recovery if refund was mistake)
             // wp_trash_post() changes post_status to 'trash' but keeps the post
-            $result = wp_trash_post($ticket->ID);
+            $result = wp_trash_post($ticket_id);
 
             if ($result) {
                 $trashed_count++;
-                error_log("HOPE REFUND: Trashed ticket {$ticket->ID} for order {$order_id} (reason: {$reason})");
+                error_log("HOPE REFUND: Trashed ticket {$ticket_id} for order {$order_id} (reason: {$reason})");
             } else {
-                error_log("HOPE REFUND: Failed to trash ticket {$ticket->ID}");
+                error_log("HOPE REFUND: Failed to trash ticket {$ticket_id}");
             }
         }
 
-        error_log("HOPE REFUND: Trashed {$trashed_count} of " . count($tickets) . " tickets for order {$order_id}");
+        error_log("HOPE REFUND: Trashed {$trashed_count} of " . count($ticket_ids) . " tickets for order {$order_id}");
 
         // Add note to order about ticket cleanup
         $order = wc_get_order($order_id);
