@@ -130,7 +130,12 @@ class HOPE_Selective_Refund_Handler {
             $reason,
             get_current_user_id()
         );
-        
+
+        // CRITICAL: Trash FooEvents tickets for refunded seats (unless keeping held for guest list)
+        if (!$keep_seats_held) {
+            $this->trash_tickets_for_seats($order_id, $seat_ids, 'selective refund');
+        }
+
         // Trigger action for extensibility
         do_action('hope_selective_refund_processed', $order_id, $seat_ids, $refund_calculation['amount']);
 
@@ -433,11 +438,90 @@ class HOPE_Selective_Refund_Handler {
     }
     
     /**
+     * Trash FooEvents tickets for specific refunded seats
+     * @param int $order_id Order ID
+     * @param array $seat_ids Array of seat IDs being refunded
+     * @param string $reason Refund reason
+     */
+    private function trash_tickets_for_seats($order_id, $seat_ids, $reason = 'selective refund') {
+        global $wpdb;
+
+        // Find all FooEvents tickets for this order
+        $ticket_ids = $wpdb->get_col($wpdb->prepare("
+            SELECT p.ID
+            FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+            WHERE p.post_type = 'event_magic_tickets'
+            AND p.post_status = 'publish'
+            AND pm.meta_key = 'WooCommerceEventsOrderID'
+            AND pm.meta_value = %d
+        ", $order_id));
+
+        if (empty($ticket_ids)) {
+            error_log("HOPE SELECTIVE REFUND: No tickets found for order {$order_id}");
+            return;
+        }
+
+        error_log("HOPE SELECTIVE REFUND: Found " . count($ticket_ids) . " total tickets for order {$order_id}");
+
+        $trashed_count = 0;
+
+        // For each ticket, check if its seat is in the refunded seats list
+        foreach ($ticket_ids as $ticket_id) {
+            // Get the seat number from ticket metadata
+            $ticket_seat = get_post_meta($ticket_id, 'fooevents_seat_number_0', true);
+
+            if (empty($ticket_seat)) {
+                continue;
+            }
+
+            // Check if this ticket's seat matches any refunded seat
+            $should_trash = false;
+            foreach ($seat_ids as $seat_id) {
+                // Extract seat number from seat_id format like "C3-9"
+                if (preg_match('/-(\d+)$/', $seat_id, $matches)) {
+                    $seat_number = $matches[1];
+                    if ($ticket_seat == $seat_number) {
+                        $should_trash = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($should_trash) {
+                $result = wp_trash_post($ticket_id);
+                if ($result) {
+                    $trashed_count++;
+                    error_log("HOPE SELECTIVE REFUND: Trashed ticket {$ticket_id} for seat {$ticket_seat} (order {$order_id})");
+                } else {
+                    error_log("HOPE SELECTIVE REFUND: Failed to trash ticket {$ticket_id}");
+                }
+            }
+        }
+
+        error_log("HOPE SELECTIVE REFUND: Trashed {$trashed_count} tickets for {$reason}");
+
+        // Add order note about ticket cleanup
+        if ($trashed_count > 0) {
+            $order = wc_get_order($order_id);
+            if ($order) {
+                $order->add_order_note(
+                    sprintf(
+                        __('%d FooEvents ticket(s) moved to trash due to %s', 'hope-theater-seating'),
+                        $trashed_count,
+                        $reason
+                    )
+                );
+            }
+        }
+    }
+
+    /**
      * Check if selective refund functionality is available
      * @return bool Whether selective refunds can be processed
      */
     public static function is_available() {
-        return class_exists('HOPE_Database_Selective_Refunds') && 
+        return class_exists('HOPE_Database_Selective_Refunds') &&
                HOPE_Database_Selective_Refunds::is_selective_refund_ready();
     }
 }
