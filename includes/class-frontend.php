@@ -12,7 +12,6 @@ if (!defined('ABSPATH')) {
 class HOPE_Seating_Frontend {
     
     public function __construct() {
-        error_log("HOPE DEBUG: Frontend class constructor called");
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'), 5);
         add_shortcode('hope_seating_chart', array($this, 'seating_chart_shortcode'));
         add_shortcode('hope_seat_button', array($this, 'seat_button_shortcode'));

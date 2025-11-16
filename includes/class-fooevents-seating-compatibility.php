@@ -19,21 +19,7 @@ class Fooevents_Seating {
      * Constructor
      */
     public function __construct() {
-        error_log("HOPE: Fooevents_Seating compatibility class instantiated");
-        
-        // Hook into FooEvents processes to track when methods are called
-        add_action('init', array($this, 'log_initialization'), 99);
-    }
-    
-    /**
-     * Log when the compatibility layer is fully initialized
-     */
-    public function log_initialization() {
-        if (class_exists('FooEvents')) {
-            error_log("HOPE: Compatibility class initialized - FooEvents is active");
-        } else {
-            error_log("HOPE: Compatibility class initialized - FooEvents NOT found");
-        }
+        // Compatibility layer is ready
     }
     
     /**
@@ -87,4 +73,3 @@ class Fooevents_Seating {
 // Instantiate the compatibility class so FooEvents can find it
 global $fooevents_seating;
 $fooevents_seating = new Fooevents_Seating();
-error_log("HOPE: Global \$fooevents_seating instance created");

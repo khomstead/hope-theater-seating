@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.5.8
+ * Version: 2.5.9
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -291,7 +291,6 @@ class HOPE_Theater_Seating {
         // NEW: Initialize refund handler for WooCommerce integration
         if (class_exists('HOPE_Refund_Handler') && class_exists('WooCommerce')) {
             new HOPE_Refund_Handler();
-            error_log('HOPE: Refund handler initialized for WooCommerce integration');
         }
         
         // NEW: Initialize selective refund capabilities (Phase 1 - Non-disruptive)
@@ -312,7 +311,6 @@ class HOPE_Theater_Seating {
         // NEW: Initialize seat blocking admin interface
         if (is_admin() && class_exists('HOPE_Admin_Seat_Blocking') && class_exists('WooCommerce')) {
             new HOPE_Admin_Seat_Blocking();
-            error_log('HOPE: Seat blocking admin interface initialized');
         }
         
         // Add cleanup cron action

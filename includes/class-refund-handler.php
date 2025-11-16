@@ -28,8 +28,6 @@ class HOPE_Refund_Handler {
         
         // Backup hook for order status changes
         add_action('woocommerce_order_status_changed', array($this, 'handle_order_status_change'), 10, 4);
-        
-        error_log('HOPE: Refund handler initialized with WooCommerce hooks');
     }
     
     /**

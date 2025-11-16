@@ -28,10 +28,6 @@ class HOPE_Seat_Blocking_Handler {
             add_action('wp_ajax_hope_create_seat_block', array($this, 'ajax_create_seat_block'));
             add_action('wp_ajax_hope_remove_seat_block', array($this, 'ajax_remove_seat_block'));
             add_action('wp_ajax_hope_get_seat_blocks', array($this, 'ajax_get_seat_blocks'));
-            
-            error_log('HOPE: Seat blocking handler initialized');
-        } else {
-            error_log('HOPE: Seat blocking handler waiting for database setup');
         }
     }
     
