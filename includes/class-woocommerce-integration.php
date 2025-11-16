@@ -89,8 +89,6 @@ class HOPE_WooCommerce_Integration {
             // Hook into FooEvents ticket creation process more aggressively
             add_action('fooevents_create_ticket', array($this, 'debug_ticket_creation'), 5, 3);
             add_filter('fooevents_ticket_data', array($this, 'inject_seat_data_into_ticket'), 10, 2);
-            
-            error_log("HOPE: FooEvents Seating compatibility layer activated with enhanced hooks");
         }
     }
     
