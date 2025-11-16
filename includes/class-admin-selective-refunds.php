@@ -431,12 +431,30 @@ class HOPE_Admin_Selective_Refunds {
         $this->render_admin_seat_modal();
 
         // Get product ID for reassignment (to pass to JavaScript)
+        // CRITICAL: Find the product that has seating enabled, not just the first item
+        // Orders may contain multiple products (e.g., event ticket + parking)
         $product_id = 0;
         $items = $order->get_items();
         if (!empty($items)) {
-            $first_item = reset($items);
-            $product_id = $first_item->get_product_id();
-            error_log('HOPE: Order ' . $order_id . ' has product ID: ' . $product_id);
+            // Loop through items to find the one with seating enabled
+            foreach ($items as $item) {
+                $item_product_id = $item->get_product_id();
+                $seating_enabled = get_post_meta($item_product_id, '_hope_seating_enabled', true);
+                $venue_id = get_post_meta($item_product_id, '_hope_seating_venue_id', true);
+
+                if ($seating_enabled === 'yes' && $venue_id) {
+                    $product_id = $item_product_id;
+                    error_log('HOPE: Order ' . $order_id . ' - Found seating product ID: ' . $product_id);
+                    break;
+                }
+            }
+
+            // Fallback: if no seating-enabled product found, use first item (legacy behavior)
+            if (!$product_id) {
+                $first_item = reset($items);
+                $product_id = $first_item->get_product_id();
+                error_log('HOPE: Order ' . $order_id . ' - Using first item as fallback, product ID: ' . $product_id);
+            }
 
             // Check if this product has a pricing map configured
             $pricing_map = get_post_meta($product_id, '_fooevents_pricing_map', true);
