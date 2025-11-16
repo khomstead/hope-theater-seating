@@ -491,38 +491,38 @@ class HOPESeatMap {
         const centerX = 600;
         const centerY = 600;
 
-        // Left divider (between A and B at -50 degrees)
-        const leftAngleRad = (-50 * Math.PI) / 180;
+        // Use exact coordinates that work correctly
+        // Right line: x1=785, y1=640, x2=1030, y2=460
+        // Left line: mirror of right line
+
+        // Left divider (between A and B)
         const leftLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        leftLine.setAttribute('x1', centerX + Math.cos(leftAngleRad) * 160);  // Inner point
-        leftLine.setAttribute('y1', centerY + Math.sin(leftAngleRad) * 160);
-        leftLine.setAttribute('x2', centerX + Math.cos(leftAngleRad) * 520);  // Outer point
-        leftLine.setAttribute('y2', centerY + Math.sin(leftAngleRad) * 520);
-        leftLine.setAttribute('stroke', '#999');
-        leftLine.setAttribute('stroke-width', '2');
-        leftLine.setAttribute('stroke-dasharray', '5,5');
-        leftLine.setAttribute('opacity', '0.5');
+        leftLine.setAttribute('x1', '415');  // Mirrored from 785 (600 - 185 = 415)
+        leftLine.setAttribute('y1', '640');
+        leftLine.setAttribute('x2', '170');  // Mirrored from 1030 (600 - 430 = 170)
+        leftLine.setAttribute('y2', '460');
+        leftLine.setAttribute('stroke', '#666');
+        leftLine.setAttribute('stroke-width', '8');
+        leftLine.setAttribute('opacity', '0.6');
         leftLine.setAttribute('class', 'vomitorium-divider');
         leftLine.setAttribute('data-tooltip', 'Not an aisle');
 
-        // Right divider (between D and E at 50 degrees)
-        const rightAngleRad = (50 * Math.PI) / 180;
+        // Right divider (between D and E)
         const rightLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        rightLine.setAttribute('x1', centerX + Math.cos(rightAngleRad) * 160);  // Inner point
-        rightLine.setAttribute('y1', centerY + Math.sin(rightAngleRad) * 160);
-        rightLine.setAttribute('x2', centerX + Math.cos(rightAngleRad) * 520);  // Outer point
-        rightLine.setAttribute('y2', centerY + Math.sin(rightAngleRad) * 520);
-        rightLine.setAttribute('stroke', '#999');
-        rightLine.setAttribute('stroke-width', '2');
-        rightLine.setAttribute('stroke-dasharray', '5,5');
-        rightLine.setAttribute('opacity', '0.5');
+        rightLine.setAttribute('x1', '785');
+        rightLine.setAttribute('y1', '640');
+        rightLine.setAttribute('x2', '1030');
+        rightLine.setAttribute('y2', '460');
+        rightLine.setAttribute('stroke', '#666');
+        rightLine.setAttribute('stroke-width', '8');
+        rightLine.setAttribute('opacity', '0.6');
         rightLine.setAttribute('class', 'vomitorium-divider');
         rightLine.setAttribute('data-tooltip', 'Not an aisle');
 
         // Add hover event listeners for tooltips
         [leftLine, rightLine].forEach(line => {
             line.addEventListener('mouseenter', (e) => {
-                this.showTooltip(e, 'Not an aisle');
+                this.showDividerTooltip(e, 'Not an aisle');
             });
             line.addEventListener('mouseleave', () => {
                 this.hideTooltip();
@@ -894,7 +894,41 @@ class HOPESeatMap {
             tooltip.classList.remove('show');
         }
     }
-    
+
+    showDividerTooltip(event, text) {
+        const tooltip = document.getElementById('tooltip');
+        if (!tooltip) return;
+
+        tooltip.innerHTML = text;
+
+        // Move tooltip to body to avoid parent transforms
+        if (tooltip.parentElement !== document.body) {
+            document.body.appendChild(tooltip);
+        }
+
+        // Position tooltip near mouse cursor
+        const mouseX = event.clientX;
+        const mouseY = event.clientY;
+
+        // Force all styles with !important
+        tooltip.style.cssText = `
+            position: fixed !important;
+            left: ${mouseX}px !important;
+            top: ${mouseY - 40}px !important;
+            transform: translateX(-50%) !important;
+            z-index: 99999 !important;
+            background: rgba(0, 0, 0, 0.9) !important;
+            color: white !important;
+            padding: 8px 12px !important;
+            border-radius: 6px !important;
+            font-size: 14px !important;
+            pointer-events: none !important;
+            white-space: nowrap !important;
+        `;
+
+        tooltip.classList.add('show');
+    }
+
     updateSelectedDisplay() {
         const listEl = document.getElementById('selected-seats-list');
         const totalEl = document.querySelector('.total-price');

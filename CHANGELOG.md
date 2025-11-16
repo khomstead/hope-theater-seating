@@ -2,6 +2,54 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.5] - 2025-01-16
+
+### Fixed
+- **Vomitorium Divider Tooltips**: Fixed tooltip functionality for vomitorium divider lines
+  - Added `showDividerTooltip()` method for simple text tooltips
+  - Dividers now display "Not an aisle" tooltip on hover
+  - Original `showTooltip()` method was designed for seat elements with data attributes
+
+## [2.8.4] - 2025-01-16
+
+### Added
+- **Vomitorium Divider Visual Indicators**: Added visual divider lines to distinguish vomitorium ramps from aisles
+  - Solid gray lines (8px width, #666 color, 0.6 opacity) between sections A-B and D-E
+  - Lines positioned to clearly indicate physical separation
+  - Added tooltip support with "Not an aisle" message
+
+## [2.8.3] - 2025-01-16
+
+### Changed
+- **Seat Map Layout Refinement**: Reduced angular gaps between orchestra sections
+  - Sections A-B gap reduced from 4° to 0° (startAngle/endAngle: -54° → -50°)
+  - Sections D-E gap reduced from 4° to 0° (startAngle/endAngle: 54° → 50°)
+  - Improves visual clarity that vomitorium ramps are not aisles
+
+## [2.8.2] - 2025-01-16
+
+### Documentation
+- **Overflow Seating Design Decision**: Added comprehensive documentation explaining why `is_overflow` is stored at the physical seat level rather than pricing tier level
+  - Documents that overflow represents physical theater limitation (removable chairs)
+  - Explains this applies to all pricing maps since it reflects actual theater configuration
+
+## [2.8.1] - 2025-01-16
+
+### Fixed
+- **Overflow Seat Visibility**: Overflow seats that are sold or held now always display, even when "Hide Overflow" toggle is enabled
+  - Prevents confusion for customers who have purchased overflow seats
+  - Toggle now only affects available overflow seats
+
+## [2.8.0] - 2025-01-16
+
+### Added
+- **Overflow/Removable Seating Control**: New admin and customer controls for handling overflow seating
+  - Added "Hide Overflow" toggle on seat selection modal
+  - Admin setting to enable/disable overflow toggle visibility
+  - Database migration to add `is_overflow` column to physical_seats table
+  - 19 specific seats in row 9 marked as removable (sections A, B, D, E)
+  - Overflow seats visually distinguished with striped pattern
+
 ## [2.4.9] - 2025-01-08
 
 ### Added
