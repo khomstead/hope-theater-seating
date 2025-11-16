@@ -121,6 +121,7 @@ class HOPESeatMap {
 
         return fetch(ajaxConfig.ajax_url, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
@@ -201,6 +202,7 @@ class HOPESeatMap {
     loadVariationPricing() {
         return fetch(hope_ajax.ajax_url, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
@@ -988,6 +990,7 @@ class HOPESeatMap {
 
         fetch(ajaxConfig.ajax_url, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
@@ -1086,6 +1089,7 @@ class HOPESeatMap {
         
         fetch(hope_ajax.ajax_url, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
@@ -1114,6 +1118,7 @@ class HOPESeatMap {
     releaseAllSeats() {
         fetch(hope_ajax.ajax_url, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
@@ -1217,6 +1222,7 @@ class HOPESeatMap {
         // Check the specific status of a seat to provide better feedback
         fetch(hope_ajax.ajax_url, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
