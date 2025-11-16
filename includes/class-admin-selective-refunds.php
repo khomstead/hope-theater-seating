@@ -1199,6 +1199,10 @@ class HOPE_Admin_Selective_Refunds {
                 )
             );
             error_log('HOPE: Added order note to order ' . $order->get_id());
+
+            // Trigger WordPress action that FooEvents listens to for ticket regeneration
+            do_action('woocommerce_order_item_meta_updated', $order_item_id, $order);
+            error_log('HOPE: Triggered woocommerce_order_item_meta_updated action for ticket regeneration');
         } else {
             error_log('HOPE: WARNING - Could not get order from item_id ' . $order_item_id);
         }
