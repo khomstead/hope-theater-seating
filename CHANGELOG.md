@@ -2,6 +2,15 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.6] - 2025-01-16
+
+### Changed
+- **Vomitorium Divider Hover Effects**: Improved visual feedback when hovering over divider lines
+  - Lines now glow orange (#ff8c00) and brighten on hover, matching seat hover behavior
+  - Stroke width increases from 8px to 10px on hover
+  - Added drop shadow effect for visual prominence
+  - Changed cursor from 'help' to 'pointer' to match seat interaction pattern
+
 ## [2.8.5] - 2025-01-16
 
 ### Fixed

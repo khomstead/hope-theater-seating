@@ -519,15 +519,25 @@ class HOPESeatMap {
         rightLine.setAttribute('class', 'vomitorium-divider');
         rightLine.setAttribute('data-tooltip', 'Not an aisle');
 
-        // Add hover event listeners for tooltips
+        // Add hover event listeners for tooltips and visual effects
         [leftLine, rightLine].forEach(line => {
             line.addEventListener('mouseenter', (e) => {
                 this.showDividerTooltip(e, 'Not an aisle');
+                // Add hover effect - brighten and add glow
+                e.target.setAttribute('stroke', '#ff8c00');
+                e.target.setAttribute('stroke-width', '10');
+                e.target.setAttribute('opacity', '0.8');
+                e.target.style.filter = 'brightness(1.2) drop-shadow(0 0 4px rgba(255, 140, 0, 0.6))';
             });
-            line.addEventListener('mouseleave', () => {
+            line.addEventListener('mouseleave', (e) => {
                 this.hideTooltip();
+                // Remove hover effect - return to original state
+                e.target.setAttribute('stroke', '#666');
+                e.target.setAttribute('stroke-width', '8');
+                e.target.setAttribute('opacity', '0.6');
+                e.target.style.filter = '';
             });
-            line.style.cursor = 'help';
+            line.style.cursor = 'pointer';
         });
 
         svg.appendChild(leftLine);
