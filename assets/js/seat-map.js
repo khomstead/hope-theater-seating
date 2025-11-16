@@ -983,18 +983,21 @@ class HOPESeatMap {
     
     // AJAX Methods
     loadSeatAvailability() {
-        fetch(hope_ajax.ajax_url, {
+        // Use this.ajax if set, otherwise fall back to global hope_ajax
+        const ajaxConfig = this.ajax || hope_ajax;
+
+        fetch(ajaxConfig.ajax_url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
             body: new URLSearchParams({
                 action: 'hope_check_availability',
-                nonce: hope_ajax.nonce,
-                product_id: this.productId,
-                venue_id: hope_ajax.venue_id,
+                nonce: ajaxConfig.nonce,
+                product_id: this.productId || ajaxConfig.product_id,
+                venue_id: ajaxConfig.venue_id,
                 seats: JSON.stringify([]),
-                session_id: this.sessionId,
+                session_id: this.sessionId || ajaxConfig.session_id,
                 cache_buster: Date.now() // Prevent Safari caching
             })
         })
