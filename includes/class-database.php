@@ -68,6 +68,8 @@ class HOPE_Seating_Database {
         */
         
         // NEW: Physical seats table (fixed layout, no pricing)
+        // NOTE: is_overflow represents physical theater limitation (removable seats)
+        // This applies to all pricing maps since it reflects actual theater configuration
         $physical_seats_table = $wpdb->prefix . 'hope_seating_physical_seats';
         $physical_seats_sql = "CREATE TABLE IF NOT EXISTS $physical_seats_table (
             id int(11) NOT NULL AUTO_INCREMENT,
@@ -293,6 +295,11 @@ class HOPE_Seating_Database {
     /**
      * Migrate database to add overflow column to physical_seats table
      * Safe to run multiple times - checks if column exists first
+     *
+     * NOTE: is_overflow represents physical theater limitation (removable seats in row 9)
+     * This is stored at the physical_seats level because it reflects actual theater
+     * configuration, not pricing strategy. All future pricing maps will inherit this
+     * physical constraint unless the theater layout physically changes.
      */
     public static function migrate_add_overflow_column() {
         global $wpdb;
@@ -307,7 +314,8 @@ class HOPE_Seating_Database {
             $wpdb->query("ALTER TABLE `{$table}` ADD COLUMN `is_overflow` boolean NOT NULL DEFAULT false AFTER `is_blocked`");
             error_log('HOPE Seating: Added is_overflow column to physical_seats table');
 
-            // Mark the 19 removable seats as overflow
+            // Mark the 19 removable seats as overflow (specific to HOPE main theater)
+            // These are physically removable chairs in row 9
             // Using seat naming pattern (section + row + seat) to work across different databases
             $overflow_seats = array(
                 'A9-1', 'A9-2', 'A9-3', 'A9-4', 'A9-5', 'A9-6',
