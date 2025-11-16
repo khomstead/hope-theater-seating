@@ -26,7 +26,7 @@ class HOPE_Selective_Refund_Handler {
             // Add new selective refund capabilities
             add_action('init', array($this, 'init_selective_features'));
             
-            error_log('HOPE: Selective refund handler initialized (database ready)');
+            // Initialization successful - database ready
         } else {
             error_log('HOPE: Selective refund handler waiting for database setup');
         }

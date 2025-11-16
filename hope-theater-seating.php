@@ -7,7 +7,7 @@
  * Primary Branch: main
  * Release Asset: true
  * Description: Custom seating chart system for HOPE Theater venues with WooCommerce/FooEvents integration
- * Version: 2.5.4
+ * Version: 2.5.5
  * Author: HOPE Center Development Team
  * License: GPL v2 or later
  * Requires at least: 5.0
@@ -23,7 +23,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('HOPE_SEATING_VERSION', '2.5.4');
+define('HOPE_SEATING_VERSION', '2.5.5');
 define('HOPE_SEATING_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('HOPE_SEATING_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('HOPE_SEATING_PLUGIN_FILE', __FILE__);
@@ -297,21 +297,16 @@ class HOPE_Theater_Seating {
         // NEW: Initialize selective refund capabilities (Phase 1 - Non-disruptive)
         if (class_exists('HOPE_Selective_Refund_Handler') && class_exists('WooCommerce')) {
             new HOPE_Selective_Refund_Handler();
-            error_log('HOPE: Selective refund handler initialized (Phase 1)');
         }
-        
+
         // NEW: Initialize admin interface for selective refunds (Phase 2)
         if (is_admin() && class_exists('HOPE_Admin_Selective_Refunds') && class_exists('WooCommerce')) {
             new HOPE_Admin_Selective_Refunds();
-            error_log('HOPE: Admin selective refunds interface instantiated');
-        } else {
-            error_log('HOPE: Admin selective refunds NOT instantiated - is_admin: ' . (is_admin() ? 'yes' : 'no') . ', class exists: ' . (class_exists('HOPE_Admin_Selective_Refunds') ? 'yes' : 'no') . ', WC exists: ' . (class_exists('WooCommerce') ? 'yes' : 'no'));
         }
-        
+
         // NEW: Initialize seat blocking handler
         if (class_exists('HOPE_Seat_Blocking_Handler') && class_exists('WooCommerce')) {
             new HOPE_Seat_Blocking_Handler();
-            error_log('HOPE: Seat blocking handler initialized');
         }
         
         // NEW: Initialize seat blocking admin interface
