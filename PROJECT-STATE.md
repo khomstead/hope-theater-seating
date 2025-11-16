@@ -1,7 +1,7 @@
 # HOPE Theater Seating - Current Project State
 
-**Last Updated:** 2025-01-08
-**Current Version:** 2.4.9
+**Last Updated:** 2025-11-16
+**Current Version:** 2.7.1
 **Primary Developer:** Kyle Homstead
 **AI Assistant:** Read this file at the start of EVERY session
 
@@ -16,7 +16,7 @@
 - When working with products, `get_post_meta($product_id, '_hope_seating_venue_id', true)` returns the pricing map ID
 - Don't let the naming fool you - verify by reading the actual data structure
 
-### Data Architecture (3-Layer Separation)
+### Data Architecture (3-Layer Separation + FooEvents Integration)
 
 ```
 ┌─────────────────────┐
@@ -33,6 +33,18 @@
 │ Bookings/Orders     │ ← Actual customer purchases
 │ Table: bookings     │   Links seat_id to order_id and product_id
 └─────────────────────┘
+         ↓ creates
+┌─────────────────────────────────────────────────────────────┐
+│ FooEvents Tickets (CRITICAL - Added v2.7.0)                 │
+│ Table: wp_posts (post_type='event_magic_tickets')          │
+│ ⚠️ Has SEPARATE metadata from order items!                  │
+│ Used for: Customer emails, Check-in app, PDF tickets       │
+│                                                             │
+│ MUST be synchronized when:                                 │
+│ - Seats are reassigned (update ticket metadata)            │
+│ - Orders are refunded (trash ticket posts)                 │
+│ - Any seat changes (keep 3 sources in sync)                │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 **NEVER query `wp_hope_seating_physical_seats` directly for available seats.**
@@ -145,15 +157,20 @@ We modified this file to support admin contexts:
 
 ## Active Features
 
-### ✅ Complete (v2.4.9)
+### ✅ Complete (v2.7.1 - CRITICAL FIXES)
 
 **Seat Reassignment:**
 - Location: WooCommerce order edit screen → "Theater Seat Management" meta box
 - Function: Admin can reassign customer seats using visual seat map
-- Implementation: `includes/class-admin-selective-refunds.php` lines 440-920
-- Documentation: `docs/SEAT-REASSIGNMENT.md`
+- Implementation: `includes/class-admin-selective-refunds.php`
+- Documentation: `docs/SEAT-REASSIGNMENT.md`, `docs/DATA_STRUCTURE.md` (FooEvents section)
 - Behavior: Single seat selection only, auto-deselects previous seat
-- Ticket Handling: Automatically regenerates FooEvents tickets
+- **v2.6.0 Fix:** Triggers `woocommerce_order_item_meta_updated` action for ticket regeneration
+- **v2.7.0 CRITICAL Fix:** Updates FooEvents ticket metadata (not just order metadata!)
+  - Updates `fooevents_seat_number_0`, `fooevents_seat_row_name_0` on ticket post
+  - Updates `WooCommerceEventsSeatingFields` serialized array
+  - Ensures customer emails and check-in app show correct seat
+- **v2.7.1 Enhancement:** Adds detailed order notes with admin name and timestamp
 
 **Seat Blocking:**
 - Location: Admin menu → Seat Blocking
@@ -161,9 +178,25 @@ We modified this file to support admin contexts:
 - Implementation: `includes/class-admin-seat-blocking.php`
 
 **Selective Refunds:**
-- Location: WooCommerce order edit screen
+- Location: WooCommerce order edit screen → "Refund Selected Seats" button
 - Function: Refund individual seats instead of entire order
-- Implementation: `includes/class-admin-selective-refunds.php` (earlier lines)
+- Implementation: `includes/class-selective-refund-handler.php`, `includes/class-admin-selective-refunds.php`
+- Features:
+  - Partial refund support (refund some seats, keep others)
+  - Guest list mode (refund but keep seats held for comps)
+  - **v2.7.1 Enhancement:** Comprehensive order notes with amounts, admin name, refund type
+
+**Full Order Refunds:**
+- Triggered by: WooCommerce refund system
+- Implementation: `includes/class-refund-handler.php`
+- **v2.5.3-2.5.4 CRITICAL Fix:** Partial refunds (e.g., parking only) no longer release theater seats
+  - Only releases seats when 100% of order is refunded
+  - Prevented duplicate seat sales bug
+- **v2.7.0 CRITICAL Fix:** Trashes FooEvents tickets on full refund
+  - Changes ticket `post_status` to 'trash'
+  - Prevents refunded customers from checking in
+  - Tickets can be recovered if refund was mistaken
+- **v2.7.1 Enhancement:** Order notes document seat release and ticket cleanup
 
 ### 🚧 Known Issues
 
@@ -368,8 +401,64 @@ wp db export backup-$(date +%Y%m%d-%H%M%S).sql
 
 ---
 
+## Critical: FooEvents Ticket Integration (Added v2.7.0)
+
+**THE PROBLEM WE DISCOVERED:**
+
+FooEvents creates separate ticket posts (`wp_posts.post_type = 'event_magic_tickets'`) with their OWN metadata, completely independent of WooCommerce order item metadata.
+
+**Three Separate Data Sources (Must Stay Synchronized):**
+
+1. **HOPE Booking Table** (`wp_hope_seating_bookings`)
+   - `seat_id` column - source of truth for reservations
+
+2. **WooCommerce Order Metadata** (`wp_woocommerce_order_itemmeta`)
+   - `_fooevents_seats`, `_fooevents_seat_number_0`, etc.
+   - Used during checkout/order processing
+
+3. **FooEvents Ticket Metadata** (`wp_postmeta` for ticket posts) **← CRITICAL!**
+   - `fooevents_seat_number_0` - seat number
+   - `fooevents_seat_row_name_0` - row display name
+   - `WooCommerceEventsSeatingFields` - serialized seat data
+   - **THIS** is what customer emails display
+   - **THIS** is what check-in app reads
+   - **THIS** is what PDF tickets show
+
+**Why This Matters:**
+
+Before v2.7.0:
+- ❌ Seat reassignment updated booking table + order metadata only
+- ❌ Ticket metadata remained stale
+- ❌ Customers received emails with WRONG seat info
+- ❌ Check-in app showed WRONG seats
+- ❌ Refunded tickets remained published and could still check in
+
+After v2.7.0+:
+- ✅ Seat reassignment updates ALL THREE sources
+- ✅ `update_fooevents_ticket_metadata()` method synchronizes ticket posts
+- ✅ Full refunds trash ticket posts (prevents check-in)
+- ✅ All actions create order notes for audit trail
+
+**Implementation Files:**
+- `class-admin-selective-refunds.php::update_fooevents_ticket_metadata()` - Seat reassignment ticket sync
+- `class-refund-handler.php::trash_fooevents_tickets()` - Refund ticket cleanup
+
+**Documentation:**
+- See `docs/DATA_STRUCTURE.md` → "FooEvents Ticket Integration" section
+- See `/Users/kyle/Desktop/CRITICAL-TICKET-METADATA-RELATIONSHIP.md`
+
 ## Version History
 
+**v2.7.1** (2025-11-16) - Comprehensive order notes for audit trail
+**v2.7.0** (2025-11-16) - **CRITICAL:** FooEvents ticket metadata synchronization
+**v2.6.0** (2025-11-16) - Fix ticket regeneration trigger
+**v2.5.9** (2025-11-16) - Remove verbose logging
+**v2.5.8** (2025-11-16) - Fix admin AJAX context for all methods
+**v2.5.7** (2025-11-16) - Add CORS credentials to fetch calls
+**v2.5.6** (2025-11-16) - Fix seat reassignment modal (AJAX config)
+**v2.5.5** (2025-11-16) - Reduce debug logging
+**v2.5.4** (2025-11-16) - **HOTFIX:** Fix handle_partial_refund() releasing seats
+**v2.5.3** (2025-11-16) - **CRITICAL:** Prevent partial refunds from releasing seats
 **v2.4.9** (2025-01-08) - Seat reassignment feature
 **v2.4.7** (Previous) - Selective refunds, seat blocking
 **v2.3.0** (Previous) - Production deployment, schema fixes
