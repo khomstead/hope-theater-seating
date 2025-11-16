@@ -1390,6 +1390,8 @@ class HOPE_WooCommerce_Integration {
 
         error_log("HOPE: Validating holds for session: {$session_id}");
 
+        $items_to_remove = array(); // Track cart items with validation failures
+
         // Check each cart item for seat data
         foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
             // Get seat data from cart item
@@ -1411,6 +1413,8 @@ class HOPE_WooCommerce_Integration {
             $product_id = $cart_item['product_id'];
             error_log("HOPE: Validating " . count($selected_seats) . " seats for product {$product_id}");
 
+            $has_validation_error = false;
+
             // Check each seat
             foreach ($selected_seats as $seat_id) {
                 // First check if seat is already booked by someone else
@@ -1430,6 +1434,7 @@ class HOPE_WooCommerce_Integration {
                         $product_name
                     ));
                     error_log("HOPE CHECKOUT BLOCKED: Seat {$seat_id} already booked");
+                    $has_validation_error = true;
                     continue;
                 }
 
@@ -1454,12 +1459,26 @@ class HOPE_WooCommerce_Integration {
                         $product_name
                     ));
                     error_log("HOPE CHECKOUT BLOCKED: No valid hold for seat {$seat_id}, product {$product_id}, session {$session_id}");
+                    $has_validation_error = true;
                 }
+            }
+
+            // If this cart item had validation errors, mark it for removal
+            if ($has_validation_error) {
+                $items_to_remove[] = $cart_item_key;
+            }
+        }
+
+        // Remove cart items that failed validation
+        if (!empty($items_to_remove)) {
+            foreach ($items_to_remove as $cart_item_key) {
+                WC()->cart->remove_cart_item($cart_item_key);
+                error_log("HOPE: Removed expired cart item: {$cart_item_key}");
             }
         }
 
         if ($errors->has_errors()) {
-            error_log('HOPE: Checkout validation failed - ' . count($errors->get_error_messages()) . ' errors');
+            error_log('HOPE: Checkout validation failed - ' . count($errors->get_error_messages()) . ' errors, removed ' . count($items_to_remove) . ' cart items');
         } else {
             error_log('HOPE: All seat holds validated successfully');
         }
