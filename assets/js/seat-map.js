@@ -200,7 +200,10 @@ class HOPESeatMap {
      * Load actual pricing from WooCommerce variations
      */
     loadVariationPricing() {
-        return fetch(hope_ajax.ajax_url, {
+        // Use this.ajax if set, otherwise fall back to global hope_ajax
+        const ajaxConfig = this.ajax || hope_ajax;
+
+        return fetch(ajaxConfig.ajax_url, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -208,8 +211,8 @@ class HOPESeatMap {
             },
             body: new URLSearchParams({
                 action: 'hope_get_variation_pricing',
-                nonce: hope_ajax.nonce,
-                product_id: this.productId
+                nonce: ajaxConfig.nonce,
+                product_id: this.productId || ajaxConfig.product_id
             })
         })
         .then(response => response.json())
@@ -1084,10 +1087,11 @@ class HOPESeatMap {
     
     holdSeats() {
         if (this.selectedSeats.size === 0) return;
-        
+
         const seats = Array.from(this.selectedSeats);
-        
-        fetch(hope_ajax.ajax_url, {
+        const ajaxConfig = this.ajax || hope_ajax;
+
+        fetch(ajaxConfig.ajax_url, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -1095,10 +1099,10 @@ class HOPESeatMap {
             },
             body: new URLSearchParams({
                 action: 'hope_hold_seats',
-                nonce: hope_ajax.nonce,
-                product_id: this.productId,
+                nonce: ajaxConfig.nonce,
+                product_id: this.productId || ajaxConfig.product_id,
                 seats: JSON.stringify(seats),
-                session_id: this.sessionId
+                session_id: this.sessionId || ajaxConfig.session_id
             })
         })
         .then(response => response.json())
@@ -1116,7 +1120,9 @@ class HOPESeatMap {
     }
     
     releaseAllSeats() {
-        fetch(hope_ajax.ajax_url, {
+        const ajaxConfig = this.ajax || hope_ajax;
+
+        fetch(ajaxConfig.ajax_url, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -1124,13 +1130,13 @@ class HOPESeatMap {
             },
             body: new URLSearchParams({
                 action: 'hope_release_seats',
-                nonce: hope_ajax.nonce,
-                product_id: this.productId,
-                session_id: this.sessionId,
+                nonce: ajaxConfig.nonce,
+                product_id: this.productId || ajaxConfig.product_id,
+                session_id: this.sessionId || ajaxConfig.session_id,
                 seats: JSON.stringify([])
             })
         });
-        
+
         this.stopHoldTimer();
     }
     
@@ -1220,7 +1226,9 @@ class HOPESeatMap {
     
     checkSeatStatus(seatId) {
         // Check the specific status of a seat to provide better feedback
-        fetch(hope_ajax.ajax_url, {
+        const ajaxConfig = this.ajax || hope_ajax;
+
+        fetch(ajaxConfig.ajax_url, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -1228,11 +1236,11 @@ class HOPESeatMap {
             },
             body: new URLSearchParams({
                 action: 'hope_check_availability',
-                nonce: hope_ajax.nonce,
-                product_id: this.productId,
-                venue_id: hope_ajax.venue_id,
+                nonce: ajaxConfig.nonce,
+                product_id: this.productId || ajaxConfig.product_id,
+                venue_id: ajaxConfig.venue_id,
                 seats: JSON.stringify([seatId]),
-                session_id: this.sessionId,
+                session_id: this.sessionId || ajaxConfig.session_id,
                 cache_buster: Date.now() // Prevent Safari caching
             })
         })
