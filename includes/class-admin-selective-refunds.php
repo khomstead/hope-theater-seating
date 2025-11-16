@@ -1187,6 +1187,9 @@ class HOPE_Admin_Selective_Refunds {
             error_log('HOPE: Updated _fooevents_seat_number_0 to ' . $seat_number . ', result: ' . var_export($result, true));
         }
 
+        // CRITICAL: Update FooEvents ticket metadata (not just order item metadata)
+        $this->update_fooevents_ticket_metadata($order_item_id, $old_seat_id, $new_seat_id);
+
         // Add note to order
         $order = wc_get_order(wc_get_order_id_by_order_item_id($order_item_id));
         if ($order) {
@@ -1205,6 +1208,89 @@ class HOPE_Admin_Selective_Refunds {
             error_log('HOPE: Triggered woocommerce_order_item_meta_updated action for ticket regeneration');
         } else {
             error_log('HOPE: WARNING - Could not get order from item_id ' . $order_item_id);
+        }
+    }
+
+    /**
+     * Update FooEvents ticket post metadata when seat is reassigned
+     * CRITICAL: Tickets have their own metadata separate from order item metadata
+     *
+     * @param int $order_item_id WooCommerce order item ID
+     * @param string $old_seat_id Old seat ID (e.g., "E8-4")
+     * @param string $new_seat_id New seat ID (e.g., "E8-1")
+     */
+    private function update_fooevents_ticket_metadata($order_item_id, $old_seat_id, $new_seat_id) {
+        error_log('HOPE: update_fooevents_ticket_metadata called');
+
+        // Get order ID from order item
+        $order_id = wc_get_order_id_by_order_item_id($order_item_id);
+        if (!$order_id) {
+            error_log('HOPE: Could not get order ID from item ' . $order_item_id);
+            return;
+        }
+
+        // Find FooEvents ticket(s) for this order
+        // Note: We search by order_id because there's no direct order_item_id link
+        $tickets = get_posts(array(
+            'post_type' => 'event_magic_tickets',
+            'post_status' => 'any',
+            'meta_query' => array(
+                array(
+                    'key' => 'WooCommerceEventsOrderID',
+                    'value' => $order_id
+                )
+            ),
+            'posts_per_page' => -1
+        ));
+
+        if (empty($tickets)) {
+            error_log('HOPE: No FooEvents tickets found for order ' . $order_id);
+            return;
+        }
+
+        error_log('HOPE: Found ' . count($tickets) . ' ticket(s) for order ' . $order_id);
+
+        // For single-ticket orders, update the ticket
+        // For multi-ticket orders, find the right ticket by matching old seat data
+        foreach ($tickets as $ticket) {
+            $ticket_seat_number = get_post_meta($ticket->ID, 'fooevents_seat_number_0', true);
+
+            // Extract seat number from old seat ID (e.g., "E8-4" -> "4")
+            if (preg_match('/-(\d+)$/', $old_seat_id, $old_matches)) {
+                $old_seat_number = $old_matches[1];
+
+                // If this ticket matches the old seat, update it
+                if ($ticket_seat_number == $old_seat_number || count($tickets) == 1) {
+                    error_log('HOPE: Updating ticket ' . $ticket->ID . ' from seat ' . $old_seat_id . ' to ' . $new_seat_id);
+
+                    // Extract new seat components
+                    if (preg_match('/^([A-Z])(\d+)-(\d+)$/', $new_seat_id, $new_matches)) {
+                        $section = $new_matches[1];
+                        $row = $new_matches[2];
+                        $new_seat_number = $new_matches[3];
+                        $new_row_name = "Section {$section} Row {$row}";
+
+                        // Update individual ticket meta fields
+                        update_post_meta($ticket->ID, 'fooevents_seat_number_0', $new_seat_number);
+                        update_post_meta($ticket->ID, 'fooevents_seat_row_name_0', $new_row_name);
+
+                        // Update serialized seating fields array
+                        $seating_fields = array(
+                            'fooevents_seat_row_name_0' => $new_row_name,
+                            'fooevents_seat_number_0' => $new_seat_number
+                        );
+                        update_post_meta($ticket->ID, 'WooCommerceEventsSeatingFields', $seating_fields);
+
+                        error_log('HOPE: Successfully updated ticket ' . $ticket->ID . ' metadata');
+                        error_log('HOPE: - Seat number: ' . $new_seat_number);
+                        error_log('HOPE: - Row name: ' . $new_row_name);
+
+                        break; // Found and updated the right ticket
+                    } else {
+                        error_log('HOPE: Could not parse new seat ID: ' . $new_seat_id);
+                    }
+                }
+            }
         }
     }
 

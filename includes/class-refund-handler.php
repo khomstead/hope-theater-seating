@@ -261,7 +261,11 @@ class HOPE_Refund_Handler {
         
         // Log the action and send notifications
         $this->log_seat_release($order_id, $bookings, $reason);
-        
+
+        // CRITICAL: Trash FooEvents tickets for refunded orders
+        // Published tickets can still check in, even after refund
+        $this->trash_fooevents_tickets($order_id, $reason);
+
         error_log("HOPE REFUND: Successfully released {$released_count} of " . count($bookings) . " seats for order {$order_id}");
     }
     
@@ -409,7 +413,62 @@ class HOPE_Refund_Handler {
             AND updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
         ");
         $stats['recent_refunds'] = (int)$recent_count;
-        
+
         return $stats;
+    }
+
+    /**
+     * Trash FooEvents tickets when order is refunded
+     * CRITICAL: Prevents refunded customers from checking in with old tickets
+     *
+     * @param int $order_id Order ID
+     * @param string $reason Refund reason (refunded, cancelled, failed)
+     */
+    private function trash_fooevents_tickets($order_id, $reason = 'refunded') {
+        // Find all FooEvents tickets for this order
+        $tickets = get_posts(array(
+            'post_type' => 'event_magic_tickets',
+            'post_status' => 'publish', // Only trash published tickets
+            'meta_query' => array(
+                array(
+                    'key' => 'WooCommerceEventsOrderID',
+                    'value' => $order_id
+                )
+            ),
+            'posts_per_page' => -1
+        ));
+
+        if (empty($tickets)) {
+            error_log("HOPE REFUND: No published tickets found for order {$order_id}");
+            return;
+        }
+
+        $trashed_count = 0;
+        foreach ($tickets as $ticket) {
+            // Move to trash (allows recovery if refund was mistake)
+            // wp_trash_post() changes post_status to 'trash' but keeps the post
+            $result = wp_trash_post($ticket->ID);
+
+            if ($result) {
+                $trashed_count++;
+                error_log("HOPE REFUND: Trashed ticket {$ticket->ID} for order {$order_id} (reason: {$reason})");
+            } else {
+                error_log("HOPE REFUND: Failed to trash ticket {$ticket->ID}");
+            }
+        }
+
+        error_log("HOPE REFUND: Trashed {$trashed_count} of " . count($tickets) . " tickets for order {$order_id}");
+
+        // Add note to order about ticket cleanup
+        $order = wc_get_order($order_id);
+        if ($order) {
+            $order->add_order_note(
+                sprintf(
+                    __('%d FooEvents ticket(s) moved to trash due to %s', 'hope-theater-seating'),
+                    $trashed_count,
+                    $reason
+                )
+            );
+        }
     }
 }
