@@ -38,6 +38,9 @@ class HOPE_WooCommerce_Integration {
         // CRITICAL: Validate seat holds BEFORE order is created
         add_action('woocommerce_after_checkout_validation', array($this, 'validate_seat_holds_at_checkout'), 10, 2);
 
+        // ALSO validate on cart page to remove expired items proactively
+        add_action('woocommerce_check_cart_items', array($this, 'validate_cart_seat_holds'));
+
         // Integration with FooEvents ticket system (with error handling)
         add_action('woocommerce_checkout_order_processed', array($this, 'create_fooevents_ticket_data'), 20, 3);
 
@@ -1481,6 +1484,88 @@ class HOPE_WooCommerce_Integration {
             error_log('HOPE: Checkout validation failed - ' . count($errors->get_error_messages()) . ' errors, removed ' . count($items_to_remove) . ' cart items');
         } else {
             error_log('HOPE: All seat holds validated successfully');
+        }
+    }
+
+    /**
+     * Validate cart seat holds proactively (runs on cart page load)
+     * Removes items with expired holds automatically
+     */
+    public function validate_cart_seat_holds() {
+        if (!class_exists('HOPE_Session_Manager')) {
+            return;
+        }
+
+        global $wpdb;
+        $holds_table = $wpdb->prefix . 'hope_seating_holds';
+
+        // Get current session ID
+        $session_id = HOPE_Session_Manager::get_current_session_id();
+        if (empty($session_id)) {
+            return;
+        }
+
+        $items_to_remove = array();
+
+        // Check each cart item for expired holds
+        foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+            // Get seat data from cart item
+            $selected_seats = null;
+            if (isset($cart_item['_hope_theater_seats'])) {
+                $selected_seats = $cart_item['_hope_theater_seats'];
+            } elseif (isset($cart_item['_hope_selected_seats'])) {
+                $selected_seats = $cart_item['_hope_selected_seats'];
+            } elseif (isset($cart_item['hope_theater_seats'])) {
+                $selected_seats = $cart_item['hope_theater_seats'];
+            } elseif (isset($cart_item['hope_selected_seats'])) {
+                $selected_seats = $cart_item['hope_selected_seats'];
+            }
+
+            if (empty($selected_seats) || !is_array($selected_seats)) {
+                continue; // Not a seating product
+            }
+
+            $product_id = $cart_item['product_id'];
+            $has_expired_hold = false;
+
+            // Check if holds exist for all seats
+            foreach ($selected_seats as $seat_id) {
+                $hold_exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$holds_table}
+                    WHERE seat_id = %s
+                    AND product_id = %d
+                    AND session_id = %s
+                    AND expires_at > NOW()",
+                    $seat_id,
+                    $product_id,
+                    $session_id
+                ));
+
+                if (!$hold_exists) {
+                    $has_expired_hold = true;
+                    break; // At least one seat has expired hold
+                }
+            }
+
+            if ($has_expired_hold) {
+                $items_to_remove[] = $cart_item_key;
+                $product = wc_get_product($product_id);
+                $product_name = $product ? $product->get_name() : "Product #{$product_id}";
+
+                wc_add_notice(
+                    sprintf(
+                        __('Your seat reservation for "%s" has expired and was removed from your cart.', 'hope-theater-seating'),
+                        $product_name
+                    ),
+                    'error'
+                );
+            }
+        }
+
+        // Remove items with expired holds
+        foreach ($items_to_remove as $cart_item_key) {
+            WC()->cart->remove_cart_item($cart_item_key);
+            error_log("HOPE CART: Removed cart item with expired hold: {$cart_item_key}");
         }
     }
 
