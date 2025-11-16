@@ -298,6 +298,126 @@ Architectural Plans & Excel Data
 - Visual positioning uses x_coordinate, y_coordinate from physical seats
 - Colors/pricing come from pricing tier configuration
 
+### FooEvents Ticket Integration
+**CRITICAL**: The system maintains THREE separate sources of seat data that must stay synchronized:
+
+#### 1. HOPE Seating Bookings Table
+**Table**: `wp_hope_seating_bookings`
+- Primary source of truth for seat reservations
+- Links orders to physical seats
+- Tracks booking status (confirmed, refunded, partially_refunded, guest_list)
+
+#### 2. WooCommerce Order Item Metadata
+**Table**: `wp_woocommerce_order_itemmeta`
+**Key Fields**:
+- `_fooevents_seats` - Seat ID (e.g., "E8-1")
+- `_hope_seat_summary` - Display text
+- `_fooevents_seat_row_name_0` - "Section E Row 8"
+- `_fooevents_seat_number_0` - "1"
+- `_product_id` - WooCommerce product/variation ID
+- `_fooevents_pricing_map` - Venue/pricing map ID
+
+#### 3. FooEvents Ticket Post Metadata (CRITICAL!)
+**Table**: `wp_posts` (post_type = 'event_magic_tickets')
+**Metadata Table**: `wp_postmeta`
+
+**IMPORTANT**: Tickets have their OWN metadata, separate from order items!
+
+**Key Ticket Meta Fields**:
+```
+fooevents_seat_number_0           - Seat number (e.g., "1")
+fooevents_seat_row_name_0         - Row display (e.g., "Section E Row 8")
+WooCommerceEventsSeatingFields    - Serialized array with seat data
+WooCommerceEventsOrderID          - Links to order
+WooCommerceEventsProductID        - Product ID
+WooCommerceEventsVariationID      - Variation ID (e.g., 2303)
+WooCommerceEventsTicketID         - Unique ticket ID
+WooCommerceEventsTicketHash       - Barcode hash for check-in
+WooCommerceEventsStatus           - "Not Checked In", "Checked In", etc.
+WooCommerceEventsPurchaserEmail   - Customer email
+WooCommerceEventsPurchaserFirstName - Customer first name
+WooCommerceEventsPurchaserLastName - Customer last name
+```
+
+**Why This Matters**:
+1. **Customer emails** display ticket metadata (NOT order metadata)
+2. **Check-in app** reads ticket metadata (NOT booking table)
+3. **PDF tickets** are generated from ticket metadata
+4. **Seat reassignments** must update ALL THREE sources
+5. **Refunds** must trash/delete ticket posts to prevent check-in
+
+**Data Synchronization Requirements**:
+
+When seats are reassigned (E8-4 → E8-1):
+```php
+// 1. Update booking table
+UPDATE wp_hope_seating_bookings
+SET seat_id = 'E8-1'
+WHERE order_id = 7884 AND seat_id = 'E8-4';
+
+// 2. Update order item metadata
+UPDATE wp_woocommerce_order_itemmeta
+SET meta_value = 'E8-1'
+WHERE order_item_id = 4274 AND meta_key = '_fooevents_seats';
+
+UPDATE wp_woocommerce_order_itemmeta
+SET meta_value = '1'
+WHERE order_item_id = 4274 AND meta_key = '_fooevents_seat_number_0';
+
+// 3. Update FooEvents ticket metadata (CRITICAL!)
+UPDATE wp_postmeta
+SET meta_value = '1'
+WHERE post_id = 7885 AND meta_key = 'fooevents_seat_number_0';
+
+UPDATE wp_postmeta
+SET meta_value = 'a:2:{s:25:"fooevents_seat_row_name_0";s:15:"Section E Row 8";s:25:"fooevents_seat_number_0";s:1:"1";}'
+WHERE post_id = 7885 AND meta_key = 'WooCommerceEventsSeatingFields';
+```
+
+When orders are refunded:
+```php
+// 1. Update booking status
+UPDATE wp_hope_seating_bookings
+SET status = 'refunded'
+WHERE order_id = 7884;
+
+// 2. Trash FooEvents tickets (CRITICAL!)
+UPDATE wp_posts
+SET post_status = 'trash'
+WHERE ID IN (
+    SELECT post_id FROM wp_postmeta
+    WHERE meta_key = 'WooCommerceEventsOrderID'
+    AND meta_value = '7884'
+);
+```
+
+**Finding Ticket Records**:
+```sql
+-- Find ticket for an order
+SELECT p.ID, p.post_status
+FROM wp_posts p
+INNER JOIN wp_postmeta pm ON p.ID = pm.post_id
+WHERE p.post_type = 'event_magic_tickets'
+AND pm.meta_key = 'WooCommerceEventsOrderID'
+AND pm.meta_value = '7884';
+
+-- Get all ticket metadata
+SELECT meta_key, meta_value
+FROM wp_postmeta
+WHERE post_id = 7885
+ORDER BY meta_key;
+```
+
+**Common Issues**:
+- ❌ Seat reassigned but ticket shows old seat → Ticket metadata not updated
+- ❌ Refunded customer can check in → Ticket not trashed
+- ❌ Email shows wrong seat → Ticket metadata stale
+- ❌ Check-in app shows wrong row → Ticket row_name not updated
+
+**Implementation**:
+- `class-admin-selective-refunds.php::update_fooevents_ticket_metadata()` - Handles ticket updates
+- `class-refund-handler.php::trash_fooevents_tickets()` - Handles ticket cleanup
+
 ## Future Expansion Capabilities
 
 ### 1. **Physical Layout Management**
