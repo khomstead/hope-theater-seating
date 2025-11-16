@@ -67,21 +67,39 @@ class HOPE_Refund_Handler {
             error_log("HOPE REFUND: Could not get refund object for ID {$refund_id}");
             return;
         }
-        
+
         $order_id = $refund->get_parent_id();
         error_log("HOPE REFUND: Processing partial refund {$refund_id} for order {$order_id}");
-        
-        // Get refunded line items
-        foreach ($refund->get_items() as $item_id => $item) {
-            // In partial refunds, we need to find the original item being refunded
-            $original_item_id = $item->get_meta('_refunded_item_id');
-            if ($original_item_id) {
-                $this->release_item_seats($order_id, $original_item_id, 'partially_refunded');
-            } else {
-                // Fallback: use the item ID directly if meta not set
-                error_log("HOPE REFUND: No _refunded_item_id meta found, using item ID {$item_id}");
-                $this->release_item_seats($order_id, $item_id, 'partially_refunded');
+
+        // CRITICAL FIX: Check if this is truly a full refund before releasing seats
+        // Partial refunds (like parking only) should NOT release theater seats
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return;
+        }
+
+        // Check if this is a full refund by comparing refund total to order total
+        $order_total = floatval($order->get_total());
+        $refunded_total = floatval($order->get_total_refunded());
+
+        // Only process seat releases if 100% of order is refunded
+        if ($refunded_total >= $order_total) {
+            error_log("HOPE REFUND: Full refund detected in partial handler ({$refunded_total} >= {$order_total})");
+
+            // Get refunded line items
+            foreach ($refund->get_items() as $item_id => $item) {
+                // In partial refunds, we need to find the original item being refunded
+                $original_item_id = $item->get_meta('_refunded_item_id');
+                if ($original_item_id) {
+                    $this->release_item_seats($order_id, $original_item_id, 'partially_refunded');
+                } else {
+                    // Fallback: use the item ID directly if meta not set
+                    error_log("HOPE REFUND: No _refunded_item_id meta found, using item ID {$item_id}");
+                    $this->release_item_seats($order_id, $item_id, 'partially_refunded');
+                }
             }
+        } else {
+            error_log("HOPE REFUND: Partial refund in partial handler ({$refunded_total} < {$order_total}), NOT releasing seats");
         }
     }
     
