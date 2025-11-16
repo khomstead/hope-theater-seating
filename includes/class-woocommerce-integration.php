@@ -35,12 +35,15 @@ class HOPE_WooCommerce_Integration {
         add_action('wp_ajax_hope_get_variation_for_seats', array($this, 'ajax_get_variation_for_seats'));
         add_action('wp_ajax_nopriv_hope_get_variation_for_seats', array($this, 'ajax_get_variation_for_seats'));
         
+        // CRITICAL: Validate seat holds BEFORE order is created
+        add_action('woocommerce_after_checkout_validation', array($this, 'validate_seat_holds_at_checkout'), 10, 2);
+
         // Integration with FooEvents ticket system (with error handling)
         add_action('woocommerce_checkout_order_processed', array($this, 'create_fooevents_ticket_data'), 20, 3);
-        
+
         // Create FooEvents Seating compatibility layer
         $this->setup_fooevents_seating_compatibility();
-        
+
         // Mark purchased seats as unavailable after successful payment
         add_action('woocommerce_order_status_processing', array($this, 'mark_seats_as_sold'), 10, 1);
         add_action('woocommerce_order_status_completed', array($this, 'mark_seats_as_sold'), 10, 1);
@@ -1358,7 +1361,110 @@ class HOPE_WooCommerce_Integration {
             error_log("HOPE: Error marking seats as sold: " . $e->getMessage());
         }
     }
-    
+
+    /**
+     * CRITICAL: Validate seat holds exist before checkout
+     * Prevents orders from being placed with expired or missing holds
+     *
+     * @param array $data Posted checkout data
+     * @param WP_Error $errors Validation errors object
+     */
+    public function validate_seat_holds_at_checkout($data, $errors) {
+        error_log('HOPE: Validating seat holds at checkout');
+
+        if (!class_exists('HOPE_Session_Manager')) {
+            error_log('HOPE: Session manager not available for validation');
+            return;
+        }
+
+        global $wpdb;
+        $holds_table = $wpdb->prefix . 'hope_seating_holds';
+        $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+
+        // Get current session ID
+        $session_id = HOPE_Session_Manager::get_current_session_id();
+        if (empty($session_id)) {
+            error_log('HOPE: No session ID available for hold validation');
+            return;
+        }
+
+        error_log("HOPE: Validating holds for session: {$session_id}");
+
+        // Check each cart item for seat data
+        foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+            // Get seat data from cart item
+            $selected_seats = null;
+            if (isset($cart_item['_hope_theater_seats'])) {
+                $selected_seats = $cart_item['_hope_theater_seats'];
+            } elseif (isset($cart_item['_hope_selected_seats'])) {
+                $selected_seats = $cart_item['_hope_selected_seats'];
+            } elseif (isset($cart_item['hope_theater_seats'])) {
+                $selected_seats = $cart_item['hope_theater_seats'];
+            } elseif (isset($cart_item['hope_selected_seats'])) {
+                $selected_seats = $cart_item['hope_selected_seats'];
+            }
+
+            if (empty($selected_seats) || !is_array($selected_seats)) {
+                continue; // Not a seating product, skip validation
+            }
+
+            $product_id = $cart_item['product_id'];
+            error_log("HOPE: Validating " . count($selected_seats) . " seats for product {$product_id}");
+
+            // Check each seat
+            foreach ($selected_seats as $seat_id) {
+                // First check if seat is already booked by someone else
+                $already_booked = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$bookings_table}
+                    WHERE seat_id = %s AND product_id = %d AND status IN ('confirmed', 'active')",
+                    $seat_id,
+                    $product_id
+                ));
+
+                if ($already_booked) {
+                    $product = wc_get_product($product_id);
+                    $product_name = $product ? $product->get_name() : "Product #{$product_id}";
+                    $errors->add('seat_unavailable', sprintf(
+                        __('Sorry, seat %s for "%s" is no longer available. Please select different seats.', 'hope-theater-seating'),
+                        $seat_id,
+                        $product_name
+                    ));
+                    error_log("HOPE CHECKOUT BLOCKED: Seat {$seat_id} already booked");
+                    continue;
+                }
+
+                // Check if hold exists for this seat and session
+                $hold_exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$holds_table}
+                    WHERE seat_id = %s
+                    AND product_id = %d
+                    AND session_id = %s
+                    AND expires_at > NOW()",
+                    $seat_id,
+                    $product_id,
+                    $session_id
+                ));
+
+                if (!$hold_exists) {
+                    $product = wc_get_product($product_id);
+                    $product_name = $product ? $product->get_name() : "Product #{$product_id}";
+                    $errors->add('seat_hold_expired', sprintf(
+                        __('Your reservation for seat %s for "%s" has expired. Please select your seats again.', 'hope-theater-seating'),
+                        $seat_id,
+                        $product_name
+                    ));
+                    error_log("HOPE CHECKOUT BLOCKED: No valid hold for seat {$seat_id}, product {$product_id}, session {$session_id}");
+                }
+            }
+        }
+
+        if ($errors->has_errors()) {
+            error_log('HOPE: Checkout validation failed - ' . count($errors->get_error_messages()) . ' errors');
+        } else {
+            error_log('HOPE: All seat holds validated successfully');
+        }
+    }
+
     /**
      * Debug method to track when FooEvents creates tickets
      */
