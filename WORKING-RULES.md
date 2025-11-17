@@ -268,27 +268,106 @@ When you modify code, check if these need updates:
 
 ---
 
-## Rule 8: Show Diffs Before Committing
+## Rule 8: MANDATORY Local Testing Before Committing
 
-Before any git commit, show:
+**CRITICAL:** This is a LIVE PRODUCTION SITE. Never push untested code.
 
-```markdown
-## Files Changed
-- file1.php: 45 insertions, 12 deletions
-- file2.js: 123 insertions, 5 deletions
-
-## Summary of Changes
-[What changed and why]
-
-## Technical Debt Created
-[Any shortcuts taken, cleanup needed]
-
-## Testing Performed
-[What was tested and results]
-
-## Risks
-[What could break, what wasn't tested]
+### ❌ WRONG Workflow (NEVER DO THIS)
 ```
+1. Make code changes
+2. Commit and push to GitHub
+3. User pulls to production
+4. Site breaks
+5. Emergency fixes required
+```
+
+### ✅ CORRECT Workflow (ALWAYS DO THIS)
+
+#### Phase 1: Local Development & Testing
+```
+1. Make code changes in local environment
+2. Run syntax check: php -l file.php
+3. Test ALL affected functionality locally:
+   - Test the specific feature/fix
+   - Test related features that might break
+   - Test complete user workflow (e.g., select seat → add to cart → checkout)
+4. Check browser console for JavaScript errors
+5. Check debug.log for PHP errors/warnings
+6. Verify database queries work correctly
+```
+
+#### Phase 2: Code Review & Documentation
+```
+7. Show diff summary to human:
+   ## Files Changed
+   - file1.php: 45 insertions, 12 deletions
+   - file2.js: 123 insertions, 5 deletions
+
+   ## Summary of Changes
+   [What changed and why]
+
+   ## Local Testing Performed
+   ✅ PHP syntax check passed
+   ✅ Feature X tested - works correctly
+   ✅ Complete user workflow tested
+   ✅ No console errors
+   ✅ No PHP errors in debug.log
+
+   ## Risks
+   [What could break, what wasn't tested]
+
+8. Update CHANGELOG.md
+9. Get human approval
+```
+
+#### Phase 3: Commit & Push
+```
+10. Commit to git
+11. Push to GitHub
+12. Human pulls to production
+```
+
+#### Phase 4: Production Verification
+```
+13. Human tests in production environment
+14. Verify no critical errors
+15. If issues found: rollback immediately and fix locally
+```
+
+### Testing Checklist
+
+Before ANY commit, verify:
+
+- [ ] PHP syntax check passed (`php -l` on all modified files)
+- [ ] Feature works in local environment
+- [ ] No JavaScript console errors
+- [ ] No PHP errors in local debug.log
+- [ ] Complete user workflow tested end-to-end
+- [ ] Browser console checked for AJAX errors
+- [ ] Database queries verified (check query results)
+- [ ] Related features still work (didn't break anything)
+
+### High-Risk Changes Requiring Extra Testing
+
+If changes involve ANY of these, test EXTRA carefully:
+
+- **Database queries** - Always check query results and error conditions
+- **AJAX handlers** - Test in browser console, check for 500 errors
+- **Global variables (`$wpdb`, `WC()`)** - Verify they're declared/available
+- **WooCommerce hooks** - Test cart, checkout, order processing
+- **Session management** - Test in incognito mode
+- **JavaScript modifications** - Check console for errors
+- **Output buffering/PHP close tags** - Can cause "headers already sent" errors
+
+### Production Site Protection
+
+**Remember:** This is a LIVE SITE serving real customers.
+
+- Production errors cost money and damage reputation
+- Test EVERYTHING locally first
+- When in doubt, test more
+- Better to spend 5 minutes testing than 2 hours fixing production
+- If you're not 100% confident, don't push
 
 **Let the human make final commit decision, not the AI.**
 
