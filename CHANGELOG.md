@@ -2,6 +2,16 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.16] - 2025-11-17
+
+### Improved
+- **Better Error Messages for Expired Holds** - Improved user experience when seat reservations expire
+  - Shows specific seat numbers in error messages (e.g., "Seats F3-2, F3-3 for...")
+  - Clearer instructions: "Please return to the event page and select your seats again"
+  - Explains why hold expired: "has expired or was taken by another customer"
+  - Forces cart totals recalculation to immediately reflect removed items
+  - Replaces generic WooCommerce message with specific, actionable feedback
+
 ## [2.8.15] - 2025-11-17
 
 ### Changed

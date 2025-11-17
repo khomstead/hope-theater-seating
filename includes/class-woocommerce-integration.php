@@ -1405,8 +1405,16 @@ class HOPE_WooCommerce_Integration {
             // CRITICAL: Use session ID from cart item, not current PHP session
             $cart_item_session_id = isset($cart_item['hope_session_id']) ? $cart_item['hope_session_id'] : null;
             if (empty($cart_item_session_id)) {
+                $product = wc_get_product($cart_item['product_id']);
+                $product_name = $product ? $product->get_name() : "Product #{$cart_item['product_id']}";
+                $seat_names = implode(', ', $selected_seats);
+
                 error_log('HOPE CHECKOUT: Cart item has no session ID, blocking checkout');
-                $errors->add('no_session', __('Session expired. Please select your seats again.', 'hope-theater-seating'));
+                $errors->add('no_session', sprintf(
+                    __('Your seat selection has expired. Seats %s for "%s" are no longer held. Please return to the event page and select your seats again.', 'hope-theater-seating'),
+                    $seat_names,
+                    $product_name
+                ));
                 $items_to_remove[] = $cart_item_key;
                 continue;
             }
@@ -1454,7 +1462,7 @@ class HOPE_WooCommerce_Integration {
                     $product = wc_get_product($product_id);
                     $product_name = $product ? $product->get_name() : "Product #{$product_id}";
                     $errors->add('seat_hold_expired', sprintf(
-                        __('Your reservation for seat %s for "%s" has expired. Please select your seats again.', 'hope-theater-seating'),
+                        __('Your reservation for seat %s for "%s" has expired or was taken by another customer. Please return to the event page and select different seats.', 'hope-theater-seating'),
                         $seat_id,
                         $product_name
                     ));
@@ -1587,9 +1595,13 @@ class HOPE_WooCommerce_Integration {
                 $product = wc_get_product($product_id);
                 $product_name = $product ? $product->get_name() : "Product #{$product_id}";
 
+                // Get seat names for better error message
+                $seat_names = implode(', ', $selected_seats);
+
                 wc_add_notice(
                     sprintf(
-                        __('Your seat reservation for "%s" has expired and was removed from your cart.', 'hope-theater-seating'),
+                        __('Your seat reservation has expired. Seats %s for "%s" are no longer held. Please select your seats again.', 'hope-theater-seating'),
+                        $seat_names,
                         $product_name
                     ),
                     'error'
@@ -1598,8 +1610,13 @@ class HOPE_WooCommerce_Integration {
         }
 
         // Remove items with expired holds
-        foreach ($items_to_remove as $cart_item_key) {
-            WC()->cart->remove_cart_item($cart_item_key);
+        if (!empty($items_to_remove)) {
+            foreach ($items_to_remove as $cart_item_key) {
+                WC()->cart->remove_cart_item($cart_item_key);
+            }
+
+            // Force cart totals recalculation to update display
+            WC()->cart->calculate_totals();
         }
     }
 
