@@ -2,6 +2,14 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.8] - 2025-01-16
+
+### Fixed
+- **Admin Seat Blocking Modal** - Fixed JavaScript error preventing admin seat blocking modal from closing
+  - Made `closeAdminSeatModal()` function global to support inline onclick handlers
+  - Error: "ReferenceError: Can't find variable: closeAdminSeatModal" resolved
+  - Function was previously scoped inside jQuery.ready(), inaccessible to onclick attributes
+
 ## [2.8.7] - 2025-01-16
 
 ### Fixed

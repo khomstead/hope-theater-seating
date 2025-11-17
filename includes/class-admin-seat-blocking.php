@@ -1874,10 +1874,10 @@ class HOPE_Admin_Seat_Blocking {
                 });
             }
 
-            // Close the admin seat modal
-            function closeAdminSeatModal() {
+            // Close the admin seat modal - MUST be global for inline onclick handlers
+            window.closeAdminSeatModal = function() {
                 console.log('Closing admin seat modal');
-                const modal = $('#hope-admin-seat-modal');
+                const modal = jQuery('#hope-admin-seat-modal');
 
                 if (modal.length === 0) {
                     console.log('Modal not found for closing');
@@ -1885,15 +1885,15 @@ class HOPE_Admin_Seat_Blocking {
                 }
 
                 modal.removeClass('show').attr('aria-hidden', 'true');
-                $('body').removeClass('hope-modal-open');
+                jQuery('body').removeClass('hope-modal-open');
 
                 // Clean up event handlers
-                $(document).off('keydown.adminModal');
+                jQuery(document).off('keydown.adminModal');
                 modal.find('.hope-modal-overlay').off('click.adminModal');
                 modal.find('.hope-cancel-btn').off('click.adminModal');
 
                 console.log('Admin seat modal closed');
-            }
+            };
 
             // Confirm admin seat selection and transfer to blocking form
             function confirmAdminSeatSelection() {
