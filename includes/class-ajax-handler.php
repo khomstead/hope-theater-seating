@@ -239,7 +239,6 @@ class HOPE_Ajax_Handler {
      * Add selected seats to cart
      */
     public function add_to_cart() {
-        global $wpdb;
         error_log('HOPE: add_to_cart called with data: ' . print_r($_POST, true));
         
         // Verify nonce
@@ -390,21 +389,6 @@ class HOPE_Ajax_Handler {
             foreach ($tier_seats as $individual_seat) {
                 error_log("HOPE: Adding individual seat {$individual_seat} from tier {$tier} as separate cart item");
 
-                // Get hold expiration time for countdown timer
-                $holds_table = $wpdb->prefix . 'hope_seating_holds';
-                $hold_expires_at = $wpdb->get_var($wpdb->prepare(
-                    "SELECT expires_at FROM {$holds_table}
-                    WHERE seat_id = %s AND product_id = %d AND session_id = %s
-                    ORDER BY expires_at DESC LIMIT 1",
-                    $individual_seat,
-                    $product_id,
-                    $session_id
-                ));
-
-                if ($wpdb->last_error) {
-                    error_log("HOPE: Database error getting hold expiration: " . $wpdb->last_error);
-                }
-
                 // Create cart item data for this individual seat
                 $cart_item_data = [
                     'hope_theater_seats' => [$individual_seat], // Array with single seat
@@ -414,7 +398,6 @@ class HOPE_Ajax_Handler {
                         'tier' => $tier
                     ]],
                     'hope_session_id' => $session_id,
-                    'hope_hold_expires_at' => $hold_expires_at, // For checkout countdown timer
                     'hope_total_price' => $price_per_seat,
                     'hope_price_per_seat' => $price_per_seat,
                     'hope_seat_count' => 1, // Always 1 for individual seats

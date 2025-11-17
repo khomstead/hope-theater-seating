@@ -2,6 +2,17 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.20] - 2025-11-17
+
+### Removed
+- **Rollback: Checkout Countdown Timer** - Removed checkout countdown timer feature due to checkout page errors
+  - Removed `display_checkout_countdown_timer()` method from WooCommerce integration
+  - Removed `woocommerce_before_checkout_form` hook registration
+  - Removed hold expiration query from add_to_cart AJAX handler
+  - Removed `hope_hold_expires_at` from cart item metadata
+  - Feature was causing "critical error" blank pages on checkout
+  - Will revisit implementation approach in future version
+
 ## [2.8.19] - 2025-11-17
 
 ### Fixed
