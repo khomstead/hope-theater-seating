@@ -1382,15 +1382,6 @@ class HOPE_WooCommerce_Integration {
         $holds_table = $wpdb->prefix . 'hope_seating_holds';
         $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
 
-        // Get current session ID
-        $session_id = HOPE_Session_Manager::get_current_session_id();
-        if (empty($session_id)) {
-            error_log('HOPE: No session ID available for hold validation');
-            return;
-        }
-
-        error_log("HOPE: Validating holds for session: {$session_id}");
-
         $items_to_remove = array(); // Track cart items with validation failures
 
         // Check each cart item for seat data
@@ -1411,8 +1402,17 @@ class HOPE_WooCommerce_Integration {
                 continue; // Not a seating product, skip validation
             }
 
+            // CRITICAL: Use session ID from cart item, not current PHP session
+            $cart_item_session_id = isset($cart_item['hope_session_id']) ? $cart_item['hope_session_id'] : null;
+            if (empty($cart_item_session_id)) {
+                error_log('HOPE CHECKOUT: Cart item has no session ID, blocking checkout');
+                $errors->add('no_session', __('Session expired. Please select your seats again.', 'hope-theater-seating'));
+                $items_to_remove[] = $cart_item_key;
+                continue;
+            }
+
             $product_id = $cart_item['product_id'];
-            error_log("HOPE: Validating " . count($selected_seats) . " seats for product {$product_id}");
+            error_log("HOPE CHECKOUT: Validating " . count($selected_seats) . " seats for product {$product_id}, session {$cart_item_session_id}");
 
             $has_validation_error = false;
 
@@ -1439,7 +1439,7 @@ class HOPE_WooCommerce_Integration {
                     continue;
                 }
 
-                // Check if hold exists for this seat and session
+                // Check if hold exists for this seat and cart item's session
                 $hold_exists = $wpdb->get_var($wpdb->prepare(
                     "SELECT id FROM {$holds_table}
                     WHERE seat_id = %s
@@ -1448,7 +1448,7 @@ class HOPE_WooCommerce_Integration {
                     AND expires_at > NOW()",
                     $seat_id,
                     $product_id,
-                    $session_id
+                    $cart_item_session_id
                 ));
 
                 if (!$hold_exists) {
@@ -1459,7 +1459,7 @@ class HOPE_WooCommerce_Integration {
                         $seat_id,
                         $product_name
                     ));
-                    error_log("HOPE CHECKOUT BLOCKED: No valid hold for seat {$seat_id}, product {$product_id}, session {$session_id}");
+                    error_log("HOPE CHECKOUT BLOCKED: No valid hold for seat {$seat_id}, product {$product_id}, session {$cart_item_session_id}");
                     $has_validation_error = true;
                 }
             }
@@ -1498,33 +1498,50 @@ class HOPE_WooCommerce_Integration {
         global $wpdb;
         $holds_table = $wpdb->prefix . 'hope_seating_holds';
 
-        // Get current session ID
-        $session_id = HOPE_Session_Manager::get_current_session_id();
-        if (empty($session_id)) {
+        // CRITICAL FIX: In incognito/privacy mode, PHP session cookies may not persist
+        // between AJAX calls and page redirects. Instead of using the current session ID,
+        // we need to collect session IDs from cart items and extend holds for all of them.
+        $session_ids_to_extend = array();
+
+        // First pass: Collect all unique session IDs from cart items
+        foreach (WC()->cart->get_cart() as $cart_item) {
+            if (isset($cart_item['hope_session_id']) && !empty($cart_item['hope_session_id'])) {
+                $session_ids_to_extend[$cart_item['hope_session_id']] = true;
+            }
+        }
+
+        if (empty($session_ids_to_extend)) {
+            error_log("HOPE CART: No session IDs found in cart items");
             return;
         }
 
-        // CRITICAL FIX: Extend all holds for this session BEFORE validating
-        // This prevents holds from expiring while customer is actively on checkout page
+        $session_ids_array = array_keys($session_ids_to_extend);
+        error_log("HOPE CART: Found session IDs in cart: " . implode(', ', $session_ids_array));
+
+        // Extend holds for ALL session IDs found in cart
         $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
         $new_expiry = gmdate('Y-m-d H:i:s', time() + $hold_duration);
 
-        $extended = $wpdb->query($wpdb->prepare(
-            "UPDATE {$holds_table}
-            SET expires_at = %s
-            WHERE session_id = %s
-            AND expires_at > NOW()",
-            $new_expiry,
-            $session_id
-        ));
+        $total_extended = 0;
+        foreach ($session_ids_array as $session_id) {
+            $extended = $wpdb->query($wpdb->prepare(
+                "UPDATE {$holds_table}
+                SET expires_at = %s
+                WHERE session_id = %s
+                AND expires_at > NOW()",
+                $new_expiry,
+                $session_id
+            ));
 
-        if ($extended > 0) {
-            error_log("HOPE CART: Extended {$extended} seat holds to {$new_expiry} for session {$session_id}");
+            if ($extended > 0) {
+                error_log("HOPE CART: Extended {$extended} seat holds to {$new_expiry} for session {$session_id}");
+                $total_extended += $extended;
+            }
         }
 
         $items_to_remove = array();
 
-        // Check each cart item for expired holds
+        // Second pass: Check each cart item for expired holds
         foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
             // Get seat data from cart item
             $selected_seats = null;
@@ -1542,10 +1559,18 @@ class HOPE_WooCommerce_Integration {
                 continue; // Not a seating product
             }
 
+            // CRITICAL: Use session ID from cart item, not current session
+            $cart_item_session_id = isset($cart_item['hope_session_id']) ? $cart_item['hope_session_id'] : null;
+            if (empty($cart_item_session_id)) {
+                error_log("HOPE CART: Cart item {$cart_item_key} has no session ID, removing");
+                $items_to_remove[] = $cart_item_key;
+                continue;
+            }
+
             $product_id = $cart_item['product_id'];
             $has_expired_hold = false;
 
-            // Check if holds exist for all seats
+            // Check if holds exist for all seats using the cart item's session ID
             foreach ($selected_seats as $seat_id) {
                 $hold_exists = $wpdb->get_var($wpdb->prepare(
                     "SELECT id FROM {$holds_table}
@@ -1555,10 +1580,11 @@ class HOPE_WooCommerce_Integration {
                     AND expires_at > NOW()",
                     $seat_id,
                     $product_id,
-                    $session_id
+                    $cart_item_session_id
                 ));
 
                 if (!$hold_exists) {
+                    error_log("HOPE CART: No valid hold found for seat {$seat_id}, product {$product_id}, session {$cart_item_session_id}");
                     $has_expired_hold = true;
                     break; // At least one seat has expired hold
                 }

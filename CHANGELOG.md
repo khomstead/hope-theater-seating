@@ -2,6 +2,18 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.14] - 2025-11-17
+
+### Fixed
+- **CRITICAL: Incognito Mode Session Cookie Issue** - Fixed holds expiring in incognito/privacy browsing mode
+  - Root cause: PHP session cookies not persisting between AJAX calls and page redirects in incognito mode
+  - Session ID stored in cart item (`hope_session_id`) but validation was using current PHP session ID (different)
+  - Solution: Retrieve session ID from cart item data instead of relying on PHP session persistence
+  - Updated `validate_cart_seat_holds()` to collect all session IDs from cart items and extend holds for all
+  - Updated `validate_checkout_seat_holds()` to use cart item's session ID for hold lookups
+  - Now works correctly in incognito mode, privacy browsing, and when cookies are blocked
+  - Fixes "items expiring immediately" issue reported in production
+
 ## [2.8.13] - 2025-11-17
 
 ### Fixed
