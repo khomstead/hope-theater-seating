@@ -400,6 +400,10 @@ class HOPE_Ajax_Handler {
                     $session_id
                 ));
 
+                if ($wpdb->last_error) {
+                    error_log("HOPE: Database error getting hold expiration: " . $wpdb->last_error);
+                }
+
                 // Create cart item data for this individual seat
                 $cart_item_data = [
                     'hope_theater_seats' => [$individual_seat], // Array with single seat
