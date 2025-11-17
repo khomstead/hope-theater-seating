@@ -29,7 +29,7 @@ class HOPE_Admin_Seat_Blocking {
         add_action('wp_ajax_hope_admin_create_seat_block', array($this, 'ajax_create_seat_block'));
         add_action('wp_ajax_hope_admin_remove_seat_block', array($this, 'ajax_remove_seat_block'));
         add_action('wp_ajax_hope_admin_get_event_seats', array($this, 'ajax_get_event_seats'));
-        add_action('wp_ajax_hope_get_event_venue', array($this, 'ajax_get_event_venue'));
+        add_action('wp_ajax_hope_get_event_venue_blocking', array($this, 'ajax_get_event_venue'));
         
         // Enqueue admin assets
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
@@ -489,7 +489,7 @@ class HOPE_Admin_Seat_Blocking {
                     url: ajaxurl,
                     type: 'POST',
                     data: {
-                        action: 'hope_get_event_venue',
+                        action: 'hope_get_event_venue_blocking',
                         event_id: eventId,
                         nonce: $('#hope_seat_block_admin_nonce').val()
                     },
@@ -826,7 +826,7 @@ class HOPE_Admin_Seat_Blocking {
                     url: ajaxurl,
                     type: 'POST',
                     data: {
-                        action: 'hope_get_event_venue',
+                        action: 'hope_get_event_venue_blocking',
                         event_id: eventId,
                         nonce: $('#hope_seat_block_admin_nonce').val()
                     },
@@ -1067,7 +1067,7 @@ class HOPE_Admin_Seat_Blocking {
                     url: ajaxurl,
                     type: 'POST',
                     data: {
-                        action: 'hope_get_event_venue',
+                        action: 'hope_get_event_venue_blocking',
                         event_id: eventId,
                         nonce: $('#hope_seat_block_admin_nonce').val()
                     },
@@ -1366,7 +1366,7 @@ class HOPE_Admin_Seat_Blocking {
                     type: 'POST',
                     async: false, // Synchronous for simplicity
                     data: {
-                        action: 'hope_get_event_venue',
+                        action: 'hope_get_event_venue_blocking',
                         event_id: eventId,
                         nonce: $('#hope_seat_block_admin_nonce').val()
                     },
@@ -2152,23 +2152,36 @@ class HOPE_Admin_Seat_Blocking {
      * AJAX handler for getting event venue ID
      */
     public function ajax_get_event_venue() {
+        error_log('HOPE BLOCKING: ajax_get_event_venue called');
+
         // Security checks
-        if (!current_user_can('manage_woocommerce') || !wp_verify_nonce($_POST['nonce'], 'hope_seat_block_admin_action')) {
-            wp_send_json_error(array('error' => 'Access denied'));
+        if (!current_user_can('manage_woocommerce')) {
+            error_log('HOPE BLOCKING: User does not have manage_woocommerce capability');
+            wp_send_json_error(array('error' => 'Access denied - insufficient permissions'));
+        }
+
+        if (!wp_verify_nonce($_POST['nonce'], 'hope_seat_block_admin_action')) {
+            error_log('HOPE BLOCKING: Nonce verification failed');
+            wp_send_json_error(array('error' => 'Access denied - nonce failed'));
         }
 
         $event_id = intval($_POST['event_id']);
+        error_log('HOPE BLOCKING: event_id = ' . $event_id);
 
         // Get the venue/pricing map ID for this product
         $venue_id = get_post_meta($event_id, '_hope_seating_venue_id', true);
+        error_log('HOPE BLOCKING: venue_id from meta = ' . var_export($venue_id, true));
 
         if (!$venue_id) {
             $product = wc_get_product($event_id);
             $product_name = $product ? $product->get_name() : "Product #{$event_id}";
+            error_log('HOPE BLOCKING: No venue_id found for product ' . $product_name);
             wp_send_json_error(array(
                 'error' => "No seat map configured for \"{$product_name}\". Please edit the product and select a seat map under the HOPE Theater Seating tab."
             ));
         }
+
+        error_log('HOPE BLOCKING: Success - venue_id = ' . $venue_id);
 
         wp_send_json_success(array(
             'venue_id' => $venue_id,

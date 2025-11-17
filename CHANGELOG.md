@@ -2,6 +2,18 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.11] - 2025-01-17
+
+### Fixed
+- **CRITICAL: Seat Blocking Broken Since v2.7.8** - Fixed AJAX action name conflict preventing seat blocking from working
+  - Root cause: Both `class-admin-seat-blocking.php` and `class-admin-selective-refunds.php` registered `wp_ajax_hope_get_event_venue`
+  - Last registered handler (seat reassignment) overrode seat blocking handler
+  - Result: Seat blocking AJAX calls were routed to wrong handler, failed with "No venue configured"
+  - Solution: Renamed seat blocking action to `hope_get_event_venue_blocking` (unique name)
+  - Updated all 4 JavaScript AJAX calls in seat blocking to use new action name
+  - Added extensive debug logging to troubleshoot AJAX flow
+  - Bug introduced in v2.7.8 when seat reassignment was updated to find correct seating product
+
 ## [2.8.10] - 2025-01-16
 
 ### Improved
