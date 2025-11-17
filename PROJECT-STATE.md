@@ -1,7 +1,7 @@
 # HOPE Theater Seating - Current Project State
 
-**Last Updated:** 2025-11-16
-**Current Version:** 2.7.1
+**Last Updated:** 2025-11-17
+**Current Version:** 2.8.14
 **Primary Developer:** Kyle Homstead
 **AI Assistant:** Read this file at the start of EVERY session
 
@@ -447,22 +447,95 @@ After v2.7.0+:
 - See `docs/DATA_STRUCTURE.md` → "FooEvents Ticket Integration" section
 - See `/Users/kyle/Desktop/CRITICAL-TICKET-METADATA-RELATIONSHIP.md`
 
+## Session Management & Hold System (Added v2.8.13-2.8.14)
+
+### Critical Understanding: Holds vs. Bookings
+
+**Holds** (`wp_hope_seating_holds`)
+- Temporary seat reservations during shopping/checkout
+- Expire after configured duration (default: 10 minutes)
+- Linked by `session_id` (NOT user_id - supports guests)
+- Prevent double-booking during checkout process
+
+**Bookings** (`wp_hope_seating_bookings`)
+- Permanent seat assignments after order completion
+- Linked by `order_id` and `product_id`
+- Created when order is processed/completed
+- Never expire (until refunded)
+
+### Session ID Storage Strategy
+
+**The Problem:** PHP session cookies don't persist in incognito/privacy mode between AJAX calls and page redirects.
+
+**The Solution (v2.8.14):** Store session ID in cart item metadata, not just PHP session:
+
+```php
+// When creating holds (class-ajax-handler.php)
+$cart_item_data = [
+    'hope_session_id' => $session_id,  // ← Stored in cart
+    'hope_theater_seats' => $seats,
+    // ...
+];
+```
+
+**Validation Pattern:**
+```php
+// WRONG (v2.8.12 and earlier):
+$session_id = HOPE_Session_Manager::get_current_session_id(); // New ID in incognito!
+
+// CORRECT (v2.8.14+):
+$cart_item_session_id = $cart_item['hope_session_id']; // From cart metadata
+```
+
+**Files That Use This Pattern:**
+- `class-woocommerce-integration.php::validate_cart_seat_holds()` - Extends holds using cart item session IDs
+- `class-woocommerce-integration.php::validate_checkout_seat_holds()` - Validates using cart item session IDs
+- `class-ajax-handler.php::ajax_add_to_cart()` - Stores session ID in cart metadata
+
+**Why This Matters:**
+- ✅ Works in incognito/private browsing
+- ✅ Works when cookies are blocked
+- ✅ Works across page redirects
+- ✅ Supports multiple sessions (if user has multiple tabs)
+
+### Session ID Regeneration Security (v2.8.13)
+
+Changed `session_regenerate_id(true)` to `session_regenerate_id(false)` when existing session data detected:
+
+```php
+// class-session-manager.php::get_current_session_id()
+if ($has_existing_session) {
+    session_regenerate_id(false); // Don't destroy old session file
+} else {
+    session_regenerate_id(true);  // New session, safe to destroy
+}
+```
+
+**Why:** The `true` parameter destroys the session file, which breaks hold lookups if session isn't fully connected yet.
+
 ## Version History
 
+**v2.8.14** (2025-11-17) - **CRITICAL:** Fix incognito mode session cookie issue
+**v2.8.13** (2025-11-17) - **CRITICAL:** Fix session regeneration destroying hold data
+**v2.8.12** (2025-01-17) - Fix seat blocking modal DOM layering
+**v2.8.11** (2025-01-17) - **CRITICAL:** Fix seat blocking AJAX conflict (broken since v2.7.8)
+**v2.8.10** (2025-01-16) - Improve seat blocking error messages
+**v2.8.9** (2025-01-16) - **CRITICAL:** Auto-extend holds during checkout
+**v2.8.8** (2025-01-16) - Fix admin seat blocking modal close button
+**v2.8.7** (2025-01-16) - **CRITICAL:** Prevent seats removed during checkout redirect
+**v2.8.6** (2025-01-16) - Vomitorium divider hover effects
+**v2.8.5** (2025-01-16) - Fix vomitorium divider tooltips
+**v2.8.4** (2025-01-16) - Add vomitorium divider visual indicators
+**v2.8.3** (2025-01-16) - Reduce angular gaps between orchestra sections
+**v2.8.2** (2025-01-16) - Document overflow seating design decision
+**v2.8.1** (2025-01-16) - Fix overflow seat visibility when sold/held
+**v2.8.0** (2025-01-16) - Add overflow/removable seating control
 **v2.7.1** (2025-11-16) - Comprehensive order notes for audit trail
 **v2.7.0** (2025-11-16) - **CRITICAL:** FooEvents ticket metadata synchronization
 **v2.6.0** (2025-11-16) - Fix ticket regeneration trigger
-**v2.5.9** (2025-11-16) - Remove verbose logging
-**v2.5.8** (2025-11-16) - Fix admin AJAX context for all methods
-**v2.5.7** (2025-11-16) - Add CORS credentials to fetch calls
-**v2.5.6** (2025-11-16) - Fix seat reassignment modal (AJAX config)
-**v2.5.5** (2025-11-16) - Reduce debug logging
-**v2.5.4** (2025-11-16) - **HOTFIX:** Fix handle_partial_refund() releasing seats
-**v2.5.3** (2025-11-16) - **CRITICAL:** Prevent partial refunds from releasing seats
 **v2.4.9** (2025-01-08) - Seat reassignment feature
 **v2.4.7** (Previous) - Selective refunds, seat blocking
 **v2.3.0** (Previous) - Production deployment, schema fixes
-**v2.2.32** (Previous) - Layout improvements
 
 ---
 
