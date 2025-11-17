@@ -2,6 +2,16 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.12] - 2025-01-17
+
+### Fixed
+- **Seat Blocking Modal DOM Layering** - Fixed SVG canvas dragging over controls when panning/zooming
+  - Added `overflow: hidden` to `.seating-container` to clip SVG bounds
+  - Set `z-index: 1` on `.seating-wrapper` (SVG layer)
+  - Set `z-index: 5` on `.header` (floor selector/controls)
+  - Set `z-index: 10` on `.zoom-controls` (already present)
+  - Now matches frontend modal behavior where controls stay above seating canvas
+
 ## [2.8.11] - 2025-01-17
 
 ### Fixed

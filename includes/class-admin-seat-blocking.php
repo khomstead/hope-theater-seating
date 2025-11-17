@@ -2340,13 +2340,14 @@ class HOPE_Admin_Seat_Blocking {
                 width: 100% !important;
                 height: 400px !important;
                 position: relative !important;
+                overflow: hidden !important; /* CRITICAL: Clips SVG to prevent dragging over controls */
             }
 
             #hope-admin-seat-modal .seating-wrapper {
                 width: 100% !important;
                 height: 100% !important;
                 position: relative !important;
-                overflow: hidden !important;
+                z-index: 1 !important; /* Below header/controls */
             }
 
             /* Admin modal controls styling */
@@ -2357,6 +2358,8 @@ class HOPE_Admin_Seat_Blocking {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                position: relative;
+                z-index: 5; /* Above seating wrapper */
             }
 
             #hope-admin-seat-modal .floor-selector {
