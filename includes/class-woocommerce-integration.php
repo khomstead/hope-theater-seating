@@ -1412,7 +1412,6 @@ class HOPE_WooCommerce_Integration {
             }
 
             $product_id = $cart_item['product_id'];
-            error_log("HOPE CHECKOUT: Validating " . count($selected_seats) . " seats for product {$product_id}, session {$cart_item_session_id}");
 
             $has_validation_error = false;
 
@@ -1511,12 +1510,10 @@ class HOPE_WooCommerce_Integration {
         }
 
         if (empty($session_ids_to_extend)) {
-            error_log("HOPE CART: No session IDs found in cart items");
             return;
         }
 
         $session_ids_array = array_keys($session_ids_to_extend);
-        error_log("HOPE CART: Found session IDs in cart: " . implode(', ', $session_ids_array));
 
         // Extend holds for ALL session IDs found in cart
         $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
@@ -1533,10 +1530,7 @@ class HOPE_WooCommerce_Integration {
                 $session_id
             ));
 
-            if ($extended > 0) {
-                error_log("HOPE CART: Extended {$extended} seat holds to {$new_expiry} for session {$session_id}");
-                $total_extended += $extended;
-            }
+            $total_extended += $extended;
         }
 
         $items_to_remove = array();
@@ -1562,7 +1556,6 @@ class HOPE_WooCommerce_Integration {
             // CRITICAL: Use session ID from cart item, not current session
             $cart_item_session_id = isset($cart_item['hope_session_id']) ? $cart_item['hope_session_id'] : null;
             if (empty($cart_item_session_id)) {
-                error_log("HOPE CART: Cart item {$cart_item_key} has no session ID, removing");
                 $items_to_remove[] = $cart_item_key;
                 continue;
             }
@@ -1584,7 +1577,6 @@ class HOPE_WooCommerce_Integration {
                 ));
 
                 if (!$hold_exists) {
-                    error_log("HOPE CART: No valid hold found for seat {$seat_id}, product {$product_id}, session {$cart_item_session_id}");
                     $has_expired_hold = true;
                     break; // At least one seat has expired hold
                 }
@@ -1608,7 +1600,6 @@ class HOPE_WooCommerce_Integration {
         // Remove items with expired holds
         foreach ($items_to_remove as $cart_item_key) {
             WC()->cart->remove_cart_item($cart_item_key);
-            error_log("HOPE CART: Removed cart item with expired hold: {$cart_item_key}");
         }
     }
 

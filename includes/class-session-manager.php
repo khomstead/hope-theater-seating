@@ -477,8 +477,6 @@ class HOPE_Session_Manager {
     public static function get_current_session_id() {
         // Enhanced session security
         if (!session_id()) {
-            error_log("HOPE SESSION: No active session, starting new session");
-
             // Set secure session parameters
             ini_set('session.cookie_httponly', 1);
             ini_set('session.cookie_secure', is_ssl() ? 1 : 0);
@@ -486,38 +484,26 @@ class HOPE_Session_Manager {
             ini_set('session.use_strict_mode', 1);
 
             session_start();
-            error_log("HOPE SESSION: Session started, PHP session_id = " . session_id());
 
             // CRITICAL: Check if we have existing session data BEFORE regenerating ID
             $has_existing_session = isset($_SESSION['hope_seating_session_id']);
-            $existing_session_id = $has_existing_session ? $_SESSION['hope_seating_session_id'] : null;
-
-            error_log("HOPE SESSION: Has existing session data? " . ($has_existing_session ? 'YES' : 'NO'));
-            if ($existing_session_id) {
-                error_log("HOPE SESSION: Existing hope_seating_session_id = {$existing_session_id}");
-            }
 
             // Regenerate session ID to prevent fixation attacks
             // But DON'T destroy session if we already have a seating session
             if (!isset($_SESSION['hope_seating_initialized'])) {
                 if ($has_existing_session) {
-                    error_log("HOPE SESSION: Regenerating PHP session ID but preserving session data");
                     session_regenerate_id(false); // FALSE = don't delete old session
                 } else {
-                    error_log("HOPE SESSION: New session - regenerating ID");
                     session_regenerate_id(true);
                 }
                 $_SESSION['hope_seating_initialized'] = true;
                 $_SESSION['hope_seating_created'] = time();
             }
-        } else {
-            error_log("HOPE SESSION: Active session found, PHP session_id = " . session_id());
         }
 
         // Check for session timeout (2 hours)
         if (isset($_SESSION['hope_seating_created']) &&
             (time() - $_SESSION['hope_seating_created']) > 7200) {
-            error_log("HOPE SESSION: Session timeout (2 hours), destroying session");
             session_destroy();
             session_start();
             $_SESSION['hope_seating_initialized'] = true;
@@ -526,9 +512,6 @@ class HOPE_Session_Manager {
 
         if (!isset($_SESSION['hope_seating_session_id'])) {
             $_SESSION['hope_seating_session_id'] = self::generate_session_id();
-            error_log("HOPE SESSION: Created NEW hope_seating_session_id = " . $_SESSION['hope_seating_session_id']);
-        } else {
-            error_log("HOPE SESSION: Using existing hope_seating_session_id = " . $_SESSION['hope_seating_session_id']);
         }
 
         return $_SESSION['hope_seating_session_id'];

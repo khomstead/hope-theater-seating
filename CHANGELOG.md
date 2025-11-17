@@ -2,6 +2,15 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.15] - 2025-11-17
+
+### Changed
+- **Code Cleanup** - Removed verbose debug logging from v2.8.13-2.8.14
+  - Removed session management debug logs (10 log statements)
+  - Removed cart validation verbose logs (6 log statements)
+  - Kept only critical error logging (session missing, checkout blocked)
+  - Improves performance and reduces log file size
+
 ## [2.8.14] - 2025-11-17
 
 ### Fixed
