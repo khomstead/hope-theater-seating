@@ -239,6 +239,7 @@ class HOPE_Ajax_Handler {
      * Add selected seats to cart
      */
     public function add_to_cart() {
+        global $wpdb;
         error_log('HOPE: add_to_cart called with data: ' . print_r($_POST, true));
         
         // Verify nonce

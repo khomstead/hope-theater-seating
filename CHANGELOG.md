@@ -2,6 +2,16 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.19] - 2025-11-17
+
+### Fixed
+- **CRITICAL: Missing global $wpdb declaration** - Fixed fatal error preventing add to cart
+  - Root cause: `add_to_cart()` method was using `$wpdb` without declaring it as global
+  - Caused 500 Internal Server Error when adding seats to cart
+  - Server returned HTML error page instead of JSON response
+  - Added `global $wpdb;` at beginning of `add_to_cart()` method
+  - Bug introduced in v2.8.17 when adding hold expiration query
+
 ## [2.8.18] - 2025-11-17
 
 ### Fixed
