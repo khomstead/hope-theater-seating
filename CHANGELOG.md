@@ -2,6 +2,14 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.18] - 2025-11-17
+
+### Fixed
+- **HOTFIX: Add to Cart Error** - Fixed undefined variable `$holds_table` in AJAX handler
+  - Missing table name definition when querying hold expiration time
+  - Caused "An error occurred while adding seats to cart" message
+  - Added `$holds_table = $wpdb->prefix . 'hope_seating_holds';` before query
+
 ## [2.8.17] - 2025-11-17
 
 ### Added

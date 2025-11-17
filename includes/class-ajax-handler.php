@@ -390,6 +390,7 @@ class HOPE_Ajax_Handler {
                 error_log("HOPE: Adding individual seat {$individual_seat} from tier {$tier} as separate cart item");
 
                 // Get hold expiration time for countdown timer
+                $holds_table = $wpdb->prefix . 'hope_seating_holds';
                 $hold_expires_at = $wpdb->get_var($wpdb->prepare(
                     "SELECT expires_at FROM {$holds_table}
                     WHERE seat_id = %s AND product_id = %d AND session_id = %s
