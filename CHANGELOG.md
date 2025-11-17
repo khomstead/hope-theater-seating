@@ -2,6 +2,15 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.10] - 2025-01-16
+
+### Improved
+- **Admin Seat Blocking Error Messages** - Better error messaging when product doesn't have seat map configured
+  - Changed generic "No venue configured" to specific product name
+  - Added instructions on how to fix: Edit product → HOPE Theater Seating tab → Select seat map
+  - Error now shows which product is missing configuration
+  - Helps admins quickly identify and fix configuration issues
+
 ## [2.8.9] - 2025-01-16
 
 ### Fixed

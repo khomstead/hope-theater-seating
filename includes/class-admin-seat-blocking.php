@@ -495,12 +495,17 @@ class HOPE_Admin_Seat_Blocking {
                     },
                     success: function(venueResponse) {
                         if (!venueResponse.success) {
-                            console.error('No venue configured for event:', eventId);
+                            const errorMsg = venueResponse.data?.error || 'This event does not have a venue/pricing map configured.';
+                            console.error('No venue configured for event:', eventId, '-', errorMsg);
                             loader.hide();
                             content.show().html(`
                                 <div style="padding: 40px; text-align: center;">
-                                    <h3>⚠️ Venue Not Configured</h3>
-                                    <p>This event does not have a venue/pricing map configured.</p>
+                                    <h3>⚠️ Seat Map Not Configured</h3>
+                                    <p style="margin: 20px 0;">${errorMsg}</p>
+                                    <p style="color: #666; font-size: 14px;">
+                                        To fix this: Edit the product → Go to "HOPE Theater Seating" tab →
+                                        Check "Enable Seat Selection" → Select a seat map
+                                    </p>
                                     <button type="button" class="button" onclick="closeAdminSeatModal()">Close</button>
                                 </div>
                             `);
@@ -2158,7 +2163,11 @@ class HOPE_Admin_Seat_Blocking {
         $venue_id = get_post_meta($event_id, '_hope_seating_venue_id', true);
 
         if (!$venue_id) {
-            wp_send_json_error(array('error' => 'No venue configured for this event'));
+            $product = wc_get_product($event_id);
+            $product_name = $product ? $product->get_name() : "Product #{$event_id}";
+            wp_send_json_error(array(
+                'error' => "No seat map configured for \"{$product_name}\". Please edit the product and select a seat map under the HOPE Theater Seating tab."
+            ));
         }
 
         wp_send_json_success(array(
