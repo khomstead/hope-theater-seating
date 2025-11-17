@@ -2,6 +2,18 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.17] - 2025-11-17
+
+### Added
+- **Checkout Countdown Timer** - Displays seat hold expiration timer on checkout page
+  - Prominent countdown displayed above checkout form
+  - Shows exact time remaining (e.g., "9:45")
+  - Turns red when under 2 minutes remaining
+  - Auto-refreshes page when timer expires with helpful message
+  - Carries hold expiration from seat selection modal through to checkout
+  - Reduces customer confusion about reservation duration
+  - Stored in cart metadata (`hope_hold_expires_at`) for persistence across sessions
+
 ## [2.8.16] - 2025-11-17
 
 ### Improved

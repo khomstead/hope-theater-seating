@@ -388,7 +388,17 @@ class HOPE_Ajax_Handler {
             // Add each seat as a separate cart item with quantity=1
             foreach ($tier_seats as $individual_seat) {
                 error_log("HOPE: Adding individual seat {$individual_seat} from tier {$tier} as separate cart item");
-                
+
+                // Get hold expiration time for countdown timer
+                $hold_expires_at = $wpdb->get_var($wpdb->prepare(
+                    "SELECT expires_at FROM {$holds_table}
+                    WHERE seat_id = %s AND product_id = %d AND session_id = %s
+                    ORDER BY expires_at DESC LIMIT 1",
+                    $individual_seat,
+                    $product_id,
+                    $session_id
+                ));
+
                 // Create cart item data for this individual seat
                 $cart_item_data = [
                     'hope_theater_seats' => [$individual_seat], // Array with single seat
@@ -398,6 +408,7 @@ class HOPE_Ajax_Handler {
                         'tier' => $tier
                     ]],
                     'hope_session_id' => $session_id,
+                    'hope_hold_expires_at' => $hold_expires_at, // For checkout countdown timer
                     'hope_total_price' => $price_per_seat,
                     'hope_price_per_seat' => $price_per_seat,
                     'hope_seat_count' => 1, // Always 1 for individual seats

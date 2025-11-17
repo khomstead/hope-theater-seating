@@ -41,6 +41,9 @@ class HOPE_WooCommerce_Integration {
         // ALSO validate on cart page to remove expired items proactively
         add_action('woocommerce_check_cart_items', array($this, 'validate_cart_seat_holds'));
 
+        // Display countdown timer on checkout page
+        add_action('woocommerce_before_checkout_form', array($this, 'display_checkout_countdown_timer'), 5);
+
         // Integration with FooEvents ticket system (with error handling)
         add_action('woocommerce_checkout_order_processed', array($this, 'create_fooevents_ticket_data'), 20, 3);
 
@@ -1852,5 +1855,95 @@ if (class_exists('FooEvents') && !class_exists('Fooevents_Seating')) {
                 return array();
             }
         }
+
+    /**
+     * Display countdown timer on checkout page
+     */
+    public function display_checkout_countdown_timer() {
+        // Check if cart has any seating products with hold expiration
+        $earliest_expiration = null;
+
+        foreach (WC()->cart->get_cart() as $cart_item) {
+            if (isset($cart_item['hope_hold_expires_at']) && !empty($cart_item['hope_hold_expires_at'])) {
+                $expiration_time = strtotime($cart_item['hope_hold_expires_at'] . ' UTC');
+
+                if ($earliest_expiration === null || $expiration_time < $earliest_expiration) {
+                    $earliest_expiration = $expiration_time;
+                }
+            }
+        }
+
+        // If no expiration found, don't show timer
+        if ($earliest_expiration === null) {
+            return;
+        }
+
+        // Calculate remaining time in seconds
+        $remaining_seconds = max(0, $earliest_expiration - time());
+
+        ?>
+        <div class="hope-checkout-timer-notice woocommerce-info" style="margin-bottom: 1.5em; padding: 1em; background: #f7f7f7; border-left: 4px solid #ff8c00;">
+            <div style="display: flex; align-items: center; gap: 1em;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <div>
+                    <strong>Your seat reservation expires in: <span id="hope-checkout-countdown" style="font-size: 1.2em; color: #ff8c00;">--:--</span></strong>
+                    <p style="margin: 0.5em 0 0 0; font-size: 0.9em;">Complete your purchase before the timer reaches zero to secure your seats.</p>
+                </div>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+        (function() {
+            let remainingSeconds = <?php echo $remaining_seconds; ?>;
+            const countdownEl = document.getElementById('hope-checkout-countdown');
+            const timerNotice = document.querySelector('.hope-checkout-timer-notice');
+
+            function updateCountdown() {
+                if (remainingSeconds <= 0) {
+                    // Expired - show warning and refresh page
+                    if (countdownEl) {
+                        countdownEl.textContent = '0:00';
+                        countdownEl.style.color = '#cc0000';
+                    }
+                    if (timerNotice) {
+                        timerNotice.style.borderLeftColor = '#cc0000';
+                        timerNotice.innerHTML = '<div style="display: flex; align-items: center; gap: 1em;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><div><strong style="color: #cc0000;">Your seat reservation has expired!</strong><p style="margin: 0.5em 0 0 0;">The page will refresh momentarily. You will need to select your seats again.</p></div></div>';
+                    }
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 3000);
+                    return;
+                }
+
+                const minutes = Math.floor(remainingSeconds / 60);
+                const seconds = remainingSeconds % 60;
+
+                if (countdownEl) {
+                    countdownEl.textContent = minutes + ':' + seconds.toString().padStart(2, '0');
+
+                    // Change color when under 2 minutes
+                    if (remainingSeconds <= 120) {
+                        countdownEl.style.color = '#cc0000';
+                        if (timerNotice) {
+                            timerNotice.style.borderLeftColor = '#cc0000';
+                        }
+                    }
+                }
+
+                remainingSeconds--;
+            }
+
+            // Update immediately
+            updateCountdown();
+
+            // Update every second
+            setInterval(updateCountdown, 1000);
+        })();
+        </script>
+        <?php
+    }
     }
 }
