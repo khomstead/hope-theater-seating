@@ -445,6 +445,10 @@ class HOPE_Ajax_Handler {
         
         // Send response based on results
         if ($successful_additions > 0) {
+            // CRITICAL FIX: Extend hold expiration before redirecting to checkout
+            // This prevents holds from expiring during redirect/page load
+            $this->extend_hold_expiration($product_id, $session_id, $seats);
+
             wp_send_json_success([
                 'cart_url' => wc_get_checkout_url(),
                 'total' => $cart_total,
@@ -639,19 +643,52 @@ class HOPE_Ajax_Handler {
     private function get_held_seats($product_id, $session_id) {
         global $wpdb;
         $table_holds = $wpdb->prefix . 'hope_seating_holds';
-        
+
         $results = $wpdb->get_results($wpdb->prepare(
-            "SELECT seat_id FROM $table_holds 
+            "SELECT seat_id FROM $table_holds
             WHERE product_id = %d AND session_id = %s AND expires_at > NOW()",
             $product_id, $session_id
         ), ARRAY_A);
-        
+
         $seat_ids = [];
         foreach ($results as $row) {
             $seat_ids[] = $row['seat_id'];
         }
-        
+
         return $seat_ids;
+    }
+
+    /**
+     * Extend hold expiration for seats being taken to checkout
+     * CRITICAL: Prevents holds from expiring during redirect and checkout page load
+     */
+    private function extend_hold_expiration($product_id, $session_id, $seats) {
+        global $wpdb;
+        $table_holds = $wpdb->prefix . 'hope_seating_holds';
+
+        // Extend holds by full hold duration (default 15 minutes)
+        // This gives plenty of time for redirect and checkout completion
+        $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
+        $new_expiry = gmdate('Y-m-d H:i:s', time() + $hold_duration);
+
+        // Update expiration for all seats in this session/product
+        $updated = $wpdb->query($wpdb->prepare(
+            "UPDATE {$table_holds}
+            SET expires_at = %s
+            WHERE product_id = %d
+            AND session_id = %s",
+            $new_expiry,
+            $product_id,
+            $session_id
+        ));
+
+        if ($updated) {
+            error_log("HOPE: Extended hold expiration for {$updated} seats to {$new_expiry} (session: {$session_id})");
+        } else {
+            error_log("HOPE: WARNING - Failed to extend hold expiration or no holds found (session: {$session_id})");
+        }
+
+        return $updated;
     }
     
     /**

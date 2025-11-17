@@ -2,6 +2,16 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.7] - 2025-01-16
+
+### Fixed
+- **CRITICAL: Seats Removed During Checkout** - Fixed critical bug where seats were being removed from cart before checkout page loaded
+  - Root cause: Seat holds were expiring during redirect from product page to checkout
+  - Solution: Extended hold expiration by full hold duration (15 minutes) when adding seats to cart
+  - Added `extend_hold_expiration()` method in AJAX handler to refresh hold timers before checkout redirect
+  - Prevents validation failures in `validate_checkout_seat_holds()` that were removing cart items
+  - Error log: "HOPE CHECKOUT BLOCKED: No valid hold for seat..." should no longer occur during normal checkout flow
+
 ## [2.8.6] - 2025-01-16
 
 ### Changed
