@@ -2,6 +2,19 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.13] - 2025-11-17
+
+### Fixed
+- **CRITICAL: Session Data Loss During Checkout** - Fixed session regeneration destroying hold data
+  - Root cause: `session_regenerate_id(true)` was destroying session file when reinitializing
+  - When checkout page loaded, if PHP session wasn't active, would start session and immediately destroy it
+  - This created NEW `hope_seating_session_id`, making hold lookups fail
+  - Solution: Changed to `session_regenerate_id(false)` when existing session data detected
+  - Preserves session file while still regenerating ID for security against fixation attacks
+  - Added extensive debug logging to track session ID through entire checkout flow
+  - Logs now show: session creation, PHP session_id, hope_seating_session_id, regeneration events
+  - This was the root cause of "items expiring immediately" issue
+
 ## [2.8.12] - 2025-01-17
 
 ### Fixed
