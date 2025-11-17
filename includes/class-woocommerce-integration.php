@@ -1487,7 +1487,8 @@ class HOPE_WooCommerce_Integration {
 
     /**
      * Validate cart seat holds proactively (runs on cart page load)
-     * Removes items with expired holds automatically
+     * CRITICAL FIX: Extends hold expiration FIRST to keep seats reserved while customer is on checkout
+     * Then removes items with expired holds if extension failed
      */
     public function validate_cart_seat_holds() {
         if (!class_exists('HOPE_Session_Manager')) {
@@ -1501,6 +1502,24 @@ class HOPE_WooCommerce_Integration {
         $session_id = HOPE_Session_Manager::get_current_session_id();
         if (empty($session_id)) {
             return;
+        }
+
+        // CRITICAL FIX: Extend all holds for this session BEFORE validating
+        // This prevents holds from expiring while customer is actively on checkout page
+        $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
+        $new_expiry = gmdate('Y-m-d H:i:s', time() + $hold_duration);
+
+        $extended = $wpdb->query($wpdb->prepare(
+            "UPDATE {$holds_table}
+            SET expires_at = %s
+            WHERE session_id = %s
+            AND expires_at > NOW()",
+            $new_expiry,
+            $session_id
+        ));
+
+        if ($extended > 0) {
+            error_log("HOPE CART: Extended {$extended} seat holds to {$new_expiry} for session {$session_id}");
         }
 
         $items_to_remove = array();

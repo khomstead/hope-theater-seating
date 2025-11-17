@@ -2,6 +2,18 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.9] - 2025-01-16
+
+### Fixed
+- **CRITICAL: Hold Expiration During Checkout** - Fixed hold expiration issue causing no sales since v2.8.7
+  - Root cause: Holds were only extended when adding to cart, not while on checkout page
+  - Holds would expire if customer spent more than hold_duration on checkout page
+  - Solution: Auto-extend all session holds on every cart/checkout page load
+  - Modified `validate_cart_seat_holds()` to refresh holds BEFORE validation
+  - Holds now stay active as long as customer is engaged with checkout
+  - Extends by full hold_duration (15 min default) on each page view
+  - Error log: "HOPE CART: Extended X seat holds" confirms active extension
+
 ## [2.8.8] - 2025-01-16
 
 ### Fixed
