@@ -2,6 +2,36 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.21] - 2025-11-19
+
+### Added
+- **Admin Order Lookup by Seat** - New admin interface to search for orders, holds, and blocks by seat location
+  - New submenu page: HOPE Seating → Order Lookup
+  - Type-to-search product selector (replaces dropdown for better UX with many products)
+  - Flexible search: exact seat, entire row, entire section, or all seats
+  - Search fields: Product/Event (required), Section (optional), Row (optional), Seat Number (optional)
+  - Results include bookings, active holds, and seat blocks
+  - Results grouped by seat with current status first, historical records indented below
+  - Visual hierarchy: current status bold, history grayed and indented with "↳ History" label
+  - Order links open in new tab for easy access
+  - Status badges color-coded: confirmed (green), pending (yellow), refunded (red), blocked (red), on hold (blue)
+  - Shows complete seat history: purchased → refunded → blocked (all in one view)
+  - Helps identify data inconsistencies (e.g., bookings for non-existent seats)
+  - New file: `includes/class-admin-order-lookup.php`
+
+### Changed
+- **Improved Error Messages** - Better error messages when seat hold expires
+  - Changed error message ordering to prevent WooCommerce from clearing custom notices
+  - Error notices now added AFTER cart operations complete (not during)
+  - Added missing `'partially_refunded'` status to cart validation query
+
+### Fixed
+- **Cart Validation** - Fixed error messages not displaying when holds expire
+  - Root cause: `wc_add_notice()` was being called before `WC()->cart->remove_cart_item()`
+  - `WC()->cart->calculate_totals()` was clearing notices added earlier
+  - Solution: Collect error messages in array, remove items, THEN add notices
+  - Now shows specific seat numbers and product names in error messages
+
 ## [2.8.20] - 2025-11-17
 
 ### Removed

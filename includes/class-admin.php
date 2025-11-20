@@ -69,6 +69,15 @@ class HOPE_Seating_Admin {
         
         add_submenu_page(
             'hope-seating',
+            'Order Lookup',
+            'Order Lookup',
+            'manage_options',
+            'hope-seating-order-lookup',
+            array($this, 'order_lookup_page')
+        );
+
+        add_submenu_page(
+            'hope-seating',
             'Diagnostics',
             'Diagnostics',
             'manage_options',
@@ -516,7 +525,17 @@ class HOPE_Seating_Admin {
         </div>
         <?php
     }
-    
+
+    // Order Lookup page
+    public function order_lookup_page() {
+        // Instantiate order lookup class and render page
+        if (!class_exists('HOPE_Admin_Order_Lookup')) {
+            require_once HOPE_SEATING_PLUGIN_DIR . 'includes/class-admin-order-lookup.php';
+        }
+        $order_lookup = new HOPE_Admin_Order_Lookup();
+        $order_lookup->render_page();
+    }
+
     // Diagnostics page for debugging seat assignments
     public function diagnostics_page() {
         global $wpdb;

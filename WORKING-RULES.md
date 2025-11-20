@@ -371,6 +371,21 @@ If changes involve ANY of these, test EXTRA carefully:
 
 **Let the human make final commit decision, not the AI.**
 
+### Local Environment Database Access
+
+**MySQL Socket for Local By Flywheel:**
+```bash
+/Users/kyle/Library/Application Support/Local/run/k9RKJlClZ/mysql/mysqld.sock
+```
+
+**Example Query:**
+```bash
+/opt/homebrew/Cellar/mysql-client/9.4.0/bin/mysql \
+  -S "/Users/kyle/Library/Application Support/Local/run/k9RKJlClZ/mysql/mysqld.sock" \
+  -u root -proot local \
+  -e "SELECT * FROM wp_hope_seating_bookings LIMIT 10;"
+```
+
 ---
 
 ## Rule 9: Ask Questions, Don't Assume

@@ -1542,6 +1542,7 @@ class HOPE_WooCommerce_Integration {
         }
 
         $items_to_remove = array();
+        $error_messages = array(); // Collect error messages to add AFTER cart operations
 
         // Second pass: Check each cart item for expired holds
         foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
@@ -1598,13 +1599,11 @@ class HOPE_WooCommerce_Integration {
                 // Get seat names for better error message
                 $seat_names = implode(', ', $selected_seats);
 
-                wc_add_notice(
-                    sprintf(
-                        __('Your seat reservation has expired. Seats %s for "%s" are no longer held. Please select your seats again.', 'hope-theater-seating'),
-                        $seat_names,
-                        $product_name
-                    ),
-                    'error'
+                // Store error message to add AFTER cart operations complete
+                $error_messages[] = sprintf(
+                    __('Your seat reservation for %s has expired or was taken by another customer. Please return to "%s" and select your seats again.', 'hope-theater-seating'),
+                    $seat_names,
+                    $product_name
                 );
             }
         }
@@ -1617,6 +1616,11 @@ class HOPE_WooCommerce_Integration {
 
             // Force cart totals recalculation to update display
             WC()->cart->calculate_totals();
+
+            // NOW add error messages AFTER cart operations are complete
+            foreach ($error_messages as $message) {
+                wc_add_notice($message, 'error');
+            }
         }
     }
 
