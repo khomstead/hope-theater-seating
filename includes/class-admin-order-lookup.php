@@ -567,12 +567,6 @@ class HOPE_Admin_Order_Lookup {
         // Combine bookings, holds, and blocks
         $all_results = array_merge($bookings, $holds, $block_results);
 
-        // Debug: Log all results before grouping
-        error_log("HOPE Order Lookup: All results before grouping:");
-        foreach ($all_results as $result) {
-            error_log("  - {$result->seat_id} ({$result->record_type}): " . ($result->order_id ? "Order {$result->order_id}" : "N/A"));
-        }
-
         // Group results by seat_id
         $grouped_results = array();
         foreach ($all_results as $record) {
@@ -591,9 +585,6 @@ class HOPE_Admin_Order_Lookup {
                 return strtotime($b->created_at) - strtotime($a->created_at);
             });
         }
-
-        // Debug logging
-        error_log("HOPE Order Lookup: Found " . count($bookings) . " bookings, " . count($holds) . " holds, and " . count($block_results) . " blocks for product {$product_id} with pattern '{$seat_pattern}'");
 
         // Format results - flatten grouped results with current status first, then history
         $results = array();
@@ -635,12 +626,9 @@ class HOPE_Admin_Order_Lookup {
                     );
                 } else {
                     // Process booking record
-                    error_log("HOPE Order Lookup: Processing booking - seat: {$record->seat_id}, order: {$record->order_id}, status: {$record->booking_status}");
-
                     $order = wc_get_order($record->order_id);
 
                     if (!$order) {
-                        error_log("HOPE Order Lookup: Order {$record->order_id} not found, skipping");
                         continue;
                     }
 
