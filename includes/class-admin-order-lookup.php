@@ -525,6 +525,7 @@ class HOPE_Admin_Order_Lookup {
 
         // Process blocks to extract individual seats matching the pattern
         $block_results = array();
+
         foreach ($blocks as $block) {
             $seat_ids = json_decode($block->seat_ids, true);
             if (!is_array($seat_ids)) {
@@ -532,12 +533,22 @@ class HOPE_Admin_Order_Lookup {
             }
 
             foreach ($seat_ids as $seat_id) {
-                // Check if this seat matches the search pattern
-                if ($seat_pattern === '%' ||
-                    ($seat_pattern !== '%' && strpos($seat_pattern, '%') !== false &&
-                     fnmatch(str_replace('%', '*', $seat_pattern), $seat_id)) ||
-                    ($seat_pattern === $seat_id)) {
+                // Check if this seat matches the search pattern using SQL LIKE-style matching
+                $matches = false;
 
+                if ($seat_pattern === '%') {
+                    // Match all seats
+                    $matches = true;
+                } elseif (strpos($seat_pattern, '%') !== false) {
+                    // Pattern has wildcards - convert SQL LIKE pattern to regex
+                    $regex_pattern = '/^' . str_replace('%', '.*', preg_quote($seat_pattern, '/')) . '$/';
+                    $matches = preg_match($regex_pattern, $seat_id);
+                } else {
+                    // Exact match
+                    $matches = ($seat_pattern === $seat_id);
+                }
+
+                if ($matches) {
                     $block_results[] = (object) array(
                         'seat_id' => $seat_id,
                         'order_id' => null,
@@ -556,6 +567,12 @@ class HOPE_Admin_Order_Lookup {
         // Combine bookings, holds, and blocks
         $all_results = array_merge($bookings, $holds, $block_results);
 
+        // Debug: Log all results before grouping
+        error_log("HOPE Order Lookup: All results before grouping:");
+        foreach ($all_results as $result) {
+            error_log("  - {$result->seat_id} ({$result->record_type}): " . ($result->order_id ? "Order {$result->order_id}" : "N/A"));
+        }
+
         // Group results by seat_id
         $grouped_results = array();
         foreach ($all_results as $record) {
@@ -565,8 +582,8 @@ class HOPE_Admin_Order_Lookup {
             $grouped_results[$record->seat_id][] = $record;
         }
 
-        // Sort seats
-        ksort($grouped_results);
+        // Sort seats using natural sort (handles A1-2, A1-10 correctly)
+        uksort($grouped_results, 'strnatcmp');
 
         // Within each seat, sort by date (most recent first)
         foreach ($grouped_results as $seat_id => &$records) {
