@@ -69,42 +69,57 @@ class HOPE_Refund_Handler {
         $order_id = $refund->get_parent_id();
         error_log("HOPE REFUND: Processing partial refund {$refund_id} for order {$order_id}");
 
-        // CRITICAL FIX: Check if this is truly a full refund before releasing seats
-        // Partial refunds (like parking only) should NOT release theater seats
+        // CRITICAL FIX: Only release seats if SEATING PRODUCTS are being refunded
+        // Refunding parking, donations, or other add-ons should NOT release theater seats
         $order = wc_get_order($order_id);
         if (!$order) {
             return;
         }
 
-        // Check if this is a full refund by comparing refund total to order total
-        $order_total = floatval($order->get_total());
-        $refunded_total = floatval($order->get_total_refunded());
-
         // CRITICAL: For $0 orders, never release seats on refund
         // $0 orders are typically comps/guest list and should be managed manually
+        $order_total = floatval($order->get_total());
         if ($order_total == 0) {
             error_log("HOPE REFUND: $0 order detected - NOT releasing seats (comps/guest list)");
             return;
         }
 
-        // Only process seat releases if 100% of order is refunded
-        if ($refunded_total >= $order_total) {
-            error_log("HOPE REFUND: Full refund detected in partial handler ({$refunded_total} >= {$order_total})");
-
-            // Get refunded line items
-            foreach ($refund->get_items() as $item_id => $item) {
-                // In partial refunds, we need to find the original item being refunded
-                $original_item_id = $item->get_meta('_refunded_item_id');
-                if ($original_item_id) {
-                    $this->release_item_seats($order_id, $original_item_id, 'partially_refunded');
-                } else {
-                    // Fallback: use the item ID directly if meta not set
-                    error_log("HOPE REFUND: No _refunded_item_id meta found, using item ID {$item_id}");
-                    $this->release_item_seats($order_id, $item_id, 'partially_refunded');
-                }
+        // Check if any SEATING PRODUCTS are in this refund
+        $has_seating_items = false;
+        foreach ($refund->get_items() as $item_id => $item) {
+            // Get the original order item being refunded
+            $original_item_id = $item->get_meta('_refunded_item_id');
+            if (!$original_item_id) {
+                continue;
             }
-        } else {
-            error_log("HOPE REFUND: Partial refund in partial handler ({$refunded_total} < {$order_total}), NOT releasing seats");
+
+            // Get the original item from the parent order
+            $original_item = $order->get_item($original_item_id);
+            if (!$original_item) {
+                continue;
+            }
+
+            // Check if this product has theater seating enabled
+            $product_id = $original_item->get_product_id();
+            if ($this->is_seating_product($product_id)) {
+                $has_seating_items = true;
+                error_log("HOPE REFUND: Seating product detected in refund - Product ID {$product_id}");
+                break;
+            }
+        }
+
+        if (!$has_seating_items) {
+            error_log("HOPE REFUND: No seating products in this refund - NOT releasing seats (likely parking/add-on refund)");
+            return;
+        }
+
+        // Only process if seating products are being refunded
+        error_log("HOPE REFUND: Seating products found in refund, processing seat release");
+        foreach ($refund->get_items() as $item_id => $item) {
+            $original_item_id = $item->get_meta('_refunded_item_id');
+            if ($original_item_id) {
+                $this->release_item_seats($order_id, $original_item_id, 'partially_refunded');
+            }
         }
     }
     
@@ -118,30 +133,68 @@ class HOPE_Refund_Handler {
     public function handle_order_refunded($order_id, $refund_id) {
         error_log("HOPE REFUND: Order {$order_id} refunded (refund ID: {$refund_id})");
 
-        // CRITICAL FIX: Only release seats if the ENTIRE order is refunded
+        // CRITICAL FIX: Only release seats if SEATING PRODUCTS are being refunded
         // Partial refunds (like parking only) should NOT release theater seats
         $order = wc_get_order($order_id);
         if (!$order) {
             return;
         }
 
-        // Check if this is a full refund by comparing refund total to order total
-        $order_total = floatval($order->get_total());
-        $refunded_total = floatval($order->get_total_refunded());
-
         // CRITICAL: For $0 orders, never release seats on refund
         // $0 orders are typically comps/guest list and should be managed manually
+        $order_total = floatval($order->get_total());
         if ($order_total == 0) {
             error_log("HOPE REFUND: $0 order detected - NOT releasing seats (comps/guest list)");
             return;
         }
 
-        // Only release seats if 100% of order is refunded
+        // Get the refund object to check what items are being refunded
+        $refund = wc_get_order($refund_id);
+        if (!$refund) {
+            error_log("HOPE REFUND: Could not get refund object for ID {$refund_id}");
+            return;
+        }
+
+        // Check if any SEATING PRODUCTS are in this refund
+        $has_seating_items = false;
+        foreach ($refund->get_items() as $item_id => $item) {
+            $original_item_id = $item->get_meta('_refunded_item_id');
+            if (!$original_item_id) {
+                continue;
+            }
+
+            $original_item = $order->get_item($original_item_id);
+            if (!$original_item) {
+                continue;
+            }
+
+            $product_id = $original_item->get_product_id();
+            if ($this->is_seating_product($product_id)) {
+                $has_seating_items = true;
+                error_log("HOPE REFUND: Seating product detected in refund - Product ID {$product_id}");
+                break;
+            }
+        }
+
+        if (!$has_seating_items) {
+            error_log("HOPE REFUND: No seating products in this refund - NOT releasing seats (likely parking/add-on refund)");
+            return;
+        }
+
+        // Check if this is a full refund of seating products
+        $refunded_total = floatval($order->get_total_refunded());
         if ($refunded_total >= $order_total) {
-            error_log("HOPE REFUND: Full refund detected ({$refunded_total} >= {$order_total}), releasing seats");
+            error_log("HOPE REFUND: Full refund detected ({$refunded_total} >= {$order_total}), releasing ALL seats");
             $this->release_order_seats($order_id, 'refunded');
         } else {
-            error_log("HOPE REFUND: Partial refund detected ({$refunded_total} < {$order_total}), NOT releasing seats");
+            error_log("HOPE REFUND: Partial seating refund detected ({$refunded_total} < {$order_total}), releasing specific items");
+            // Release only the specific items being refunded
+            foreach ($refund->get_items() as $item_id => $item) {
+                $original_item_id = $item->get_meta('_refunded_item_id');
+                if ($original_item_id) {
+                    $this->release_item_seats($order_id, $original_item_id, 'partially_refunded');
+                }
+            }
         }
     }
     
@@ -156,30 +209,66 @@ class HOPE_Refund_Handler {
             $order_id = $args['order_id'];
             error_log("HOPE REFUND: Refund created for order {$order_id} (refund ID: {$refund_id})");
 
-            // CRITICAL FIX: Only release seats if the ENTIRE order is refunded
+            // CRITICAL FIX: Only release seats if SEATING PRODUCTS are being refunded
             // Partial refunds (like parking only) should NOT release theater seats
             $order = wc_get_order($order_id);
             if (!$order) {
                 return;
             }
 
-            // Check if this is a full refund by comparing refund total to order total
-            $order_total = floatval($order->get_total());
-            $refunded_total = floatval($order->get_total_refunded());
-
             // CRITICAL: For $0 orders, never release seats on refund
             // $0 orders are typically comps/guest list and should be managed manually
+            $order_total = floatval($order->get_total());
             if ($order_total == 0) {
                 error_log("HOPE REFUND: $0 order detected - NOT releasing seats (comps/guest list)");
                 return;
             }
 
-            // Only release seats if 100% of order is refunded
+            // Get the refund object to check what items are being refunded
+            $refund = wc_get_order($refund_id);
+            if (!$refund) {
+                return;
+            }
+
+            // Check if any SEATING PRODUCTS are in this refund
+            $has_seating_items = false;
+            foreach ($refund->get_items() as $item_id => $item) {
+                $original_item_id = $item->get_meta('_refunded_item_id');
+                if (!$original_item_id) {
+                    continue;
+                }
+
+                $original_item = $order->get_item($original_item_id);
+                if (!$original_item) {
+                    continue;
+                }
+
+                $product_id = $original_item->get_product_id();
+                if ($this->is_seating_product($product_id)) {
+                    $has_seating_items = true;
+                    error_log("HOPE REFUND: Seating product detected in refund - Product ID {$product_id}");
+                    break;
+                }
+            }
+
+            if (!$has_seating_items) {
+                error_log("HOPE REFUND: No seating products in this refund - NOT releasing seats (likely parking/add-on refund)");
+                return;
+            }
+
+            // Check if this is a full refund of seating products
+            $refunded_total = floatval($order->get_total_refunded());
             if ($refunded_total >= $order_total) {
-                error_log("HOPE REFUND: Full refund detected ({$refunded_total} >= {$order_total}), releasing seats");
+                error_log("HOPE REFUND: Full refund detected ({$refunded_total} >= {$order_total}), releasing ALL seats");
                 $this->release_order_seats($order_id, 'refunded');
             } else {
-                error_log("HOPE REFUND: Partial refund detected ({$refunded_total} < {$order_total}), NOT releasing seats");
+                error_log("HOPE REFUND: Partial seating refund detected, releasing specific items");
+                foreach ($refund->get_items() as $item_id => $item) {
+                    $original_item_id = $item->get_meta('_refunded_item_id');
+                    if ($original_item_id) {
+                        $this->release_item_seats($order_id, $original_item_id, 'partially_refunded');
+                    }
+                }
             }
         }
     }
@@ -447,6 +536,17 @@ class HOPE_Refund_Handler {
         $stats['recent_refunds'] = (int)$recent_count;
 
         return $stats;
+    }
+
+    /**
+     * Check if a product has theater seating enabled
+     *
+     * @param int $product_id Product ID
+     * @return bool True if seating enabled, false otherwise
+     */
+    private function is_seating_product($product_id) {
+        $seating_enabled = get_post_meta($product_id, '_hope_seating_enabled', true);
+        return ($seating_enabled === 'yes');
     }
 
     /**
