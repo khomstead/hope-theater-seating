@@ -675,6 +675,17 @@ class HOPE_Admin_Order_Lookup {
             error_log("  FINAL: {$r['seat_id']} - Order {$r['order_id']}");
         }
 
+        // Debug info for troubleshooting
+        $debug_info = array(
+            'bookings_count' => count($bookings),
+            'blocks_count' => count($block_results),
+            'all_results_count' => count($all_results),
+            'grouped_count' => count($grouped_results),
+            'final_results_count' => count($results),
+            'grouped_seats' => array_keys($grouped_results),
+            'final_seat_ids' => array_map(function($r) { return $r['seat_id']; }, $results)
+        );
+
         wp_send_json_success(array(
             'results' => $results,
             'search_criteria' => array(
@@ -683,7 +694,8 @@ class HOPE_Admin_Order_Lookup {
                 'row_number' => $row_number,
                 'seat_number' => $seat_number,
                 'seat_pattern' => $seat_pattern
-            )
+            ),
+            'debug' => $debug_info
         ));
     }
 }
