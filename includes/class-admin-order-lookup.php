@@ -482,10 +482,6 @@ class HOPE_Admin_Order_Lookup {
         );
 
         $bookings = $wpdb->get_results($bookings_query);
-        error_log("HOPE Order Lookup: Query returned " . count($bookings) . " bookings");
-        foreach ($bookings as $b) {
-            error_log("  DB: {$b->seat_id} - Order {$b->order_id}");
-        }
 
         // Query seat blocks - get active blocks matching the pattern
         $blocks_query = $wpdb->prepare(
@@ -549,14 +545,6 @@ class HOPE_Admin_Order_Lookup {
         // Combine bookings and blocks (holds excluded - too temporary/noisy)
         $all_results = array_merge($bookings, $block_results);
 
-        // Debug: Log all seats before grouping
-        error_log("HOPE Order Lookup: Total results before grouping: " . count($all_results));
-        $all_seat_ids = array();
-        foreach ($all_results as $result) {
-            $all_seat_ids[] = $result->seat_id;
-            error_log("  - " . $result->seat_id . " (order: " . ($result->order_id ?: 'N/A') . ", status: " . $result->booking_status . ")");
-        }
-
         // Group results by seat_id
         $grouped_results = array();
         foreach ($all_results as $record) {
@@ -568,9 +556,6 @@ class HOPE_Admin_Order_Lookup {
 
         // Sort seats using natural sort (handles A1-2, A1-10 correctly)
         uksort($grouped_results, 'strnatcmp');
-
-        // Debug: Log seats after grouping and sorting
-        error_log("HOPE Order Lookup: Grouped seats after sorting: " . implode(', ', array_keys($grouped_results)));
 
         // Within each seat, sort by priority, then by date
         // Priority order: confirmed/active bookings > blocks > refunded
@@ -604,9 +589,7 @@ class HOPE_Admin_Order_Lookup {
 
         // Format results - flatten grouped results with current status first, then history
         $results = array();
-        error_log("HOPE Order Lookup: Formatting results for " . count($grouped_results) . " seats");
         foreach ($grouped_results as $seat_id => $records) {
-            error_log("  Processing seat: {$seat_id} (" . count($records) . " records)");
             $is_first = true; // First record is current status
             foreach ($records as $record) {
                 $is_current = $is_first;
@@ -665,26 +648,9 @@ class HOPE_Admin_Order_Lookup {
                         'order_date' => $order->get_date_created()->date_i18n('M j, Y g:i A'),
                         'is_current' => $is_current
                     );
-                    error_log("    Added to results: {$seat_id}");
                 }
             }
         }
-
-        error_log("HOPE Order Lookup: Final results count: " . count($results));
-        foreach ($results as $r) {
-            error_log("  FINAL: {$r['seat_id']} - Order {$r['order_id']}");
-        }
-
-        // Debug info for troubleshooting
-        $debug_info = array(
-            'bookings_count' => count($bookings),
-            'blocks_count' => count($block_results),
-            'all_results_count' => count($all_results),
-            'grouped_count' => count($grouped_results),
-            'final_results_count' => count($results),
-            'grouped_seats' => array_keys($grouped_results),
-            'final_seat_ids' => array_map(function($r) { return $r['seat_id']; }, $results)
-        );
 
         wp_send_json_success(array(
             'results' => $results,
@@ -694,8 +660,7 @@ class HOPE_Admin_Order_Lookup {
                 'row_number' => $row_number,
                 'seat_number' => $seat_number,
                 'seat_pattern' => $seat_pattern
-            ),
-            'debug' => $debug_info
+            )
         ));
     }
 }
