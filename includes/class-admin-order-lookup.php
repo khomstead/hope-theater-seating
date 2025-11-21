@@ -579,9 +579,34 @@ class HOPE_Admin_Order_Lookup {
         // Sort seats using natural sort (handles A1-2, A1-10 correctly)
         uksort($grouped_results, 'strnatcmp');
 
-        // Within each seat, sort by date (most recent first)
+        // Within each seat, sort by priority, then by date
+        // Priority order: confirmed/active bookings > blocks > holds > refunded
         foreach ($grouped_results as $seat_id => &$records) {
             usort($records, function($a, $b) {
+                // Define priority for each status
+                $priority = function($record) {
+                    if ($record->record_type === 'booking') {
+                        if (in_array($record->booking_status, array('confirmed', 'active', 'pending'))) {
+                            return 1; // Highest priority - active bookings
+                        } else {
+                            return 4; // Lowest priority - refunded bookings
+                        }
+                    } elseif ($record->record_type === 'block') {
+                        return 2; // Second priority - blocks
+                    } else { // hold
+                        return 3; // Third priority - holds
+                    }
+                };
+
+                $priority_a = $priority($a);
+                $priority_b = $priority($b);
+
+                // First sort by priority (lower number = higher priority)
+                if ($priority_a !== $priority_b) {
+                    return $priority_a - $priority_b;
+                }
+
+                // If same priority, sort by date (most recent first)
                 return strtotime($b->created_at) - strtotime($a->created_at);
             });
         }
