@@ -619,7 +619,7 @@ class HOPE_Admin_Order_Lookup {
                     $blocked_by_name = $blocked_by_user ? $blocked_by_user->display_name : 'Unknown';
 
                     $results[] = array(
-                        'seat_id' => $record->seat_id,
+                        'seat_id' => $seat_id,
                         'order_id' => null,
                         'order_edit_url' => null,
                         'customer_name' => 'Blocked (' . $block_type_label . ')',
@@ -636,7 +636,7 @@ class HOPE_Admin_Order_Lookup {
                     if (!$order) {
                         // Order not found or invalid - still show the booking record with available data
                         $results[] = array(
-                            'seat_id' => $record->seat_id,
+                            'seat_id' => $seat_id,
                             'order_id' => $record->order_id,
                             'order_edit_url' => admin_url('post.php?post=' . $record->order_id . '&action=edit'),
                             'customer_name' => 'Unknown (Order #' . $record->order_id . ' not found)',
@@ -655,7 +655,7 @@ class HOPE_Admin_Order_Lookup {
                     }
 
                     $results[] = array(
-                        'seat_id' => $record->seat_id,
+                        'seat_id' => $seat_id,
                         'order_id' => $record->order_id,
                         'order_edit_url' => admin_url('post.php?post=' . $record->order_id . '&action=edit'),
                         'customer_name' => $customer_name,
@@ -665,7 +665,7 @@ class HOPE_Admin_Order_Lookup {
                         'order_date' => $order->get_date_created()->date_i18n('M j, Y g:i A'),
                         'is_current' => $is_current
                     );
-                    error_log("    Added to results: {$record->seat_id}");
+                    error_log("    Added to results: {$seat_id}");
                 }
             }
         }
