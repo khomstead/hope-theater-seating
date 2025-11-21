@@ -545,20 +545,12 @@ class HOPE_Admin_Order_Lookup {
         // Combine bookings and blocks (holds excluded - too temporary/noisy)
         $all_results = array_merge($bookings, $block_results);
 
-        // Debug: Check for duplicates before grouping
+        // Debug: Log all seats before grouping
         error_log("HOPE Order Lookup: Total results before grouping: " . count($all_results));
-        $seat_count = array();
+        $all_seat_ids = array();
         foreach ($all_results as $result) {
-            $key = $result->seat_id . '-' . $result->record_type;
-            if (!isset($seat_count[$key])) {
-                $seat_count[$key] = 0;
-            }
-            $seat_count[$key]++;
-        }
-        foreach ($seat_count as $key => $count) {
-            if ($count > 1) {
-                error_log("HOPE Order Lookup: DUPLICATE FOUND - {$key} appears {$count} times");
-            }
+            $all_seat_ids[] = $result->seat_id;
+            error_log("  - " . $result->seat_id . " (order: " . ($result->order_id ?: 'N/A') . ", status: " . $result->booking_status . ")");
         }
 
         // Group results by seat_id
@@ -572,6 +564,9 @@ class HOPE_Admin_Order_Lookup {
 
         // Sort seats using natural sort (handles A1-2, A1-10 correctly)
         uksort($grouped_results, 'strnatcmp');
+
+        // Debug: Log seats after grouping and sorting
+        error_log("HOPE Order Lookup: Grouped seats after sorting: " . implode(', ', array_keys($grouped_results)));
 
         // Within each seat, sort by priority, then by date
         // Priority order: confirmed/active bookings > blocks > refunded
