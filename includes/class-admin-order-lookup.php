@@ -444,7 +444,6 @@ class HOPE_Admin_Order_Lookup {
 
         global $wpdb;
         $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
-        $holds_table = $wpdb->prefix . 'hope_seating_holds';
         $blocks_table = $wpdb->prefix . 'hope_seating_seat_blocks';
 
         // Build seat ID pattern for LIKE query
@@ -483,27 +482,6 @@ class HOPE_Admin_Order_Lookup {
         );
 
         $bookings = $wpdb->get_results($bookings_query);
-
-        // Query holds - get active holds (not yet purchased)
-        $holds_query = $wpdb->prepare(
-            "SELECT
-                h.seat_id,
-                NULL as order_id,
-                h.user_email as customer_email,
-                'on_hold' as booking_status,
-                h.created_at,
-                'hold' as record_type,
-                h.expires_at
-            FROM {$holds_table} h
-            WHERE h.product_id = %d
-            AND h.seat_id LIKE %s
-            AND h.expires_at > NOW()
-            ORDER BY h.seat_id ASC, h.created_at DESC",
-            $product_id,
-            $seat_pattern
-        );
-
-        $holds = $wpdb->get_results($holds_query);
 
         // Query seat blocks - get active blocks matching the pattern
         $blocks_query = $wpdb->prepare(
@@ -564,8 +542,8 @@ class HOPE_Admin_Order_Lookup {
             }
         }
 
-        // Combine bookings, holds, and blocks
-        $all_results = array_merge($bookings, $holds, $block_results);
+        // Combine bookings and blocks (holds excluded - too temporary/noisy)
+        $all_results = array_merge($bookings, $block_results);
 
         // Group results by seat_id
         $grouped_results = array();
@@ -580,7 +558,7 @@ class HOPE_Admin_Order_Lookup {
         uksort($grouped_results, 'strnatcmp');
 
         // Within each seat, sort by priority, then by date
-        // Priority order: confirmed/active bookings > blocks > holds > refunded
+        // Priority order: confirmed/active bookings > blocks > refunded
         foreach ($grouped_results as $seat_id => &$records) {
             usort($records, function($a, $b) {
                 // Define priority for each status
@@ -589,12 +567,10 @@ class HOPE_Admin_Order_Lookup {
                         if (in_array($record->booking_status, array('confirmed', 'active', 'pending'))) {
                             return 1; // Highest priority - active bookings
                         } else {
-                            return 4; // Lowest priority - refunded bookings
+                            return 3; // Lowest priority - refunded bookings
                         }
-                    } elseif ($record->record_type === 'block') {
+                    } else { // block
                         return 2; // Second priority - blocks
-                    } else { // hold
-                        return 3; // Third priority - holds
                     }
                 };
 
@@ -619,20 +595,7 @@ class HOPE_Admin_Order_Lookup {
                 $is_current = $is_first;
                 $is_first = false;
 
-                if ($record->record_type === 'hold') {
-                    // Process hold record
-                    $results[] = array(
-                        'seat_id' => $record->seat_id,
-                        'order_id' => null,
-                        'order_edit_url' => null,
-                        'customer_name' => 'Hold (Not Purchased)',
-                        'customer_email' => $record->customer_email ? $record->customer_email : 'N/A',
-                        'booking_status' => 'on_hold',
-                        'order_status' => 'N/A',
-                        'order_date' => 'Expires: ' . mysql2date('M j, Y g:i A', $record->expires_at),
-                        'is_current' => $is_current
-                    );
-                } elseif ($record->record_type === 'block') {
+                if ($record->record_type === 'block') {
                     // Process block record
                     $block_type_label = ucfirst($record->block_type);
                     $blocked_by_user = get_userdata($record->blocked_by);
