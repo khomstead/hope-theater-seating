@@ -545,6 +545,22 @@ class HOPE_Admin_Order_Lookup {
         // Combine bookings and blocks (holds excluded - too temporary/noisy)
         $all_results = array_merge($bookings, $block_results);
 
+        // Debug: Check for duplicates before grouping
+        error_log("HOPE Order Lookup: Total results before grouping: " . count($all_results));
+        $seat_count = array();
+        foreach ($all_results as $result) {
+            $key = $result->seat_id . '-' . $result->record_type;
+            if (!isset($seat_count[$key])) {
+                $seat_count[$key] = 0;
+            }
+            $seat_count[$key]++;
+        }
+        foreach ($seat_count as $key => $count) {
+            if ($count > 1) {
+                error_log("HOPE Order Lookup: DUPLICATE FOUND - {$key} appears {$count} times");
+            }
+        }
+
         // Group results by seat_id
         $grouped_results = array();
         foreach ($all_results as $record) {
