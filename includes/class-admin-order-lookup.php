@@ -482,6 +482,10 @@ class HOPE_Admin_Order_Lookup {
         );
 
         $bookings = $wpdb->get_results($bookings_query);
+        error_log("HOPE Order Lookup: Query returned " . count($bookings) . " bookings");
+        foreach ($bookings as $b) {
+            error_log("  DB: {$b->seat_id} - Order {$b->order_id}");
+        }
 
         // Query seat blocks - get active blocks matching the pattern
         $blocks_query = $wpdb->prepare(
@@ -600,7 +604,9 @@ class HOPE_Admin_Order_Lookup {
 
         // Format results - flatten grouped results with current status first, then history
         $results = array();
+        error_log("HOPE Order Lookup: Formatting results for " . count($grouped_results) . " seats");
         foreach ($grouped_results as $seat_id => $records) {
+            error_log("  Processing seat: {$seat_id} (" . count($records) . " records)");
             $is_first = true; // First record is current status
             foreach ($records as $record) {
                 $is_current = $is_first;
@@ -628,6 +634,18 @@ class HOPE_Admin_Order_Lookup {
                     $order = wc_get_order($record->order_id);
 
                     if (!$order) {
+                        // Order not found or invalid - still show the booking record with available data
+                        $results[] = array(
+                            'seat_id' => $record->seat_id,
+                            'order_id' => $record->order_id,
+                            'order_edit_url' => admin_url('post.php?post=' . $record->order_id . '&action=edit'),
+                            'customer_name' => 'Unknown (Order #' . $record->order_id . ' not found)',
+                            'customer_email' => $record->customer_email ? $record->customer_email : 'N/A',
+                            'booking_status' => $record->booking_status,
+                            'order_status' => 'Order Not Found',
+                            'order_date' => mysql2date('M j, Y g:i A', $record->created_at),
+                            'is_current' => $is_current
+                        );
                         continue;
                     }
 
@@ -647,8 +665,14 @@ class HOPE_Admin_Order_Lookup {
                         'order_date' => $order->get_date_created()->date_i18n('M j, Y g:i A'),
                         'is_current' => $is_current
                     );
+                    error_log("    Added to results: {$record->seat_id}");
                 }
             }
+        }
+
+        error_log("HOPE Order Lookup: Final results count: " . count($results));
+        foreach ($results as $r) {
+            error_log("  FINAL: {$r['seat_id']} - Order {$r['order_id']}");
         }
 
         wp_send_json_success(array(
