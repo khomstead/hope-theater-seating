@@ -84,6 +84,15 @@ class HOPE_Seating_Admin {
             'hope-seating-diagnostics',
             array($this, 'diagnostics_page')
         );
+
+        add_submenu_page(
+            'hope-seating',
+            'Printable Chart',
+            'Printable Chart',
+            'manage_options',
+            'hope-seating-printable-chart',
+            array($this, 'printable_chart_page')
+        );
     }
     
     public function init_settings() {
@@ -534,6 +543,11 @@ class HOPE_Seating_Admin {
         }
         $order_lookup = new HOPE_Admin_Order_Lookup();
         $order_lookup->render_page();
+    }
+
+    // Printable seating chart page
+    public function printable_chart_page() {
+        include plugin_dir_path(dirname(__FILE__)) . 'admin/printable-chart.php';
     }
 
     // Diagnostics page for debugging seat assignments
