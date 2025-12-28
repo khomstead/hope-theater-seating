@@ -500,11 +500,18 @@ class HOPEWooCommerceIntegration {
             if (data.success && data.data.seats && data.data.seats.length > 0) {
                 console.log('Found seats in cart for product page display:', data.data.seats);
                 console.log('Cart total from server:', data.data.total);
-                
+
                 this.selectedSeats = new Set(data.data.seats);
                 this.updateSelectedSeatsDisplay(data.data.seats, data.data.total);
                 this.getVariationForSeats(data.data.seats);
-                
+
+                // CRITICAL: Sync with seat map so selectedSeats Set is updated
+                // This ensures clicking a new seat after returning from checkout works correctly
+                if (window.hopeSeatMap && window.hopeSeatMap.selectSeats) {
+                    console.log('Syncing cart seats to seat map selectedSeats Set');
+                    window.hopeSeatMap.selectSeats(data.data.seats);
+                }
+
                 // Update the select seats button
                 const selectButton = document.querySelector('#hope-select-seats-main, #hope-select-seats');
                 if (selectButton) {
