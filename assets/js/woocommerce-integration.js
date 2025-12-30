@@ -476,7 +476,40 @@ class HOPEWooCommerceIntegration {
             }
         });
     }
-    
+
+    /**
+     * Sync seats to the seat map's selectedSeats Set
+     * Waits for hopeSeatMap to be available if it isn't yet
+     */
+    syncSeatsToSeatMap(seats) {
+        const attemptSync = (retries = 0) => {
+            if (window.hopeSeatMap && window.hopeSeatMap.selectSeats) {
+                console.log('Syncing cart seats to seat map selectedSeats Set:', seats);
+                // First clear any existing selections to avoid duplicates
+                if (window.hopeSeatMap.selectedSeats) {
+                    window.hopeSeatMap.selectedSeats.clear();
+                }
+                // Add each seat directly to the Set (avoid triggering holdSeats for each)
+                seats.forEach(seatId => {
+                    window.hopeSeatMap.selectedSeats.add(seatId);
+                    // Also update visual state
+                    const seatEl = document.querySelector(`[data-id="${seatId}"]`);
+                    if (seatEl) {
+                        seatEl.classList.add('selected');
+                        seatEl.setAttribute('fill', '#28a745');
+                    }
+                });
+                console.log('Seat map selectedSeats now has', window.hopeSeatMap.selectedSeats.size, 'seats');
+            } else if (retries < 20) {
+                // hopeSeatMap not ready yet, retry in 100ms
+                setTimeout(() => attemptSync(retries + 1), 100);
+            } else {
+                console.warn('Could not sync seats to seat map - hopeSeatMap not available after 2 seconds');
+            }
+        };
+        attemptSync();
+    }
+
     restoreProductPageDisplay() {
         // Check if there are seats in the cart for this product
         if (typeof hope_ajax === 'undefined' || !hope_ajax.product_id || hope_ajax.product_id === '0') {
@@ -507,10 +540,7 @@ class HOPEWooCommerceIntegration {
 
                 // CRITICAL: Sync with seat map so selectedSeats Set is updated
                 // This ensures clicking a new seat after returning from checkout works correctly
-                if (window.hopeSeatMap && window.hopeSeatMap.selectSeats) {
-                    console.log('Syncing cart seats to seat map selectedSeats Set');
-                    window.hopeSeatMap.selectSeats(data.data.seats);
-                }
+                this.syncSeatsToSeatMap(data.data.seats);
 
                 // Update the select seats button
                 const selectButton = document.querySelector('#hope-select-seats-main, #hope-select-seats');

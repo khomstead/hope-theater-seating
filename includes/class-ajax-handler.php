@@ -3,15 +3,14 @@
  * AJAX Handler Class
  * Manages all AJAX requests for seat selection
  */
-
 if (!defined('ABSPATH')) {
     exit;
 }
 
 class HOPE_Ajax_Handler {
-    
+
     private $current_product_id = 0;
-    
+
     public function __construct() {
         // Register AJAX actions
         add_action('wp_ajax_hope_check_availability', array($this, 'check_availability'));
@@ -141,50 +140,40 @@ class HOPE_Ajax_Handler {
         $product_id = intval($_POST['product_id']);
         $seats = json_decode(stripslashes($_POST['seats']), true);
         $session_id = sanitize_text_field($_POST['session_id']);
-        
+
         // Set current product ID for use in other methods
         $this->current_product_id = $product_id;
-        
-        // DEBUG: Log what we received
-        error_log("HOPE hold_seats: Received raw seats data: " . $_POST['seats']);
-        error_log("HOPE hold_seats: Decoded seats array: " . print_r($seats, true));
-        error_log("HOPE hold_seats: Session ID: {$session_id}");
-        
+
         if (empty($seats) || empty($session_id)) {
             wp_send_json_error(['message' => 'Invalid request']);
         }
-        
+
         // Check maximum seats per order
         if (count($seats) > 10) {
             wp_send_json_error(['message' => 'Maximum 10 seats per order']);
         }
-        
+
         global $wpdb;
         $table_holds = $wpdb->prefix . 'hope_seating_holds';
-        
+
         // First, release any existing holds for this session
-        $deleted = $wpdb->delete($table_holds, [
+        $wpdb->delete($table_holds, [
             'session_id' => $session_id,
             'product_id' => $product_id
         ]);
-        
-        error_log("Released {$deleted} existing holds for session {$session_id}");
-        
-        $success = true;
+
         $held_seats = [];
         // Get hold duration from admin settings
         $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
         // Use gmdate() to match MySQL NOW() which uses UTC
         $expires_at = gmdate('Y-m-d H:i:s', time() + $hold_duration);
-        
+
         $unavailable_seats = [];
-        
+
         foreach ($seats as $seat_id) {
             // Check if seat is available
             $is_available = $this->is_seat_available($product_id, $seat_id, $session_id);
-            
-            error_log("Seat {$seat_id} availability: " . ($is_available ? 'available' : 'not available'));
-            
+
             if ($is_available) {
                 $result = $wpdb->insert($table_holds, [
                     'product_id' => $product_id,
@@ -193,17 +182,12 @@ class HOPE_Ajax_Handler {
                     'expires_at' => $expires_at,
                     'created_at' => gmdate('Y-m-d H:i:s')
                 ]);
-                
+
                 if ($result) {
                     $held_seats[] = $seat_id;
-                    error_log("Successfully held seat {$seat_id}");
-                } else {
-                    $success = false;
-                    error_log("Failed to hold seat {$seat_id}: " . $wpdb->last_error);
                 }
             } else {
                 $unavailable_seats[] = $seat_id;
-                error_log("Seat {$seat_id} is not available for holding");
             }
         }
         
@@ -239,73 +223,75 @@ class HOPE_Ajax_Handler {
      * Add selected seats to cart
      */
     public function add_to_cart() {
-        error_log('HOPE: add_to_cart called with data: ' . print_r($_POST, true));
-        
+        $debug_file = '/tmp/hope_debug.log';
+        file_put_contents($debug_file, "\n" . date('Y-m-d H:i:s') . " === add_to_cart CALLED ===\n", FILE_APPEND);
+
         // Verify nonce
         if (!wp_verify_nonce($_POST['nonce'], 'hope_seating_nonce')) {
-            error_log('HOPE: Nonce verification failed');
             wp_die('Security check failed');
         }
-        
+
         $product_id = intval($_POST['product_id']);
         $seats = json_decode(stripslashes($_POST['seats']), true);
         $session_id = sanitize_text_field($_POST['session_id']);
-        
+
         // Set current product ID for pricing methods
         $this->current_product_id = $product_id;
-        
-        error_log("HOPE: Processing add_to_cart - Product ID: {$product_id}, Seats: " . print_r($seats, true) . ", Session: {$session_id}");
-        
+
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " Product: {$product_id}, Seats from JS: " . implode(', ', $seats ?: []) . ", Session: {$session_id}\n", FILE_APPEND);
+
         if (empty($seats)) {
-            error_log('HOPE: No seats selected');
             wp_send_json_error(['message' => 'No seats selected']);
         }
-        
+
         // Check if WooCommerce is available
         if (!function_exists('WC') || !WC()->cart) {
-            error_log('HOPE: WooCommerce cart not available');
             wp_send_json_error(['message' => 'Shopping cart not available']);
         }
-        
+
         // Check if product exists
         $product = wc_get_product($product_id);
         if (!$product) {
-            error_log("HOPE: Product {$product_id} not found");
             wp_send_json_error(['message' => 'Product not found']);
         }
-        
-        error_log("HOPE: Product found: {$product->get_name()}, Type: {$product->get_type()}");
-        
+
+        // CRITICAL: Get valid cart seats BEFORE removing them (for back-from-checkout validation)
+        // This checks cart items' own session IDs for valid holds, not the current session
+        // Must happen before remove_existing_seats_from_cart() which clears the cart
+        // Also get the original session IDs so we can properly transfer holds
+        $cart_seats_data = $this->get_valid_cart_seats_with_holds($product_id, true);
+        $valid_cart_seats_before_clear = $cart_seats_data['seats'];
+        $original_seat_sessions = $cart_seats_data['sessions']; // Maps seat_id => original session_id
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " Valid cart seats before clear: " . implode(', ', $valid_cart_seats_before_clear ?: ['none']) . "\n", FILE_APPEND);
+
         // Remove any existing cart items for this product to prevent duplicates
         $this->remove_existing_seats_from_cart($product_id);
-        
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " Cart cleared for product {$product_id}\n", FILE_APPEND);
+
         // Handle variable products - need to map seats to their appropriate variations
         $available_variations = [];
         $variation_map = [];
-        
+
         if ($product->is_type('variable')) {
-            error_log('HOPE: Product is variable, getting available variations');
             $available_variations = $product->get_available_variations();
-            
+
             if (empty($available_variations)) {
-                error_log('HOPE: No available variations found');
                 wp_send_json_error(['message' => 'No available ticket options found']);
             }
-            
+
             // Create a map of seating-tier to variation_id
             foreach ($available_variations as $variation) {
                 $attributes = $variation['attributes'];
                 $tier = null;
-                
+
                 // Look for tier attribute with different possible names and cases
                 foreach ($attributes as $attr_key => $attr_value) {
                     if (stripos($attr_key, 'tier') !== false || stripos($attr_key, 'seating') !== false) {
                         $tier = strtolower($attr_value); // Normalize to lowercase
-                        error_log("HOPE: Found tier attribute {$attr_key} = {$attr_value} (normalized: {$tier})");
                         break;
                     }
                 }
-                
+
                 if ($tier) {
                     $variation_map[$tier] = [
                         'variation_id' => $variation['variation_id'],
@@ -313,85 +299,134 @@ class HOPE_Ajax_Handler {
                     ];
                 }
             }
-            
-            error_log('HOPE: All available variations: ' . print_r($available_variations, true));
-            error_log('HOPE: Available variation map: ' . print_r($variation_map, true));
         }
-        
-        // Get currently held seats for this session (may be fewer than requested if some were unavailable)
+
+        // Get currently held seats for this session (the NEW seats being selected)
         $actually_held_seats = $this->get_held_seats($product_id, $session_id);
-        error_log('HOPE: Currently held seats: ' . print_r($actually_held_seats, true));
-        error_log('HOPE: Requested seats: ' . print_r($seats, true));
-        error_log('HOPE: Requested seat count: ' . count($seats) . ', Actually held count: ' . count($actually_held_seats));
-        
-        if (empty($actually_held_seats)) {
-            error_log('HOPE: No seats are currently held for this session');
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " Held seats for current session: " . implode(',', $actually_held_seats ?: ['none']) . "\n", FILE_APPEND);
+
+        // Use the valid cart seats we captured BEFORE clearing the cart
+        // These are seats from cart items that still have valid holds (using their own session IDs)
+        $valid_cart_seats = $valid_cart_seats_before_clear;
+
+        // Combine: newly held seats (current session) + preserved cart seats (their own sessions)
+        $all_valid_seats = array_unique(array_merge($actually_held_seats, $valid_cart_seats));
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " All valid seats (held + cart): " . implode(',', $all_valid_seats ?: ['none']) . "\n", FILE_APPEND);
+
+        // Filter requested seats to only include those that are valid
+        // BUT ALSO include valid cart seats even if not in the new selection
+        $seats_to_add = array_unique(array_merge(
+            array_intersect($seats, $all_valid_seats),  // Requested seats that are valid
+            $valid_cart_seats                            // Previously carted seats with valid holds
+        ));
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " Final seats to add: " . implode(',', $seats_to_add ?: ['none']) . "\n", FILE_APPEND);
+
+        if (empty($seats_to_add)) {
+            file_put_contents($debug_file, date('Y-m-d H:i:s') . " ERROR: No valid seats to add!\n", FILE_APPEND);
             wp_send_json_error(['message' => 'No seats are currently held. Please select seats first.']);
         }
-        
-        // Show discrepancy warning if counts don't match
-        if (count($seats) !== count($actually_held_seats)) {
-            $missing_seats = array_diff($seats, $actually_held_seats);
-            error_log('HOPE: WARNING - Seat count mismatch! Missing seats: ' . print_r($missing_seats, true));
+
+        // Use validated seats
+        $seats = array_values($seats_to_add);
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " Proceeding to add " . count($seats) . " seats: " . implode(',', $seats) . "\n", FILE_APPEND);
+
+        // CRITICAL: Create/transfer holds for preserved cart seats to current session
+        // This ensures checkout validation will find valid holds for ALL seats
+        // Preserved seats have holds under their old session - we need them under current session
+        global $wpdb;
+        $table_holds = $wpdb->prefix . 'hope_seating_holds';
+        $hold_duration = class_exists('HOPE_Theater_Seating') ? HOPE_Theater_Seating::get_hold_duration() : 900;
+        $expires_at = gmdate('Y-m-d H:i:s', time() + $hold_duration);
+
+        foreach ($valid_cart_seats as $preserved_seat) {
+            // Check if this seat already has a hold for the current session
+            $existing_hold = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$table_holds}
+                WHERE seat_id = %s
+                AND product_id = %d
+                AND session_id = %s
+                AND expires_at > NOW()",
+                $preserved_seat,
+                $product_id,
+                $session_id
+            ));
+
+            if (!$existing_hold) {
+                // Get the original session that held this seat
+                $original_session = isset($original_seat_sessions[$preserved_seat]) ? $original_seat_sessions[$preserved_seat] : '';
+
+                if ($original_session && $original_session !== $session_id) {
+                    // Delete the old hold for this specific seat and session only
+                    // This is safe because we know this user owns that hold
+                    $wpdb->delete($table_holds, [
+                        'seat_id' => $preserved_seat,
+                        'product_id' => $product_id,
+                        'session_id' => $original_session
+                    ]);
+                    file_put_contents($debug_file, date('Y-m-d H:i:s') . " Deleted old hold for {$preserved_seat} (session: {$original_session})\n", FILE_APPEND);
+                }
+
+                // Create a new hold under the current session
+                $result = $wpdb->insert($table_holds, [
+                    'product_id' => $product_id,
+                    'seat_id' => $preserved_seat,
+                    'session_id' => $session_id,
+                    'expires_at' => $expires_at,
+                    'created_at' => gmdate('Y-m-d H:i:s')
+                ]);
+
+                if ($result) {
+                    file_put_contents($debug_file, date('Y-m-d H:i:s') . " Created new hold for preserved seat {$preserved_seat} under current session\n", FILE_APPEND);
+                } else {
+                    file_put_contents($debug_file, date('Y-m-d H:i:s') . " FAILED to create hold for preserved seat {$preserved_seat}\n", FILE_APPEND);
+                }
+            } else {
+                file_put_contents($debug_file, date('Y-m-d H:i:s') . " Preserved seat {$preserved_seat} already has hold under current session\n", FILE_APPEND);
+            }
         }
-        
-        // Use only the seats that are actually held
-        $seats = $actually_held_seats;
-        error_log('HOPE: Using actually held seats for cart: ' . print_r($seats, true));
-        
-        error_log('HOPE: Seat holds verified successfully');
-        
+
         // Group seats by their pricing tier
         $seats_by_tier = $this->group_seats_by_tier($seats);
-        error_log('HOPE: Seats grouped by tier: ' . print_r($seats_by_tier, true));
-        
+
         $successful_additions = 0;
         $total_seats_added = 0;
-        
-        // CRITICAL FIX: Add each seat as an individual cart item (quantity=1)
+
+        // Add each seat as an individual cart item (quantity=1)
         // This ensures seats from different tiers create separate cart items
         foreach ($seats_by_tier as $tier => $tier_seats) {
-            error_log("HOPE: Processing tier {$tier} with " . count($tier_seats) . " seats: " . implode(', ', $tier_seats));
-            
             // Find the appropriate variation for this tier
             $variation_id = 0;
             $variation_data = [];
-            
+
             $tier_key = strtolower($tier); // Normalize for map lookup
             if (isset($variation_map[$tier_key])) {
                 $variation_id = $variation_map[$tier_key]['variation_id'];
                 $variation_data = $variation_map[$tier_key]['attributes'];
-                error_log("HOPE: Found exact variation match for tier {$tier} (key: {$tier_key}): variation_id {$variation_id}");
             } else {
                 // Try to find a matching variation by searching all available variations
                 $matching_variation = $this->find_variation_for_tier($available_variations, $tier);
                 if ($matching_variation) {
                     $variation_id = $matching_variation['variation_id'];
                     $variation_data = $matching_variation['attributes'];
-                    error_log("HOPE: Found fallback variation for tier {$tier}: variation_id {$variation_id}");
                 } elseif (!empty($available_variations)) {
-                    // Last resort: use first available variation but log the issue
+                    // Last resort: use first available variation
                     $variation_id = $available_variations[0]['variation_id'];
                     $variation_data = $available_variations[0]['attributes'];
-                    error_log("HOPE: WARNING - Using first available variation for tier {$tier} as no match found");
                 }
             }
-            
+
             if ($variation_id === 0) {
-                error_log("HOPE: ERROR - No variation found for tier {$tier}, skipping");
                 continue;
             }
-            
+
             // Calculate pricing for this tier using the actual variation price
             $price_per_seat = $this->get_variation_price($variation_id, $tier);
-            
+
             // Add each seat as a separate cart item with quantity=1
             foreach ($tier_seats as $individual_seat) {
-                error_log("HOPE: Adding individual seat {$individual_seat} from tier {$tier} as separate cart item");
-
                 // Create cart item data for this individual seat
                 $cart_item_data = [
-                    'hope_theater_seats' => [$individual_seat], // Array with single seat
+                    'hope_theater_seats' => [$individual_seat],
                     'hope_seat_details' => [[
                         'seat_id' => $individual_seat,
                         'price' => $price_per_seat,
@@ -400,41 +435,30 @@ class HOPE_Ajax_Handler {
                     'hope_session_id' => $session_id,
                     'hope_total_price' => $price_per_seat,
                     'hope_price_per_seat' => $price_per_seat,
-                    'hope_seat_count' => 1, // Always 1 for individual seats
+                    'hope_seat_count' => 1,
                     'hope_tier' => $tier,
-                    'unique_key' => md5($individual_seat . microtime() . rand()) // Ensure uniqueness
+                    'unique_key' => md5($individual_seat . microtime() . rand())
                 ];
-                
-                error_log("HOPE: Adding individual seat {$individual_seat} to cart - tier {$tier} at \${$price_per_seat}");
-                error_log('HOPE: Individual seat cart data: ' . print_r($cart_item_data, true));
-                
+
                 try {
                     $cart_item_key = WC()->cart->add_to_cart(
                         $product_id,
-                        1, // Always quantity 1 for individual seats
+                        1,
                         $variation_id,
                         $variation_data,
                         $cart_item_data
                     );
-                    
+
                     if ($cart_item_key) {
-                        error_log("HOPE: Successfully added individual seat {$individual_seat} to cart with key {$cart_item_key}");
                         $successful_additions++;
-                        $total_seats_added += 1;
-                        
-                        // DO NOT convert holds to bookings yet - keep as holds until checkout
-                        // This allows users to change their selection by going back to the modal
-                        // Conversion to bookings will happen during checkout process
-                        
-                    } else {
-                        error_log("HOPE: Failed to add individual seat {$individual_seat} to cart");
+                        $total_seats_added++;
                     }
                 } catch (Exception $e) {
-                    error_log("HOPE: Exception adding individual seat {$individual_seat} to cart: " . $e->getMessage());
+                    error_log("HOPE add_to_cart: Exception adding seat {$individual_seat}: " . $e->getMessage());
                 }
             }
         }
-        
+
         // Calculate total from actual cart items added
         $cart_total = 0;
         foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
@@ -442,12 +466,23 @@ class HOPE_Ajax_Handler {
                 $cart_total += $cart_item['line_total'];
             }
         }
-        
+
+        // Log final cart state
+        $final_cart_seats = [];
+        foreach (WC()->cart->get_cart() as $cart_item) {
+            if ($cart_item['product_id'] == $product_id && isset($cart_item['hope_theater_seats'])) {
+                $final_cart_seats = array_merge($final_cart_seats, $cart_item['hope_theater_seats']);
+            }
+        }
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " FINAL CART STATE: " . count(WC()->cart->get_cart()) . " items, seats: " . implode(',', $final_cart_seats ?: ['none']) . "\n", FILE_APPEND);
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " Successfully added: {$total_seats_added} seats\n", FILE_APPEND);
+
         // Send response based on results
         if ($successful_additions > 0) {
-            // CRITICAL FIX: Extend hold expiration before redirecting to checkout
-            // This prevents holds from expiring during redirect/page load
+            // Extend hold expiration before redirecting to checkout
             $this->extend_hold_expiration($product_id, $session_id, $seats);
+
+            file_put_contents($debug_file, date('Y-m-d H:i:s') . " SUCCESS - returning to JS\n\n", FILE_APPEND);
 
             wp_send_json_success([
                 'cart_url' => wc_get_checkout_url(),
@@ -460,11 +495,11 @@ class HOPE_Ajax_Handler {
                 )
             ]);
         } else {
-            error_log('HOPE: No cart items were successfully added');
+            file_put_contents($debug_file, date('Y-m-d H:i:s') . " FAILED - no seats added\n\n", FILE_APPEND);
             wp_send_json_error(['message' => 'Could not add any seats to cart']);
         }
     }
-    
+
     /**
      * Remove existing cart items for this product to prevent duplicates
      * Preserves applied coupons (including URL-based coupons from Advanced Coupons)
@@ -656,6 +691,90 @@ class HOPE_Ajax_Handler {
         }
 
         return $seat_ids;
+    }
+
+    /**
+     * Get seats currently in cart for a specific product
+     * Used to validate seats when user returns from checkout and adds more
+     */
+    private function get_cart_seats_for_product($product_id) {
+        if (!function_exists('WC') || !WC()->cart) {
+            return [];
+        }
+
+        $cart_seats = [];
+        foreach (WC()->cart->get_cart() as $cart_item) {
+            if ($cart_item['product_id'] == $product_id && !empty($cart_item['hope_theater_seats'])) {
+                $cart_seats = array_merge($cart_seats, $cart_item['hope_theater_seats']);
+            }
+        }
+
+        return array_unique($cart_seats);
+    }
+
+    /**
+     * Get cart seats that still have valid holds (using their original session IDs)
+     * CRITICAL: Cart items store their own session_id which may differ from current session
+     */
+    private function get_valid_cart_seats_with_holds($product_id, $return_with_sessions = false) {
+        $debug_file = '/tmp/hope_debug.log';
+
+        if (!function_exists('WC') || !WC()->cart) {
+            file_put_contents($debug_file, date('Y-m-d H:i:s') . " get_valid_cart_seats: WC or cart not available\n", FILE_APPEND);
+            return $return_with_sessions ? ['seats' => [], 'sessions' => []] : [];
+        }
+
+        global $wpdb;
+        $table_holds = $wpdb->prefix . 'hope_seating_holds';
+        $valid_seats = [];
+        $seat_sessions = []; // Maps seat_id => original session_id
+
+        $cart_items = WC()->cart->get_cart();
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " get_valid_cart_seats: Checking " . count($cart_items) . " cart items for product {$product_id}\n", FILE_APPEND);
+
+        foreach ($cart_items as $cart_item) {
+            if ($cart_item['product_id'] != $product_id || empty($cart_item['hope_theater_seats'])) {
+                continue;
+            }
+
+            // Get the session ID that was used when this cart item was created
+            $cart_session_id = isset($cart_item['hope_session_id']) ? $cart_item['hope_session_id'] : '';
+            $cart_seats = $cart_item['hope_theater_seats'];
+            file_put_contents($debug_file, date('Y-m-d H:i:s') . " get_valid_cart_seats: Cart item seats: " . implode(',', $cart_seats) . ", session: {$cart_session_id}\n", FILE_APPEND);
+
+            if (empty($cart_session_id)) {
+                file_put_contents($debug_file, date('Y-m-d H:i:s') . " get_valid_cart_seats: No session ID, skipping\n", FILE_APPEND);
+                continue;
+            }
+
+            // Check each seat in this cart item for a valid hold with ITS session ID
+            foreach ($cart_seats as $seat_id) {
+                $hold_exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$table_holds}
+                    WHERE seat_id = %s
+                    AND product_id = %d
+                    AND session_id = %s
+                    AND expires_at > NOW()",
+                    $seat_id,
+                    $product_id,
+                    $cart_session_id
+                ));
+
+                file_put_contents($debug_file, date('Y-m-d H:i:s') . " get_valid_cart_seats: Seat {$seat_id} with session {$cart_session_id}: " . ($hold_exists ? "VALID" : "EXPIRED") . "\n", FILE_APPEND);
+
+                if ($hold_exists) {
+                    $valid_seats[] = $seat_id;
+                    $seat_sessions[$seat_id] = $cart_session_id;
+                }
+            }
+        }
+
+        file_put_contents($debug_file, date('Y-m-d H:i:s') . " get_valid_cart_seats: Returning " . count($valid_seats) . " valid seats: " . implode(',', $valid_seats ?: ['none']) . "\n", FILE_APPEND);
+
+        if ($return_with_sessions) {
+            return ['seats' => array_unique($valid_seats), 'sessions' => $seat_sessions];
+        }
+        return array_unique($valid_seats);
     }
 
     /**
