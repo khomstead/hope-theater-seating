@@ -2,16 +2,23 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.23] - 2026-01-22
+
+### Fixed
+- **CRITICAL: Seat Selection Not Working on Windows/Surface** - Fixed the actual root cause
+  - The `handleSeatHover()` function in `seat-map.js` was moving seat elements in the DOM to bring them visually to the front (needed because SVG renders in document order)
+  - If the mouse moved even slightly during a click, `mouseleave` would fire and move the element back BEFORE the click event registered
+  - This caused click events to be lost or misdirected, especially on Windows PCs and Surface tablets
+  - Solution: Added 150ms delay before restoring seat position on mouseleave, allowing click events to complete first
+  - Visual "bring to front" effect on hover is preserved (important when seats overlap slightly)
+
 ## [2.8.22] - 2026-01-22
 
 ### Fixed
-- **CRITICAL: Seat Selection Not Working on Windows PCs** - Fixed issue where users on Windows machines (Chrome/Edge) could not click to select seats
-  - Root cause: `isMobile()` detection in `mobile-handler.js` was incorrectly identifying Windows PCs as mobile devices
+- **Improved Mobile Detection** - Prevent false positive mobile detection on Windows PCs
+  - `isMobile()` detection in `mobile-handler.js` was incorrectly identifying Windows PCs as mobile devices
   - Windows browsers often report `navigator.maxTouchPoints > 0` even on devices without touchscreens
-  - This triggered mobile touch handlers that interfered with standard mouse click events
   - Solution: Improved mobile detection to require BOTH mobile-sized viewport (<= 768px) AND touch capability for non-mobile user agents
-  - Mobile user agents (iPhone, iPad, Android) are still detected correctly
-  - Windows PCs with large viewports are no longer misidentified as mobile devices
 
 ## [2.8.21] - 2025-11-19
 

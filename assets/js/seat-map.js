@@ -774,31 +774,47 @@ class HOPESeatMap {
     handleSeatHover(e) {
         const seat = e.currentTarget;
 
-        // Move to top layer
-        seat._originalParent = seat.parentNode;
-        seat._originalNextSibling = seat.nextSibling;
-        const svgId = this.containerId || 'seat-map';
-        const svg = document.getElementById(svgId);
-        svg.appendChild(seat);
+        // Cancel any pending restoration from a previous hover
+        if (seat._restoreTimeout) {
+            clearTimeout(seat._restoreTimeout);
+            seat._restoreTimeout = null;
+        }
+
+        // Move to top layer so hovered seat appears above overlapping neighbors
+        // (In SVG, elements render in document order - last element is on top)
+        if (!seat._originalParent) {
+            seat._originalParent = seat.parentNode;
+            seat._originalNextSibling = seat.nextSibling;
+            const svgId = this.containerId || 'seat-map';
+            const svg = document.getElementById(svgId);
+            svg.appendChild(seat);
+        }
 
         // Show tooltip
         this.showTooltip(seat);
     }
-    
+
     handleSeatLeave(e) {
         const seat = e.currentTarget;
-        
-        // Restore original position
+
+        // Delay restoration to allow click events to complete first
+        // This fixes the issue where slight mouse movement during a click
+        // would cause mouseleave to fire and move the element before click registered
         if (seat._originalParent && !seat.classList.contains('selected')) {
-            if (seat._originalNextSibling) {
-                seat._originalParent.insertBefore(seat, seat._originalNextSibling);
-            } else {
-                seat._originalParent.appendChild(seat);
-            }
-            seat._originalParent = null;
-            seat._originalNextSibling = null;
+            seat._restoreTimeout = setTimeout(() => {
+                if (seat._originalParent) {
+                    if (seat._originalNextSibling && seat._originalNextSibling.parentNode === seat._originalParent) {
+                        seat._originalParent.insertBefore(seat, seat._originalNextSibling);
+                    } else {
+                        seat._originalParent.appendChild(seat);
+                    }
+                    seat._originalParent = null;
+                    seat._originalNextSibling = null;
+                }
+                seat._restoreTimeout = null;
+            }, 150); // 150ms delay allows click to complete
         }
-        
+
         this.hideTooltip();
     }
     
