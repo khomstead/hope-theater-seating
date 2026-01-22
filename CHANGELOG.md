@@ -5,12 +5,11 @@ All notable changes to HOPE Theater Seating Plugin will be documented in this fi
 ## [2.8.23] - 2026-01-22
 
 ### Fixed
-- **CRITICAL: Seat Selection Not Working on Windows/Surface** - Fixed the actual root cause
-  - The `handleSeatHover()` function in `seat-map.js` was moving seat elements in the DOM to bring them visually to the front (needed because SVG renders in document order)
-  - If the mouse moved even slightly during a click, `mouseleave` would fire and move the element back BEFORE the click event registered
-  - This caused click events to be lost or misdirected, especially on Windows PCs and Surface tablets
-  - Solution: Added 150ms delay before restoring seat position on mouseleave, allowing click events to complete first
-  - Visual "bring to front" effect on hover is preserved (important when seats overlap slightly)
+- **CRITICAL: Seat Selection Not Working on Windows/Surface** - Fixed click events not registering on Windows PCs and Surface tablets
+  - Root cause: The wrapper's `handleMouseDown()` was setting `isDragging=true` for ALL mousedown events, including on seats
+  - If the mouse moved even slightly during a click, `handleMouseMove()` would call `e.preventDefault()`, disrupting the click event chain
+  - Solution: Skip drag initialization when the mousedown target is a seat element
+  - Also added 150ms delay before restoring seat position on mouseleave (preserves visual "bring to front" on hover while allowing clicks to complete)
 
 ## [2.8.22] - 2026-01-22
 
