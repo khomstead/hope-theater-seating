@@ -29,9 +29,26 @@ class HOPEMobileHandler {
     }
     
     isMobile() {
-        return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || 
-               ('ontouchstart' in window) ||
-               (navigator.maxTouchPoints > 0);
+        // Check user agent for actual mobile devices
+        const isMobileUA = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        // Check for mobile-sized viewport (more reliable than touch detection)
+        const isMobileViewport = window.innerWidth <= 768;
+
+        // Only consider it mobile if:
+        // 1. User agent indicates mobile device, OR
+        // 2. Viewport is mobile-sized AND device has touch capability
+        // This prevents false positives on Windows PCs that report maxTouchPoints > 0
+        // but aren't actually mobile devices
+        if (isMobileUA) {
+            return true;
+        }
+
+        // For non-mobile user agents, require BOTH small viewport AND touch capability
+        // This handles tablets in desktop mode while avoiding Windows PC false positives
+        const hasTouchCapability = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+        return isMobileViewport && hasTouchCapability;
     }
     
     setupTouchHandlers() {

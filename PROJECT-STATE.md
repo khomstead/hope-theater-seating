@@ -1,7 +1,7 @@
 # HOPE Theater Seating - Current Project State
 
-**Last Updated:** 2025-11-17
-**Current Version:** 2.8.14
+**Last Updated:** 2026-01-22
+**Current Version:** 2.8.22
 **Primary Developer:** Kyle Homstead
 **AI Assistant:** Read this file at the start of EVERY session
 
@@ -515,6 +515,7 @@ if ($has_existing_session) {
 
 ## Version History
 
+**v2.8.22** (2026-01-22) - **CRITICAL:** Fix seat selection not working on Windows PCs
 **v2.8.14** (2025-11-17) - **CRITICAL:** Fix incognito mode session cookie issue
 **v2.8.13** (2025-11-17) - **CRITICAL:** Fix session regeneration destroying hold data
 **v2.8.12** (2025-01-17) - Fix seat blocking modal DOM layering

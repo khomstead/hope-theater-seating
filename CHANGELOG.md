@@ -2,6 +2,17 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.22] - 2026-01-22
+
+### Fixed
+- **CRITICAL: Seat Selection Not Working on Windows PCs** - Fixed issue where users on Windows machines (Chrome/Edge) could not click to select seats
+  - Root cause: `isMobile()` detection in `mobile-handler.js` was incorrectly identifying Windows PCs as mobile devices
+  - Windows browsers often report `navigator.maxTouchPoints > 0` even on devices without touchscreens
+  - This triggered mobile touch handlers that interfered with standard mouse click events
+  - Solution: Improved mobile detection to require BOTH mobile-sized viewport (<= 768px) AND touch capability for non-mobile user agents
+  - Mobile user agents (iPhone, iPad, Android) are still detected correctly
+  - Windows PCs with large viewports are no longer misidentified as mobile devices
+
 ## [2.8.21] - 2025-11-19
 
 ### Added
