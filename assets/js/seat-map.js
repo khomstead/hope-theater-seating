@@ -621,13 +621,22 @@ class HOPESeatMap {
         }
         
         // Event handlers
-        seat.addEventListener('click', (e) => this.handleSeatClick(e));
+        seat.addEventListener('click', (e) => {
+            console.log('HOPE DEBUG: Click listener fired on seat', seat.getAttribute('data-id'));
+            this.handleSeatClick(e);
+        });
+        seat.addEventListener('mousedown', (e) => {
+            console.log('HOPE DEBUG: mousedown on seat', seat.getAttribute('data-id'));
+        });
+        seat.addEventListener('mouseup', (e) => {
+            console.log('HOPE DEBUG: mouseup on seat', seat.getAttribute('data-id'));
+        });
         seat.addEventListener('mouseenter', (e) => this.handleSeatHover(e));
         seat.addEventListener('mouseleave', (e) => this.handleSeatLeave(e));
-        
+
         parentGroup.appendChild(seat);
     }
-    
+
     createSection(svg, sectionName, sectionData) {
         const sectionGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         sectionGroup.setAttribute('id', `section-${sectionName}`);
@@ -699,17 +708,28 @@ class HOPESeatMap {
         seat.setAttribute('stroke-dashoffset', '0');
         
         // Event handlers
-        seat.addEventListener('click', (e) => this.handleSeatClick(e));
+        seat.addEventListener('click', (e) => {
+            console.log('HOPE DEBUG: Click listener fired on seat (balcony)', seat.getAttribute('data-id'));
+            this.handleSeatClick(e);
+        });
+        seat.addEventListener('mousedown', (e) => {
+            console.log('HOPE DEBUG: mousedown on seat (balcony)', seat.getAttribute('data-id'));
+        });
+        seat.addEventListener('mouseup', (e) => {
+            console.log('HOPE DEBUG: mouseup on seat (balcony)', seat.getAttribute('data-id'));
+        });
         seat.addEventListener('mouseenter', (e) => this.handleSeatHover(e));
         seat.addEventListener('mouseleave', (e) => this.handleSeatLeave(e));
-        
+
         parentGroup.appendChild(seat);
     }
-    
+
     handleSeatClick(e) {
+        console.log('HOPE DEBUG: handleSeatClick called', e.type, e.target, e.currentTarget);
         e.stopPropagation();
         const seat = e.currentTarget;
         const seatId = seat.getAttribute('data-id');
+        console.log('HOPE DEBUG: Processing seat click for', seatId);
         
         // Allow deselection of currently selected seats, even if they appear unavailable
         if (this.selectedSeats.has(seatId)) {
@@ -1064,12 +1084,18 @@ class HOPESeatMap {
     }
     
     handleMouseDown(e) {
+        console.log('HOPE DEBUG: wrapper mousedown, target:', e.target.tagName, e.target.getAttribute?.('data-id') || 'no data-id');
+        // Don't start drag if clicking on a seat
+        if (e.target.classList && e.target.classList.contains('seat')) {
+            console.log('HOPE DEBUG: mousedown on seat, NOT starting drag');
+            return;
+        }
         this.isDragging = true;
         this.startX = e.clientX - this.translateX;
         this.startY = e.clientY - this.translateY;
         document.getElementById('seating-wrapper').classList.add('dragging');
     }
-    
+
     handleMouseMove(e) {
         if (!this.isDragging) return;
         e.preventDefault();
