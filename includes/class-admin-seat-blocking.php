@@ -2286,12 +2286,12 @@ class HOPE_Admin_Seat_Blocking {
 
         // Enqueue the seat map script
         if (file_exists(dirname(__FILE__) . '/../assets/js/seat-map.js')) {
-            wp_enqueue_script('hope-seat-map', $plugin_url . 'assets/js/seat-map.js', array('jquery'), '2.4.9', true);
+            wp_enqueue_script('hope-seat-map', $plugin_url . 'assets/js/seat-map.js', array('jquery'), HOPE_SEATING_VERSION, true);
         }
 
         // Enqueue frontend styles for modal appearance
         if (file_exists(dirname(__FILE__) . '/../assets/css/frontend.css')) {
-            wp_enqueue_style('hope-frontend-style', $plugin_url . 'assets/css/frontend.css', array(), '2.4.9');
+            wp_enqueue_style('hope-frontend-style', $plugin_url . 'assets/css/frontend.css', array(), HOPE_SEATING_VERSION);
         }
 
         // Create proper localization for admin seat map
