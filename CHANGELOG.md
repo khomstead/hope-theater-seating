@@ -2,6 +2,14 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.24] - 2026-01-22
+
+### Fixed
+- **Admin Seat Blocking: Stale State on Modal Reopen** - Fixed intermittent issue where admin seat blocking showed wrong data
+  - Added proper cleanup when closing admin seat modal (clears seat map instance, selected seats, SVG content)
+  - Added cleanup at start of initialization to ensure fresh state when opening for a different event
+  - Fixed hardcoded version numbers in script enqueues to use `HOPE_SEATING_VERSION` for proper cache busting
+
 ## [2.8.23] - 2026-01-22
 
 ### Fixed

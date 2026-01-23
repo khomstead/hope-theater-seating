@@ -480,6 +480,29 @@ class HOPE_Admin_Seat_Blocking {
             function initializeRealAdminSeatMap(eventId) {
                 console.log('Initializing REAL admin seat map for event:', eventId);
 
+                // CRITICAL: Clean up any previous seat map state first
+                if (window.adminSeatMap) {
+                    console.log('Cleaning up previous admin seat map instance');
+                    if (window.adminSeatMap.selectedSeats) {
+                        window.adminSeatMap.selectedSeats.clear();
+                    }
+                    if (window.adminSeatMap.availabilityInterval) {
+                        clearInterval(window.adminSeatMap.availabilityInterval);
+                    }
+                    window.adminSeatMap = null;
+                }
+
+                // Clear simple selected seats
+                if (window.simpleSelectedSeats) {
+                    window.simpleSelectedSeats.clear();
+                }
+
+                // Clear SVG content
+                const svg = document.getElementById('admin-seat-map');
+                if (svg) {
+                    svg.innerHTML = '';
+                }
+
                 const modal = $('#hope-admin-seat-modal');
                 const loader = modal.find('.hope-loading-indicator');
                 const content = modal.find('#hope-admin-seat-map-container');
@@ -1897,7 +1920,32 @@ class HOPE_Admin_Seat_Blocking {
                 modal.find('.hope-modal-overlay').off('click.adminModal');
                 modal.find('.hope-cancel-btn').off('click.adminModal');
 
-                console.log('Admin seat modal closed');
+                // CRITICAL: Clean up seat map state to prevent stale data on next open
+                if (window.adminSeatMap) {
+                    // Clear selected seats
+                    if (window.adminSeatMap.selectedSeats) {
+                        window.adminSeatMap.selectedSeats.clear();
+                    }
+                    // Clear any intervals
+                    if (window.adminSeatMap.availabilityInterval) {
+                        clearInterval(window.adminSeatMap.availabilityInterval);
+                    }
+                    // Destroy the instance
+                    window.adminSeatMap = null;
+                }
+
+                // Clear simple selected seats too
+                if (window.simpleSelectedSeats) {
+                    window.simpleSelectedSeats.clear();
+                }
+
+                // Clear SVG content to ensure fresh render on next open
+                const svg = document.getElementById('admin-seat-map');
+                if (svg) {
+                    svg.innerHTML = '';
+                }
+
+                console.log('Admin seat modal closed and state cleaned up');
             };
 
             // Confirm admin seat selection and transfer to blocking form
