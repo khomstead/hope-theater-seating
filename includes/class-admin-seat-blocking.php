@@ -588,24 +588,38 @@ class HOPE_Admin_Seat_Blocking {
                                 // Don't start periodic refresh in admin mode
                             };
 
-                            // CRITICAL: Initialize data loading status to prevent waiting
+                            // CRITICAL: Initialize data loading status
                             window.adminSeatMap.dataLoadingStatus = {
-                                variationPricing: false, // Start as false, we'll set to true after init
-                                realSeatData: false      // Start as false, will be set by loadRealSeatData
+                                variationPricing: false,
+                                realSeatData: false
                             };
 
-                            console.log('Calling initializeMap...');
-                            window.adminSeatMap.initializeMap();
+                            // Wait for ACTUAL data to load before rendering
+                            // The HOPESeatMap constructor started loading data - wait for it
+                            console.log('Waiting for real seat data to load...');
 
-                            // Force both data loading flags to true after a short delay
-                            setTimeout(() => {
-                                console.log('Forcing data loading status to complete...');
-                                if (window.adminSeatMap.dataLoadingStatus) {
+                            const waitForRealData = setInterval(() => {
+                                // Check if real seat data has actually loaded (not just the flag)
+                                const hasRealData = window.adminSeatMap.realSeatData &&
+                                                   window.adminSeatMap.realSeatData.length > 0;
+
+                                if (hasRealData) {
+                                    clearInterval(waitForRealData);
+                                    console.log('Real seat data loaded:', window.adminSeatMap.realSeatData.length, 'seats');
+
+                                    // Process the data if not already processed
+                                    if (!window.adminSeatMap.processedSeatData ||
+                                        !window.adminSeatMap.processedSeatData.orchestra ||
+                                        Object.keys(window.adminSeatMap.processedSeatData.orchestra).length === 0) {
+                                        console.log('Processing real seat data...');
+                                        window.adminSeatMap.processRealSeatData();
+                                    }
+
+                                    // Now set flags and render
                                     window.adminSeatMap.dataLoadingStatus.variationPricing = true;
                                     window.adminSeatMap.dataLoadingStatus.realSeatData = true;
 
-                                    // Re-call initializeMap now that both flags are true
-                                    console.log('Re-calling initializeMap with both data types ready...');
+                                    console.log('Calling initializeMap with real data...');
                                     window.adminSeatMap.initializeMap();
 
                                     // Check if seats rendered after a delay
@@ -706,7 +720,23 @@ class HOPE_Admin_Seat_Blocking {
                                         }
                                     }, 1000);
                                 }
-                            }, 2000);
+                            }, 100); // Check every 100ms for real data
+
+                            // Timeout fallback - if data doesn't load in 10 seconds, show error
+                            setTimeout(() => {
+                                if (!window.adminSeatMap.realSeatData || window.adminSeatMap.realSeatData.length === 0) {
+                                    clearInterval(waitForRealData);
+                                    console.error('Timeout: Real seat data failed to load');
+                                    const svg = document.getElementById('admin-seat-map');
+                                    if (svg) {
+                                        svg.innerHTML = `
+                                            <text x="400" y="300" text-anchor="middle" fill="#e74c3c" font-size="18">
+                                                Error: Could not load seat data. Please refresh and try again.
+                                            </text>
+                                        `;
+                                    }
+                                }
+                            }, 10000);
 
                             // Set up admin-specific event handlers
                             setupAdminSeatMapHandlers();

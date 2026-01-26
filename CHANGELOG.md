@@ -2,6 +2,16 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.25] - 2026-01-22
+
+### Fixed
+- **Admin Seat Blocking: Mirror Image / Wrong Seat Data** - Fixed critical issue where blocked seats appeared in wrong positions
+  - Root cause: Admin was forcing data loading flags to true before actual data loaded, causing fallback to hardcoded seat coordinates
+  - Hardcoded coordinates don't match real database coordinates, causing "mirror image" effect
+  - Solution: Wait for actual real seat data to load (checking every 100ms) before rendering
+  - Added 10-second timeout with error message if data fails to load
+  - Dividers and blocked seats now appear in correct positions
+
 ## [2.8.24] - 2026-01-22
 
 ### Fixed
