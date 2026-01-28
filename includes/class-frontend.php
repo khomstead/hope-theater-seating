@@ -429,6 +429,62 @@ public function seat_button_shortcode($atts) {
             error_log('HOPE: Overflow seating ENABLED for event ' . $event_id . ' - showing all ' . count($seats_with_pricing) . ' seats');
         }
 
+        // Filter out sections excluded by Film Screening Mode
+        $film_screening_mode = false;
+        if ($event_id) {
+            $film_screening_mode = get_post_meta($event_id, '_hope_film_screening_mode', true) === 'yes';
+        }
+
+        if ($film_screening_mode) {
+            $excluded_sections = get_option('hope_film_screening_excluded_sections', array('A', 'E', 'F', 'H'));
+
+            if (!empty($excluded_sections)) {
+                $original_count = count($seats_with_pricing);
+
+                // Similar to overflow: check for sold/held seats in excluded sections
+                global $wpdb;
+                $bookings_table = $wpdb->prefix . 'hope_seating_bookings';
+                $holds_table = $wpdb->prefix . 'hope_seating_holds';
+
+                // Get sold seats in excluded sections (from bookings)
+                $sold_excluded_seats = $wpdb->get_col($wpdb->prepare(
+                    "SELECT DISTINCT seat_id
+                    FROM {$bookings_table}
+                    WHERE product_id = %d
+                    AND status IN ('confirmed', 'held')",
+                    $event_id
+                ));
+
+                // Get held seats in excluded sections (from holds)
+                $held_excluded_seats = $wpdb->get_col($wpdb->prepare(
+                    "SELECT DISTINCT seat_id
+                    FROM {$holds_table}
+                    WHERE product_id = %d
+                    AND expires_at > NOW()",
+                    $event_id
+                ));
+
+                // Merge sold and held seats
+                $occupied_excluded_seats = array_merge($sold_excluded_seats, $held_excluded_seats);
+
+                // Filter: hide excluded section seats UNLESS they are sold/held
+                $seats_with_pricing = array_filter($seats_with_pricing, function($seat) use ($excluded_sections, $occupied_excluded_seats) {
+                    // Always show seats NOT in excluded sections
+                    if (!in_array($seat->section, $excluded_sections)) {
+                        return true;
+                    }
+                    // Show excluded section seats only if they're occupied (sold/held)
+                    return in_array($seat->seat_id, $occupied_excluded_seats);
+                });
+
+                $filtered_count = count($seats_with_pricing);
+                $hidden_count = $original_count - $filtered_count;
+                error_log('HOPE: Film Screening Mode ENABLED for event ' . $event_id . ' - hiding ' . $hidden_count . ' seats in sections: ' . implode(', ', $excluded_sections));
+            }
+        } else {
+            error_log('HOPE: Film Screening Mode disabled for event ' . $event_id);
+        }
+
         if (empty($seats_with_pricing)) {
             wp_send_json_error('No seats found for this pricing map');
             return;

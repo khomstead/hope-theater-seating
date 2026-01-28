@@ -1,7 +1,7 @@
 # HOPE Theater Seating - Current Project State
 
-**Last Updated:** 2026-01-22
-**Current Version:** 2.8.23
+**Last Updated:** 2026-01-28
+**Current Version:** 2.8.26
 **Primary Developer:** Kyle Homstead
 **AI Assistant:** Read this file at the start of EVERY session
 

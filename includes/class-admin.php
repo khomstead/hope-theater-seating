@@ -97,6 +97,31 @@ class HOPE_Seating_Admin {
     
     public function init_settings() {
         register_setting('hope_seating_settings', 'hope_seating_options');
+        register_setting('hope_seating_settings', 'hope_film_screening_excluded_sections', array(
+            'type' => 'array',
+            'default' => array('A', 'E', 'F', 'H'),
+            'sanitize_callback' => array($this, 'sanitize_excluded_sections')
+        ));
+    }
+
+    /**
+     * Sanitize excluded sections input
+     */
+    public function sanitize_excluded_sections($input) {
+        if (!is_array($input)) {
+            // Parse comma-separated string into array
+            $input = array_map('trim', explode(',', $input));
+        }
+        // Only allow valid section letters (A-H)
+        $valid_sections = array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H');
+        $sanitized = array();
+        foreach ($input as $section) {
+            $section = strtoupper(trim($section));
+            if (in_array($section, $valid_sections)) {
+                $sanitized[] = $section;
+            }
+        }
+        return array_unique($sanitized);
     }
     
     // Main admin page
@@ -529,6 +554,50 @@ class HOPE_Seating_Admin {
                         </td>
                     </tr>
                 </table>
+
+                <h2><?php _e('Film Screening Mode', 'hope-seating'); ?></h2>
+                <p class="description"><?php _e('Configure which sections are hidden when Film Screening Mode is enabled for a product. These sections typically have obstructed views of the screen.', 'hope-seating'); ?></p>
+
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php _e('Excluded Sections', 'hope-seating'); ?></th>
+                        <td>
+                            <?php
+                            $excluded_sections = get_option('hope_film_screening_excluded_sections', array('A', 'E', 'F', 'H'));
+                            $all_sections = array(
+                                'A' => 'Section A (Orchestra Left)',
+                                'B' => 'Section B (Orchestra Left-Center)',
+                                'C' => 'Section C (Orchestra Center)',
+                                'D' => 'Section D (Orchestra Right-Center)',
+                                'E' => 'Section E (Orchestra Right)',
+                                'F' => 'Section F (Balcony Left)',
+                                'G' => 'Section G (Balcony Center)',
+                                'H' => 'Section H (Balcony Right)'
+                            );
+                            ?>
+                            <fieldset>
+                                <?php foreach ($all_sections as $section_code => $section_label): ?>
+                                    <label style="display: block; margin-bottom: 8px;">
+                                        <input type="checkbox"
+                                               name="hope_film_screening_excluded_sections[]"
+                                               value="<?php echo esc_attr($section_code); ?>"
+                                               <?php checked(in_array($section_code, $excluded_sections)); ?> />
+                                        <?php echo esc_html($section_label); ?>
+                                        <?php if (in_array($section_code, array('A', 'E', 'F', 'H'))): ?>
+                                            <span style="color: #d63638; font-size: 11px;">(recommended for film screenings)</span>
+                                        <?php endif; ?>
+                                    </label>
+                                <?php endforeach; ?>
+                            </fieldset>
+                            <p class="description" style="margin-top: 10px;">
+                                <?php _e('Checked sections will be hidden from customers when "Film Screening Mode" is enabled on a product.', 'hope-seating'); ?>
+                                <br>
+                                <strong><?php _e('Default:', 'hope-seating'); ?></strong> <?php _e('Sections A, E (side orchestra) and F, H (side balcony) have obstructed screen views.', 'hope-seating'); ?>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+
                 <?php submit_button(); ?>
             </form>
         </div>
@@ -1379,6 +1448,21 @@ class HOPE_Seating_Admin {
                         'value' => $overflow_enabled ? $overflow_enabled : 'no',
                         'desc_tip' => true
                     ));
+
+                    // Film Screening Mode toggle
+                    $film_screening_mode = get_post_meta($post->ID, '_hope_film_screening_mode', true);
+                    $excluded_sections = get_option('hope_film_screening_excluded_sections', array('A', 'E', 'F', 'H'));
+                    $excluded_list = implode(', ', $excluded_sections);
+                    woocommerce_wp_checkbox(array(
+                        'id' => '_hope_film_screening_mode',
+                        'label' => __('Film Screening Mode', 'hope-seating'),
+                        'description' => sprintf(
+                            __('Hide seats with obstructed screen view. Currently excludes sections: %s. Configure in HOPE Seating → Settings.', 'hope-seating'),
+                            $excluded_list
+                        ),
+                        'value' => $film_screening_mode ? $film_screening_mode : 'no',
+                        'desc_tip' => true
+                    ));
                     ?>
                 </div>
             </div>
@@ -1506,6 +1590,10 @@ class HOPE_Seating_Admin {
         // Save overflow seating toggle
         $overflow_enabled = isset($_POST['_hope_overflow_enabled']) ? 'yes' : 'no';
         update_post_meta($post_id, '_hope_overflow_enabled', $overflow_enabled);
+
+        // Save film screening mode toggle
+        $film_screening_mode = isset($_POST['_hope_film_screening_mode']) ? 'yes' : 'no';
+        update_post_meta($post_id, '_hope_film_screening_mode', $film_screening_mode);
     }
     
     // Add venue column to products list

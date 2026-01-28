@@ -2,6 +2,16 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.26] - 2026-01-28
+
+### Added
+- **Film Screening Mode** - New feature to hide sections with obstructed screen views during film screenings
+  - Product-level toggle: Enable "Film Screening Mode" checkbox in product's HOPE Theater Seating settings
+  - Global setting: Configure which sections are excluded (HOPE Seating → Settings)
+  - Default excluded sections: A, E (orchestra sides) and F, H (balcony sides)
+  - Smart handling: Already-sold seats in excluded sections remain visible (prevents customer confusion)
+  - Similar implementation pattern to overflow seating for consistency
+
 ## [2.8.25] - 2026-01-22
 
 ### Fixed
