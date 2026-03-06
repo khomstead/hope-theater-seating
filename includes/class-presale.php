@@ -500,6 +500,21 @@ class HOPE_Presale {
             return;
         }
 
+        // Check per-password activation date (optional — if set, must have passed)
+        if (!empty($matched_entry['activation_date'])) {
+            $now = (new DateTime('now', wp_timezone()))->getTimestamp();
+            if ($now < (int) $matched_entry['activation_date']) {
+                $activation_display = $this->format_date_for_display((int) $matched_entry['activation_date']);
+                $label = !empty($matched_entry['label']) ? $matched_entry['label'] : __('This', 'hope-seating');
+                wp_send_json_error(sprintf(
+                    __('%s pre-sale begins %s', 'hope-seating'),
+                    esc_html($label),
+                    esc_html($activation_display)
+                ));
+                return;
+            }
+        }
+
         // Password matched — set cookie
         $public_start = get_post_meta($product_id, '_hope_presale_public_start', true);
         $password_hash = md5($password_lower);

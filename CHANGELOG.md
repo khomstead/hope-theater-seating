@@ -19,6 +19,10 @@ All notable changes to HOPE Theater Seating Plugin will be documented in this fi
   - All dates respect WordPress timezone setting
   - Pre-sale info saved to order item metadata for reporting
   - Future-proof data structure for per-password pricing tiers and section restrictions
+  - **Per-password activation dates** (optional) for staggered pre-sale access (e.g., Platinum fans before Gold fans)
+    - Optional datetime-local field per password row in admin
+    - When set, password is rejected before its activation date with specific error: "[Label] pre-sale begins [date]"
+    - Leave blank to use the global pre-sale start date (most common scenario)
 
 ## [2.8.26] - 2026-01-28
 

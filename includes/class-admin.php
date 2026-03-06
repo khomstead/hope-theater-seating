@@ -1681,21 +1681,33 @@ class HOPE_Seating_Admin {
                         <tr>
                             <th><?php esc_html_e('Password', 'hope-seating'); ?></th>
                             <th><?php esc_html_e('Label', 'hope-seating'); ?></th>
+                            <th><?php esc_html_e('Activation Date', 'hope-seating'); ?></th>
                             <th><?php esc_html_e('Uses', 'hope-seating'); ?></th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($passwords as $i => $pw) : ?>
+                        <?php foreach ($passwords as $i => $pw) :
+                            $pw_activation_local = '';
+                            if (!empty($pw['activation_date'])) {
+                                $dt = new DateTime('@' . $pw['activation_date']);
+                                $dt->setTimezone($tz);
+                                $pw_activation_local = $dt->format('Y-m-d\TH:i');
+                            }
+                        ?>
                         <tr>
                             <td><input type="text" name="_hope_presale_pw[<?php echo $i; ?>][password]" value="<?php echo esc_attr($pw['password']); ?>" /></td>
                             <td><input type="text" name="_hope_presale_pw[<?php echo $i; ?>][label]" value="<?php echo esc_attr($pw['label']); ?>" /></td>
+                            <td><input type="datetime-local" name="_hope_presale_pw[<?php echo $i; ?>][activation_date]" value="<?php echo esc_attr($pw_activation_local); ?>" style="width:100%;" /></td>
                             <td><span class="usage-count"><?php echo isset($pw['usage_count']) ? intval($pw['usage_count']) : 0; ?></span></td>
                             <td><button type="button" class="button hope-remove-pw">&times;</button></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                <p class="description" style="padding-left:12px;">
+                    <?php esc_html_e('Activation Date is optional. Leave blank to use the global Pre-sale Start date.', 'hope-seating'); ?>
+                </p>
                 <p style="padding-left:12px;">
                     <button type="button" class="button hope-add-pw"><?php esc_html_e('Add Password', 'hope-seating'); ?></button>
                 </p>
@@ -1736,6 +1748,7 @@ class HOPE_Seating_Admin {
                     var row = '<tr>' +
                         '<td><input type="text" name="_hope_presale_pw[' + pwIndex + '][password]" value="" /></td>' +
                         '<td><input type="text" name="_hope_presale_pw[' + pwIndex + '][label]" value="" /></td>' +
+                        '<td><input type="datetime-local" name="_hope_presale_pw[' + pwIndex + '][activation_date]" value="" style="width:100%;" /></td>' +
                         '<td><span class="usage-count">0</span></td>' +
                         '<td><button type="button" class="button hope-remove-pw">&times;</button></td>' +
                         '</tr>';
@@ -1805,10 +1818,18 @@ class HOPE_Seating_Admin {
                 }
                 $key = strtolower(trim($password));
                 $usage_count = isset($existing_map[$key]) ? $existing_map[$key] : 0;
+
+                $activation_date = '';
+                if (!empty($pw_data['activation_date'])) {
+                    $dt = new DateTime(sanitize_text_field($pw_data['activation_date']), $tz);
+                    $activation_date = $dt->getTimestamp();
+                }
+
                 $new_passwords[] = array(
-                    'password'    => $password,
-                    'label'       => $label,
-                    'usage_count' => $usage_count,
+                    'password'        => $password,
+                    'label'           => $label,
+                    'usage_count'     => $usage_count,
+                    'activation_date' => $activation_date,
                 );
             }
         }
