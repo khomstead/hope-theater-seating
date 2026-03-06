@@ -94,7 +94,10 @@ class HOPE_Presale {
      */
     public function set_presale_cookie($product_id, $password_hash, $expiry) {
         $cookie_name = 'hope_presale_' . $product_id;
-        setcookie($cookie_name, $password_hash, $expiry, '/', '', is_ssl(), false);
+        // Use WordPress COOKIEPATH and COOKIE_DOMAIN for consistency with WP cookies
+        $path = defined('COOKIEPATH') ? COOKIEPATH : '/';
+        $domain = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
+        setcookie($cookie_name, $password_hash, $expiry, $path, $domain, is_ssl(), false);
         // Also set in $_COOKIE so it's available in the current request
         $_COOKIE[$cookie_name] = $password_hash;
     }
@@ -400,23 +403,18 @@ class HOPE_Presale {
                     .then(function(response) { return response.json(); })
                     .then(function(data) {
                         if (data.success) {
-                            // Replace gate content with success message using safe DOM methods
+                            // Show success message then reload page so server renders
+                            // the full purchase interface (Select Seats or Add to Cart)
                             while (gate.firstChild) {
                                 gate.removeChild(gate.firstChild);
                             }
                             var successDiv = document.createElement('div');
                             successDiv.className = 'hope-presale-success';
-                            successDiv.textContent = '<?php echo esc_js(__('Pre-sale code accepted!', 'hope-seating')); ?>';
+                            successDiv.textContent = '<?php echo esc_js(__('Pre-sale code accepted! Loading tickets...', 'hope-seating')); ?>';
                             gate.appendChild(successDiv);
 
                             setTimeout(function() {
-                                // Unhide the form elements
-                                var hidden = document.querySelectorAll('[data-hope-presale-hidden="true"]');
-                                for (var i = 0; i < hidden.length; i++) {
-                                    hidden[i].style.display = '';
-                                    hidden[i].removeAttribute('data-hope-presale-hidden');
-                                }
-                                gate.parentNode.removeChild(gate);
+                                window.location.reload();
                             }, 800);
                         } else {
                             errorDiv.textContent = data.data || '<?php echo esc_js(__('Invalid pre-sale code. Please try again.', 'hope-seating')); ?>';
