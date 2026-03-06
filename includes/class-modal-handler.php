@@ -65,7 +65,19 @@ class HOPE_Modal_Handler {
         $venue_id = get_post_meta($product->get_id(), '_hope_seating_venue_id', true);
         
         if ($seating_enabled !== 'yes' || !$venue_id) return;
-        
+
+        // Pre-sale gate: don't render modal if customer can't access it yet
+        if (class_exists('HOPE_Presale')) {
+            $presale = new HOPE_Presale();
+            $presale_state = $presale->get_presale_state($product->get_id());
+            if ($presale_state === 'announced') {
+                return;
+            }
+            if ($presale_state === 'presale' && !$presale->has_valid_presale_cookie($product->get_id())) {
+                return;
+            }
+        }
+
         // Use new pricing maps architecture
         $pricing_map_id = $venue_id; // Actually pricing map ID now
         

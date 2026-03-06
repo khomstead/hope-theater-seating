@@ -18,7 +18,12 @@ class HOPE_Seating_Admin {
         add_action('woocommerce_product_data_tabs', array($this, 'add_product_venue_tab'));
         add_action('woocommerce_product_data_panels', array($this, 'add_product_venue_fields'));
         add_action('woocommerce_process_product_meta', array($this, 'save_product_venue_fields'));
-        
+
+        // Pre-sale tab
+        add_action('woocommerce_product_data_tabs', array($this, 'add_presale_tab'));
+        add_action('woocommerce_product_data_panels', array($this, 'add_presale_fields'));
+        add_action('woocommerce_process_product_meta', array($this, 'save_presale_fields'));
+
         // Add columns to products list
         add_filter('manage_edit-product_columns', array($this, 'add_product_columns'));
         add_action('manage_product_posts_custom_column', array($this, 'show_product_column_content'), 10, 2);
@@ -1595,7 +1600,230 @@ class HOPE_Seating_Admin {
         $film_screening_mode = isset($_POST['_hope_film_screening_mode']) ? 'yes' : 'no';
         update_post_meta($post_id, '_hope_film_screening_mode', $film_screening_mode);
     }
-    
+
+    /**
+     * Add Pre-sale product data tab.
+     */
+    public function add_presale_tab($tabs) {
+        $tabs['hope_presale'] = array(
+            'label'    => __('Pre-sale', 'hope-seating'),
+            'target'   => 'hope_presale_options',
+            'class'    => array('show_if_simple', 'show_if_variable'),
+            'priority' => 22,
+        );
+        return $tabs;
+    }
+
+    /**
+     * Render the Pre-sale product data panel.
+     */
+    public function add_presale_fields() {
+        global $post;
+        $enabled = get_post_meta($post->ID, '_hope_presale_enabled', true);
+        $presale_start = get_post_meta($post->ID, '_hope_presale_start', true);
+        $public_start = get_post_meta($post->ID, '_hope_presale_public_start', true);
+        $passwords = get_post_meta($post->ID, '_hope_presale_passwords', true);
+        $announcement_message = get_post_meta($post->ID, '_hope_presale_announcement_message', true);
+        $presale_message = get_post_meta($post->ID, '_hope_presale_message', true);
+
+        if (!is_array($passwords)) {
+            $passwords = array();
+        }
+
+        $tz = wp_timezone();
+        $start_local = '';
+        if ($presale_start) {
+            $dt = new DateTime('@' . $presale_start);
+            $dt->setTimezone($tz);
+            $start_local = $dt->format('Y-m-d\TH:i');
+        }
+        $public_local = '';
+        if ($public_start) {
+            $dt = new DateTime('@' . $public_start);
+            $dt->setTimezone($tz);
+            $public_local = $dt->format('Y-m-d\TH:i');
+        }
+
+        $tz_info = $tz->getName() . ' (UTC' . (new DateTime('now', $tz))->format('P') . ')';
+        ?>
+        <div id="hope_presale_options" class="panel woocommerce_options_panel">
+            <div class="options_group">
+                <?php
+                woocommerce_wp_checkbox(array(
+                    'id'          => '_hope_presale_enabled',
+                    'label'       => __('Enable Pre-sale', 'hope-seating'),
+                    'description' => __('Enable pre-sale access for this product.', 'hope-seating'),
+                    'value'       => $enabled,
+                ));
+                ?>
+            </div>
+
+            <div class="options_group hope-presale-details" style="<?php echo $enabled === 'yes' ? '' : 'display:none;'; ?>">
+                <p class="form-field">
+                    <label for="_hope_presale_start"><?php esc_html_e('Pre-sale Start', 'hope-seating'); ?></label>
+                    <input type="datetime-local" id="_hope_presale_start" name="_hope_presale_start" value="<?php echo esc_attr($start_local); ?>" />
+                </p>
+                <p class="form-field">
+                    <label for="_hope_presale_public_start"><?php esc_html_e('Public Sale Start', 'hope-seating'); ?></label>
+                    <input type="datetime-local" id="_hope_presale_public_start" name="_hope_presale_public_start" value="<?php echo esc_attr($public_local); ?>" />
+                </p>
+                <p class="description" style="padding-left:12px;">
+                    <?php echo esc_html(sprintf(__('Times are in %s', 'hope-seating'), $tz_info)); ?>
+                </p>
+            </div>
+
+            <div class="options_group hope-presale-details" style="<?php echo $enabled === 'yes' ? '' : 'display:none;'; ?>">
+                <p class="form-field">
+                    <label><?php esc_html_e('Pre-sale Passwords', 'hope-seating'); ?></label>
+                </p>
+                <table class="widefat hope-presale-passwords" style="margin:0 12px 12px; width:calc(100% - 24px);">
+                    <thead>
+                        <tr>
+                            <th><?php esc_html_e('Password', 'hope-seating'); ?></th>
+                            <th><?php esc_html_e('Label', 'hope-seating'); ?></th>
+                            <th><?php esc_html_e('Uses', 'hope-seating'); ?></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($passwords as $i => $pw) : ?>
+                        <tr>
+                            <td><input type="text" name="_hope_presale_pw[<?php echo $i; ?>][password]" value="<?php echo esc_attr($pw['password']); ?>" /></td>
+                            <td><input type="text" name="_hope_presale_pw[<?php echo $i; ?>][label]" value="<?php echo esc_attr($pw['label']); ?>" /></td>
+                            <td><span class="usage-count"><?php echo isset($pw['usage_count']) ? intval($pw['usage_count']) : 0; ?></span></td>
+                            <td><button type="button" class="button hope-remove-pw">&times;</button></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <p style="padding-left:12px;">
+                    <button type="button" class="button hope-add-pw"><?php esc_html_e('Add Password', 'hope-seating'); ?></button>
+                </p>
+            </div>
+
+            <div class="options_group hope-presale-details" style="<?php echo $enabled === 'yes' ? '' : 'display:none;'; ?>">
+                <?php
+                woocommerce_wp_textarea_input(array(
+                    'id'          => '_hope_presale_announcement_message',
+                    'label'       => __('Announcement Message', 'hope-seating'),
+                    'description' => __('Displayed before the pre-sale starts.', 'hope-seating'),
+                    'value'       => $announcement_message,
+                ));
+                woocommerce_wp_textarea_input(array(
+                    'id'          => '_hope_presale_message',
+                    'label'       => __('Pre-sale Message', 'hope-seating'),
+                    'description' => __('Displayed during the pre-sale period.', 'hope-seating'),
+                    'value'       => $presale_message,
+                ));
+                ?>
+            </div>
+
+            <script type="text/javascript">
+            jQuery(function($) {
+                var $cb = $('#_hope_presale_enabled');
+                var $details = $('.hope-presale-details');
+
+                $cb.on('change', function() {
+                    if ($(this).is(':checked')) {
+                        $details.show();
+                    } else {
+                        $details.hide();
+                    }
+                });
+
+                var pwIndex = <?php echo count($passwords); ?>;
+                $('.hope-add-pw').on('click', function() {
+                    var row = '<tr>' +
+                        '<td><input type="text" name="_hope_presale_pw[' + pwIndex + '][password]" value="" /></td>' +
+                        '<td><input type="text" name="_hope_presale_pw[' + pwIndex + '][label]" value="" /></td>' +
+                        '<td><span class="usage-count">0</span></td>' +
+                        '<td><button type="button" class="button hope-remove-pw">&times;</button></td>' +
+                        '</tr>';
+                    $('.hope-presale-passwords tbody').append(row);
+                    pwIndex++;
+                });
+
+                $(document).on('click', '.hope-remove-pw', function() {
+                    $(this).closest('tr').remove();
+                });
+            });
+            </script>
+        </div>
+        <?php
+    }
+
+    /**
+     * Save Pre-sale fields.
+     */
+    public function save_presale_fields($post_id) {
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            return;
+        }
+        if (!current_user_can('edit_post', $post_id)) {
+            return;
+        }
+
+        // Save enabled checkbox
+        $enabled = isset($_POST['_hope_presale_enabled']) ? 'yes' : 'no';
+        update_post_meta($post_id, '_hope_presale_enabled', $enabled);
+
+        // Save dates - convert datetime-local to Unix timestamp
+        $tz = wp_timezone();
+
+        if (!empty($_POST['_hope_presale_start'])) {
+            $dt = new DateTime(sanitize_text_field($_POST['_hope_presale_start']), $tz);
+            update_post_meta($post_id, '_hope_presale_start', $dt->getTimestamp());
+        } else {
+            delete_post_meta($post_id, '_hope_presale_start');
+        }
+
+        if (!empty($_POST['_hope_presale_public_start'])) {
+            $dt = new DateTime(sanitize_text_field($_POST['_hope_presale_public_start']), $tz);
+            update_post_meta($post_id, '_hope_presale_public_start', $dt->getTimestamp());
+        } else {
+            delete_post_meta($post_id, '_hope_presale_public_start');
+        }
+
+        // Save passwords - preserve usage_count from existing entries
+        $existing_passwords = get_post_meta($post_id, '_hope_presale_passwords', true);
+        if (!is_array($existing_passwords)) {
+            $existing_passwords = array();
+        }
+        $existing_map = array();
+        foreach ($existing_passwords as $pw) {
+            $key = strtolower(trim($pw['password']));
+            $existing_map[$key] = isset($pw['usage_count']) ? intval($pw['usage_count']) : 0;
+        }
+
+        $new_passwords = array();
+        if (isset($_POST['_hope_presale_pw']) && is_array($_POST['_hope_presale_pw'])) {
+            foreach ($_POST['_hope_presale_pw'] as $pw_data) {
+                $password = sanitize_text_field($pw_data['password']);
+                $label = sanitize_text_field($pw_data['label']);
+                if (empty($password)) {
+                    continue;
+                }
+                $key = strtolower(trim($password));
+                $usage_count = isset($existing_map[$key]) ? $existing_map[$key] : 0;
+                $new_passwords[] = array(
+                    'password'    => $password,
+                    'label'       => $label,
+                    'usage_count' => $usage_count,
+                );
+            }
+        }
+        update_post_meta($post_id, '_hope_presale_passwords', $new_passwords);
+
+        // Save messaging
+        $announcement = isset($_POST['_hope_presale_announcement_message'])
+            ? sanitize_textarea_field($_POST['_hope_presale_announcement_message']) : '';
+        update_post_meta($post_id, '_hope_presale_announcement_message', $announcement);
+
+        $message = isset($_POST['_hope_presale_message'])
+            ? sanitize_textarea_field($_POST['_hope_presale_message']) : '';
+        update_post_meta($post_id, '_hope_presale_message', $message);
+    }
+
     // Add venue column to products list
     public function add_product_columns($columns) {
         $new_columns = array();

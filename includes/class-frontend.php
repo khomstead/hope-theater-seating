@@ -48,7 +48,18 @@ class HOPE_Seating_Frontend {
                 $load_scripts = true;
             }
         }
-        
+
+        // Pre-sale gate override: don't load seat map scripts if customer can't access yet
+        if ($load_scripts && class_exists('HOPE_Presale')) {
+            $presale = new HOPE_Presale();
+            $presale_state = $presale->get_presale_state($post->ID);
+            if ($presale_state === 'announced') {
+                $load_scripts = false;
+            } elseif ($presale_state === 'presale' && !$presale->has_valid_presale_cookie($post->ID)) {
+                $load_scripts = false;
+            }
+        }
+
         // Check for shortcodes in content
         if ($post && is_object($post) && (has_shortcode($post->post_content, 'hope_seating_chart') || has_shortcode($post->post_content, 'hope_seat_button'))) {
             $load_scripts = true;
