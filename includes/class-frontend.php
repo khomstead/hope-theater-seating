@@ -51,7 +51,7 @@ class HOPE_Seating_Frontend {
 
         // Pre-sale gate override: don't load seat map scripts if customer can't access yet
         if ($load_scripts && class_exists('HOPE_Presale')) {
-            $presale = new HOPE_Presale();
+            $presale = new HOPE_Presale(false);
             $presale_state = $presale->get_presale_state($post->ID);
             if ($presale_state === 'announced') {
                 $load_scripts = false;

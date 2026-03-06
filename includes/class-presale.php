@@ -20,7 +20,15 @@ class HOPE_Presale {
     /** Rate limit: lockout duration in seconds (15 minutes) */
     const LOCKOUT_DURATION = 900;
 
-    public function __construct() {
+    /**
+     * @param bool $register_hooks Pass false when creating an instance only
+     *                             for helper method access (avoids duplicate hook registration).
+     */
+    public function __construct($register_hooks = true) {
+        if (!$register_hooks) {
+            return;
+        }
+
         // AJAX endpoints for password validation (logged-in and guest)
         add_action('wp_ajax_hope_validate_presale_password', array($this, 'ajax_validate_password'));
         add_action('wp_ajax_nopriv_hope_validate_presale_password', array($this, 'ajax_validate_password'));
@@ -53,7 +61,7 @@ class HOPE_Presale {
             return 'disabled';
         }
 
-        $now = current_time('timestamp');
+        $now = (new DateTime('now', wp_timezone()))->getTimestamp();
 
         if ($now >= (int) $public_start) {
             return 'general_sale';

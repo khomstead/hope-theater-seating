@@ -68,7 +68,7 @@ class HOPE_Modal_Handler {
 
         // Pre-sale gate: don't render modal if customer can't access it yet
         if (class_exists('HOPE_Presale')) {
-            $presale = new HOPE_Presale();
+            $presale = new HOPE_Presale(false);
             $presale_state = $presale->get_presale_state($product->get_id());
             if ($presale_state === 'announced') {
                 return;
