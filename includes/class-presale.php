@@ -153,12 +153,43 @@ class HOPE_Presale {
      * @return string Formatted date/time string
      */
     public function format_date_for_display($timestamp) {
-        $date_format = get_option('date_format', 'F j, Y');
-        $time_format = get_option('time_format', 'g:i A');
         $timezone = wp_timezone();
         $dt = new DateTime('@' . $timestamp);
         $dt->setTimezone($timezone);
-        return $dt->format($date_format . ' \a\t ' . $time_format . ' T');
+
+        // Format: "March 6 at 10 AM Eastern" (human-friendly)
+        $minutes = $dt->format('i');
+        $time_format = ($minutes === '00') ? 'g A' : 'g:i A';
+        $tz_name = $this->get_friendly_timezone_name($timezone);
+
+        return $dt->format('F j') . ' at ' . $dt->format($time_format) . ' ' . $tz_name;
+    }
+
+    /**
+     * Get a human-friendly timezone name (e.g., "Eastern" instead of "EST" or "America/New_York").
+     *
+     * @param DateTimeZone $timezone
+     * @return string
+     */
+    private function get_friendly_timezone_name($timezone) {
+        $tz_id = $timezone->getName();
+
+        $friendly_names = array(
+            'America/New_York'    => 'Eastern',
+            'America/Chicago'     => 'Central',
+            'America/Denver'      => 'Mountain',
+            'America/Los_Angeles' => 'Pacific',
+            'America/Anchorage'   => 'Alaska',
+            'Pacific/Honolulu'    => 'Hawaii',
+        );
+
+        if (isset($friendly_names[$tz_id])) {
+            return $friendly_names[$tz_id];
+        }
+
+        // Fallback to abbreviation (e.g., "EST", "PST")
+        $dt = new DateTime('now', $timezone);
+        return $dt->format('T');
     }
 
     /**
@@ -299,20 +330,19 @@ class HOPE_Presale {
                 var gate = document.querySelector('.hope-presale-gate');
                 if (!gate) return;
 
-                // Hide the add-to-cart form elements that follow the gate
-                var form = gate.closest('form.cart');
-                if (form) {
-                    var siblings = gate.parentNode.children;
-                    var pastGate = false;
-                    for (var i = 0; i < siblings.length; i++) {
-                        if (siblings[i] === gate) {
-                            pastGate = true;
-                            continue;
-                        }
-                        if (pastGate && !siblings[i].classList.contains('hope-presale-gate')) {
-                            siblings[i].style.display = 'none';
-                            siblings[i].setAttribute('data-hope-presale-hidden', 'true');
-                        }
+                // Hide the add-to-cart form and any sibling elements after the gate
+                // The gate is rendered before <form class="cart"> via woocommerce_before_add_to_cart_form,
+                // so we need to hide siblings (including the form itself), not children inside the form.
+                var siblings = gate.parentNode.children;
+                var pastGate = false;
+                for (var i = 0; i < siblings.length; i++) {
+                    if (siblings[i] === gate) {
+                        pastGate = true;
+                        continue;
+                    }
+                    if (pastGate && !siblings[i].classList.contains('hope-presale-gate')) {
+                        siblings[i].style.display = 'none';
+                        siblings[i].setAttribute('data-hope-presale-hidden', 'true');
                     }
                 }
 

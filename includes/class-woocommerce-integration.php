@@ -257,7 +257,19 @@ class HOPE_WooCommerce_Integration {
             error_log("HOPE: Seating interface not rendered - seating_enabled: '{$seating_enabled}', venue_id: '{$venue_id}'");
             return;
         }
-        
+
+        // Pre-sale gate: don't render seat selection if customer can't access yet
+        if (class_exists('HOPE_Presale')) {
+            $presale = new HOPE_Presale(false);
+            $presale_state = $presale->get_presale_state($product_id);
+            if ($presale_state === 'announced') {
+                return;
+            }
+            if ($presale_state === 'presale' && !$presale->has_valid_presale_cookie($product_id)) {
+                return;
+            }
+        }
+
         // Use new pricing maps architecture
         $pricing_map_id = $venue_id; // Actually pricing map ID now
         
