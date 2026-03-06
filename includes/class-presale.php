@@ -265,8 +265,8 @@ class HOPE_Presale {
                         <label for="hope-presale-code"><?php _e('Enter your pre-sale code:', 'hope-seating'); ?></label>
                         <div class="hope-presale-input-group">
                             <input type="text" id="hope-presale-code" class="hope-presale-code-input" placeholder="<?php esc_attr_e('Pre-sale code', 'hope-seating'); ?>" autocomplete="off" />
-                            <button type="button" id="hope-presale-submit" class="button alt"><?php _e('Submit', 'hope-seating'); ?></button>
                         </div>
+                        <button type="button" id="hope-presale-submit" class="hope-presale-submit-btn"><?php _e('Submit', 'hope-seating'); ?></button>
                         <div class="hope-presale-error" style="display: none;"></div>
                     </div>
                 </div>
@@ -301,16 +301,37 @@ class HOPE_Presale {
         }
         .hope-presale-input-group {
             display: flex;
-            gap: 8px;
-            align-items: center;
+            margin-bottom: 12px;
         }
         .hope-presale-code-input {
-            padding: 8px 12px;
+            padding: 10px 14px;
             font-size: 1em;
             border: 1px solid #ccc;
-            border-radius: 4px;
-            flex: 1;
+            border-radius: 6px;
+            width: 100%;
             max-width: 300px;
+        }
+        .hope-presale-submit-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            background: #7c3aed;
+            color: white !important;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .hope-presale-submit-btn:hover {
+            background: #6b21a8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+        }
+        .hope-presale-submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
         .hope-presale-error {
             color: #dc3545;
