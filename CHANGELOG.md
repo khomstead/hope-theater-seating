@@ -2,6 +2,24 @@
 
 All notable changes to HOPE Theater Seating Plugin will be documented in this file.
 
+## [2.8.27] - 2026-03-05
+
+### Added
+- **Pre-sale Password Gating** - New feature to gate ticket purchases behind pre-sale passwords
+  - New "Pre-sale" product data tab in WooCommerce product editor
+  - Enable/disable toggle with pre-sale start date and general sale start date
+  - Multiple password support with labels (e.g., "Fan Club", "Spotify VIP")
+  - Password usage tracking correlated to orders (similar to coupon tracking)
+  - Three customer-facing states: Announced (info only), Pre-sale (password required), General Sale (normal)
+  - Custom messaging fields for announcement and pre-sale periods
+  - AJAX password validation with rate limiting (5 attempts / 15 min per IP)
+  - Cookie-based session persistence (no re-entry needed during pre-sale window)
+  - Works with both seated events and general admission products
+  - Automatic transition to general sale at configured date/time
+  - All dates respect WordPress timezone setting
+  - Pre-sale info saved to order item metadata for reporting
+  - Future-proof data structure for per-password pricing tiers and section restrictions
+
 ## [2.8.26] - 2026-01-28
 
 ### Added
