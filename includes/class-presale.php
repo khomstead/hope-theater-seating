@@ -36,6 +36,9 @@ class HOPE_Presale {
         // Frontend gate — runs before seating interface (priority 5)
         add_action('woocommerce_before_add_to_cart_form', array($this, 'maybe_gate_purchase'), 5);
 
+        // Send no-cache headers on presale product pages (before output)
+        add_action('template_redirect', array($this, 'send_no_cache_headers'));
+
         // Track pre-sale usage at checkout
         add_action('woocommerce_checkout_create_order_line_item', array($this, 'save_presale_to_order_item'), 10, 4);
         add_action('woocommerce_order_status_processing', array($this, 'increment_presale_usage'), 20, 1);
@@ -203,6 +206,28 @@ class HOPE_Presale {
         // Fallback to abbreviation (e.g., "EST", "PST")
         $dt = new DateTime('now', $timezone);
         return $dt->format('T');
+    }
+
+    /**
+     * Send no-cache headers on product pages with active presale.
+     *
+     * Prevents Cloudflare (and other CDNs) from caching pages whose content
+     * varies based on the presale cookie. Fires at template_redirect, before output.
+     */
+    public function send_no_cache_headers() {
+        if (!is_product()) {
+            return;
+        }
+
+        global $post;
+        if (!$post) {
+            return;
+        }
+
+        $state = $this->get_presale_state($post->ID);
+        if ($state === 'announced' || $state === 'presale') {
+            nocache_headers();
+        }
     }
 
     /**
