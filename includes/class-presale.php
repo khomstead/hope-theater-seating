@@ -97,7 +97,17 @@ class HOPE_Presale {
         // Use WordPress COOKIEPATH and COOKIE_DOMAIN for consistency with WP cookies
         $path = defined('COOKIEPATH') ? COOKIEPATH : '/';
         $domain = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
-        setcookie($cookie_name, $password_hash, $expiry, $path, $domain, is_ssl(), false);
+
+        // Use array syntax to explicitly set SameSite=Lax (PHP 7.3+)
+        // Chrome requires explicit SameSite or it defaults unpredictably
+        setcookie($cookie_name, $password_hash, array(
+            'expires'  => $expiry,
+            'path'     => $path,
+            'domain'   => $domain,
+            'secure'   => is_ssl(),
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ));
         // Also set in $_COOKIE so it's available in the current request
         $_COOKIE[$cookie_name] = $password_hash;
     }
@@ -414,7 +424,10 @@ class HOPE_Presale {
                             gate.appendChild(successDiv);
 
                             setTimeout(function() {
-                                window.location.reload();
+                                // Bypass Cloudflare cache by adding unique query param
+                                var url = window.location.href.split('?')[0];
+                                url += '?presale_access=' + Date.now();
+                                window.location.href = url;
                             }, 800);
                         } else {
                             errorDiv.textContent = data.data || '<?php echo esc_js(__('Invalid pre-sale code. Please try again.', 'hope-seating')); ?>';
@@ -518,6 +531,16 @@ class HOPE_Presale {
         // Password matched — set cookie
         $public_start = get_post_meta($product_id, '_hope_presale_public_start', true);
         $password_hash = md5($password_lower);
+
+        $path = defined('COOKIEPATH') ? COOKIEPATH : '/';
+        $domain = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
+        error_log(sprintf(
+            'HOPE PRESALE: Setting cookie hope_presale_%d | hash=%s | expires=%d | path=%s | domain=%s | secure=%s | headers_sent=%s',
+            $product_id, $password_hash, (int) $public_start, $path, $domain,
+            is_ssl() ? 'true' : 'false',
+            headers_sent() ? 'YES (PROBLEM!)' : 'no'
+        ));
+
         $this->set_presale_cookie($product_id, $password_hash, (int) $public_start);
 
         wp_send_json_success(array(
